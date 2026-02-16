@@ -31,6 +31,12 @@ python -m codex_relay admin
 
 # Beginner quickstart (creates venv, runs tests, starts daemon)
 ./scripts/start_beginner.sh
+
+# Auto-start at boot (installs launchd service)
+./scripts/install_autostart.sh
+
+# Uninstall auto-start
+./scripts/uninstall_autostart.sh
 ```
 
 ## Architecture

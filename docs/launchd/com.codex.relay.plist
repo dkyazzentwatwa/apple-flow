@@ -7,10 +7,10 @@
 
     <key>ProgramArguments</key>
     <array>
-      <string>/usr/bin/env</string>
-      <string>python</string>
+      <string>/Users/cypher-server/Documents/code/codex-flow/.venv/bin/python</string>
       <string>-m</string>
-      <string>codex_relay.daemon</string>
+      <string>codex_relay</string>
+      <string>daemon</string>
     </array>
 
     <key>RunAtLoad</key>
@@ -20,12 +20,18 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/tmp/codex-relay.log</string>
+    <string>/Users/cypher-server/Documents/code/codex-flow/logs/codex-relay.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/tmp/codex-relay.err.log</string>
+    <string>/Users/cypher-server/Documents/code/codex-flow/logs/codex-relay.err.log</string>
 
     <key>WorkingDirectory</key>
-    <string>/Users/cypher/Public/code/codex-flow</string>
+    <string>/Users/cypher-server/Documents/code/codex-flow</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/Users/cypher-server/Documents/code/codex-flow/.venv/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
   </dict>
 </plist>
