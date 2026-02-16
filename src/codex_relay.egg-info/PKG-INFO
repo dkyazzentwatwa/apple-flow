@@ -1,0 +1,119 @@
+Metadata-Version: 2.4
+Name: codex-relay
+Version: 0.1.0
+Summary: Local-first iMessage to Codex App Server relay daemon
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: pydantic>=2.8.0
+Requires-Dist: pydantic-settings>=2.3.0
+Requires-Dist: httpx>=0.27.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+Requires-Dist: httpx>=0.27.0; extra == "dev"
+
+# Codex Relay
+
+Codex Relay is a local-first daemon that bridges iMessage on macOS to Codex App Server, with policy gating, approval workflows, and an admin API.
+
+## Features
+
+- Poll inbound iMessages from local Apple Messages database
+- Map sender handles to persistent Codex threads
+- Human-in-the-loop approval for mutating tasks
+- Workspace allowlist policy enforcement
+- Local FastAPI admin endpoints
+- Launchd service profile for always-on operation
+
+## Quick Start
+
+Easiest path for beginners:
+
+```bash
+cd /Users/cypher/Public/code/codex-flow
+cp .env.example .env
+# edit .env and set your own phone + workspace
+./scripts/start_beginner.sh
+```
+
+Manual setup:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .[dev]
+pytest -q
+```
+
+Run the relay API:
+
+```bash
+uvicorn codex_relay.main:app --reload
+```
+
+Run the relay daemon:
+
+```bash
+python -m codex_relay daemon
+```
+
+Run admin API only:
+
+```bash
+python -m codex_relay admin
+```
+
+## Commands Over iMessage
+
+- `relay: <message>`: general chat mode (default safety trigger)
+- `idea: <prompt>`: brainstorming and options
+- `plan: <goal>`: implementation plan only (non-mutating)
+- `task: <instruction>`: creates an approval request before execution
+- `project: <spec>`: project concierge pipeline with approval gate
+- `clear context` / `new chat`: reset sender thread and start fresh context
+- `approve <request_id>`: executes a queued request
+- `deny <request_id>`: cancels a queued request
+- `status`: pending approval count
+
+If `codex_relay_send_startup_intro=true`, relay sends an intro iMessage on startup with current workspace + command list.
+
+## Security Defaults
+
+- Allowlisted senders only
+- Workspace allowlist only
+- Human approval required for mutating requests (`task:` and `project:`)
+- Per-sender rate limiting
+
+## Codex Auth and App Server
+
+Authenticate locally once:
+
+```bash
+codex login
+```
+
+Then relay uses `codex app-server` as the default runtime command.
+
+## Beginner Checklist
+
+1. Make sure iMessage is signed in on this Mac.
+2. Run `codex login` once.
+3. Put your own phone number in `/Users/cypher/Public/code/codex-flow/.env` as `codex_relay_allowed_senders`.
+4. Put safe folders in `codex_relay_allowed_workspaces`.
+5. Start the daemon and text commands like `idea:`, `plan:`, or `task:`.
+
+## Important Safety Behavior
+
+- On first start, Codex Relay now skips historical messages by default.
+- It does not auto-message blocked senders unless you explicitly enable it.
+- It can poll only allowlisted senders at SQL-query time.
+- It can require a chat prefix (default `relay:`) so echoed self-messages are ignored.
+- Keep these in `.env` for safest behavior:
+  - `codex_relay_process_historical_on_first_start=false`
+  - `codex_relay_notify_blocked_senders=false`
+  - `codex_relay_notify_rate_limited_senders=false`
+  - `codex_relay_only_poll_allowed_senders=true`
+  - `codex_relay_require_chat_prefix=true`
+  - `codex_relay_chat_prefix=relay:`

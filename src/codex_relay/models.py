@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+
+
+class RunState(str, Enum):
+    """States for task/project runs."""
+
+    RECEIVED = "received"
+    PLANNING = "planning"
+    AWAITING_APPROVAL = "awaiting_approval"
+    EXECUTING = "executing"
+    VERIFYING = "verifying"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    DENIED = "denied"
+
+
+class ApprovalStatus(str, Enum):
+    """Status values for approval requests."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    DENIED = "denied"
+    EXPIRED = "expired"
+
+
+@dataclass(slots=True)
+class InboundMessage:
+    id: str
+    sender: str
+    text: str
+    received_at: str
+    is_from_me: bool
+
+
+@dataclass(slots=True)
+class ApprovalRequest:
+    request_id: str
+    run_id: str
+    summary: str
+    command_preview: str
+    expires_at: str
+    status: str = "pending"
