@@ -18,6 +18,27 @@ Requires-Dist: httpx>=0.27.0; extra == "dev"
 
 Codex Relay is a local-first daemon that bridges iMessage on macOS to Codex App Server, with policy gating, approval workflows, and an admin API.
 
+**Text yourself to chat with Claude, brainstorm ideas, and execute tasks in your workspace!**
+
+## 🚀 Quick Start
+
+**New to Codex Relay?** See **[QUICKSTART.md](QUICKSTART.md)** for complete setup instructions.
+
+**TL;DR** for experienced users:
+
+```bash
+# 1. Grant Full Disk Access to Terminal (System Settings)
+# 2. Authenticate
+codex login
+
+# 3. Configure
+cp .env.example .env
+nano .env  # Set your phone number and workspace
+
+# 4. Run
+./scripts/start_beginner.sh
+```
+
 ## Features
 
 - Poll inbound iMessages from local Apple Messages database
@@ -26,17 +47,15 @@ Codex Relay is a local-first daemon that bridges iMessage on macOS to Codex App 
 - Workspace allowlist policy enforcement
 - Local FastAPI admin endpoints
 - Launchd service profile for always-on operation
+- **NEW**: Database connection caching + indexes for performance
+- **NEW**: Approval sender verification for security
+- **NEW**: Graceful shutdown with signal handling
 
-## Quick Start
+## Documentation
 
-Easiest path for beginners:
-
-```bash
-cd /Users/cypher/Public/code/codex-flow
-cp .env.example .env
-# edit .env and set your own phone + workspace
-./scripts/start_beginner.sh
-```
+- **[QUICKSTART.md](QUICKSTART.md)** - Complete beginner's guide
+- **[CLAUDE.md](CLAUDE.md)** - Architecture and development guide
+- **[.env.example](.env.example)** - All configuration options
 
 Manual setup:
 
