@@ -1,6 +1,6 @@
 """Tests for shared utility functions."""
 
-from codex_relay.utils import normalize_sender
+from apple_flow.utils import normalize_sender
 
 
 def test_normalize_sender_with_plus():

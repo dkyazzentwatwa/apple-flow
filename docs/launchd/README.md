@@ -27,7 +27,7 @@ Use the installation script:
 
 This will:
 1. Auto-detect all required paths
-2. Generate `~/Library/LaunchAgents/com.codex.relay.plist`
+2. Generate `~/Library/LaunchAgents/com.apple-flow.plist`
 3. Load the service
 4. Display the Python binary path for Full Disk Access
 

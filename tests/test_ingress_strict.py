@@ -1,6 +1,6 @@
 import sqlite3
 
-from codex_relay.ingress import IMessageIngress
+from apple_flow.ingress import IMessageIngress
 
 
 def test_fetch_new_returns_none_when_strict_filter_required_but_empty_allowlist(tmp_path):

@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class RelaySettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="codex_relay_",
+        env_prefix="apple_flow_",
         extra="ignore",
         env_file=".env",
         enable_decoding=False,
@@ -31,6 +31,7 @@ class RelaySettings(BaseSettings):
     use_codex_cli: bool = True
     codex_cli_command: str = "codex"
     codex_cli_context_window: int = 3
+    codex_cli_model: str = ""  # e.g., "sonnet", "opus", "haiku" (empty = use codex default)
 
     admin_host: str = "127.0.0.1"
     admin_port: int = 8787
@@ -65,6 +66,7 @@ class RelaySettings(BaseSettings):
     # Apple Reminders integration settings
     enable_reminders_polling: bool = False
     reminders_list_name: str = "Codex Tasks"
+    reminders_archive_list_name: str = "Archive"
     reminders_owner: str = ""
     reminders_auto_approve: bool = False
     reminders_poll_interval_seconds: float = 5.0
@@ -72,6 +74,8 @@ class RelaySettings(BaseSettings):
     # Apple Notes integration settings
     enable_notes_polling: bool = False
     notes_folder_name: str = "Codex Inbox"
+    notes_archive_folder_name: str = "codex-archive"
+    notes_trigger_tag: str = ">>codex"
     notes_owner: str = ""
     notes_auto_approve: bool = False
     notes_poll_interval_seconds: float = 10.0
@@ -91,7 +95,7 @@ class RelaySettings(BaseSettings):
     # File attachment settings
     enable_attachments: bool = False
     max_attachment_size_mb: int = 10
-    attachment_temp_dir: str = "/tmp/codex_relay_attachments"
+    attachment_temp_dir: str = "/tmp/apple_flow_attachments"
 
     # Voice memo settings (convert responses to audio via macOS TTS)
     enable_voice_memos: bool = False

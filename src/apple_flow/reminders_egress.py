@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import subprocess
 
-logger = logging.getLogger("codex_relay.reminders_egress")
+logger = logging.getLogger("apple_flow.reminders_egress")
 
 
 class AppleRemindersEgress:
@@ -127,4 +127,82 @@ class AppleRemindersEgress:
             return True
         except Exception as exc:
             logger.warning("Unexpected error annotating reminder %s: %s", reminder_id, exc)
+            return False
+
+    def move_to_archive(
+        self,
+        reminder_id: str,
+        result_text: str,
+        source_list_name: str,
+        archive_list_name: str,
+    ) -> bool:
+        """Move reminder to archive list, write result to notes, and mark complete.
+
+        Args:
+            reminder_id: The x-apple-reminder:// URI of the reminder
+            result_text: The Codex execution result to write to the reminder body
+            source_list_name: The list where the reminder currently lives
+            archive_list_name: The list to move the reminder to
+
+        Returns:
+            True on success, False on failure
+        """
+        escaped_source_list = source_list_name.replace('"', '\\"')
+        escaped_archive_list = archive_list_name.replace('"', '\\"')
+        escaped_text = (
+            result_text
+            .replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+        )
+        escaped_id = reminder_id.replace('"', '\\"')
+
+        script = f'''
+        tell application "Reminders"
+            try
+                set sourceList to list "{escaped_source_list}"
+                set archiveList to list "{escaped_archive_list}"
+                set matchedReminder to (first reminder of sourceList whose id is "{escaped_id}")
+                set body of matchedReminder to "{escaped_text}"
+                set completed of matchedReminder to true
+                move matchedReminder to archiveList
+                return "ok"
+            on error errMsg
+                return "error: " & errMsg
+            end try
+        end tell
+        '''
+
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            output = result.stdout.strip()
+            if result.returncode != 0 or output.startswith("error:"):
+                logger.warning(
+                    "Failed to move reminder %s to archive: rc=%s output=%s stderr=%s",
+                    reminder_id,
+                    result.returncode,
+                    output,
+                    result.stderr.strip(),
+                )
+                return False
+            logger.info(
+                "Moved reminder %s from %r to %r and marked complete",
+                reminder_id,
+                source_list_name,
+                archive_list_name,
+            )
+            return True
+        except subprocess.TimeoutExpired:
+            logger.warning("Timed out moving reminder %s to archive", reminder_id)
+            return False
+        except FileNotFoundError:
+            logger.warning("osascript not found — Apple Reminders egress requires macOS")
+            return False
+        except Exception as exc:
+            logger.warning("Unexpected error moving reminder %s to archive: %s", reminder_id, exc)
             return False

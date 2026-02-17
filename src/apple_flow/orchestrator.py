@@ -42,7 +42,12 @@ class RelayOrchestrator:
         voice_memo_voice: str = "Samantha",
         voice_memo_max_chars: int = 2000,
         voice_memo_send_text_too: bool = True,
-        voice_memo_output_dir: str = "/tmp/codex_relay_attachments",
+        voice_memo_output_dir: str = "/tmp/apple_flow_attachments",
+        reminders_egress: Any = None,
+        reminders_archive_list_name: str = "Archive",
+        notes_egress: Any = None,
+        notes_archive_folder_name: str = "codex-archive",
+        calendar_egress: Any = None,
     ):
         self.connector = connector
         self.egress = egress
@@ -62,6 +67,11 @@ class RelayOrchestrator:
         self.voice_memo_max_chars = voice_memo_max_chars
         self.voice_memo_send_text_too = voice_memo_send_text_too
         self.voice_memo_output_dir = voice_memo_output_dir
+        self.reminders_egress = reminders_egress
+        self.reminders_archive_list_name = reminders_archive_list_name
+        self.notes_egress = notes_egress
+        self.notes_archive_folder_name = notes_archive_folder_name
+        self.calendar_egress = calendar_egress
 
     # --- Workspace Resolution (Feature 1) ---
 
@@ -158,7 +168,7 @@ class RelayOrchestrator:
     # --- Feature 2: Health Dashboard ---
 
     def _handle_health(self, sender: str) -> OrchestrationResult:
-        parts = ["Codex Relay Health"]
+        parts = ["Apple Flow Health"]
 
         if hasattr(self.store, "get_stats"):
             stats = self.store.get_stats()
@@ -334,6 +344,12 @@ class RelayOrchestrator:
         final = f"Execution:\n{execution_output}\n\nVerification:\n{verification_output}"
         self.egress.send(sender, final)
         self._send_voice_memo(sender, verification_output)
+
+        # Post-execution cleanup: move reminders to archive, update notes, etc.
+        source_context = self.store.get_run_source_context(approval["run_id"])
+        if source_context:
+            self._handle_post_execution_cleanup(source_context, final)
+
         return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=final)
 
     def _handle_approval_required_command(
@@ -354,6 +370,34 @@ class RelayOrchestrator:
             return OrchestrationResult(kind=kind, response=response)
 
         run_id = f"run_{uuid4().hex[:12]}"
+
+        # Extract source context for tracking the originating channel (reminders, notes, etc.)
+        source_context = None
+        if message.context:
+            # Build source_context from message.context if present
+            channel = message.context.get("channel")
+            if channel == "reminders":
+                source_context = {
+                    "channel": "reminders",
+                    "reminder_id": message.context.get("reminder_id"),
+                    "reminder_name": message.context.get("reminder_name"),
+                    "list_name": message.context.get("list_name"),
+                }
+            elif channel == "notes":
+                source_context = {
+                    "channel": "notes",
+                    "note_id": message.context.get("note_id"),
+                    "note_name": message.context.get("note_title"),
+                    "folder_name": message.context.get("folder_name"),
+                }
+            elif channel == "calendar":
+                source_context = {
+                    "channel": "calendar",
+                    "event_id": message.context.get("event_id"),
+                    "event_name": message.context.get("event_summary"),
+                    "calendar_name": message.context.get("calendar_name"),
+                }
+
         self.store.create_run(
             run_id=run_id,
             sender=message.sender,
@@ -361,6 +405,7 @@ class RelayOrchestrator:
             state=RunState.PLANNING.value,
             cwd=ws,
             risk_level="execute",
+            source_context=source_context,
         )
 
         planner_prompt = (
@@ -431,13 +476,46 @@ class RelayOrchestrator:
             finally:
                 cleanup_voice_memo(memo_path)
 
+    # --- Post-Execution Cleanup ---
+
+    def _handle_post_execution_cleanup(self, source_context: dict[str, Any], result: str) -> None:
+        """Handle cleanup after task execution (move reminders to archive, update notes, etc.)"""
+        channel = source_context.get("channel")
+
+        if channel == "reminders" and self.reminders_egress:
+            reminder_id = source_context.get("reminder_id")
+            list_name = source_context.get("list_name")
+            if reminder_id and list_name:
+                self.reminders_egress.move_to_archive(
+                    reminder_id=reminder_id,
+                    result_text=f"[Codex Result]\n\n{result}",
+                    source_list_name=list_name,
+                    archive_list_name=self.reminders_archive_list_name,
+                )
+
+        elif channel == "notes" and self.notes_egress:
+            note_id = source_context.get("note_id")
+            folder_name = source_context.get("folder_name")
+            if note_id and folder_name and hasattr(self.notes_egress, "move_to_archive"):
+                self.notes_egress.move_to_archive(
+                    note_id=note_id,
+                    result_text=f"[Codex Result]\n\n{result}",
+                    source_folder_name=folder_name,
+                    archive_subfolder_name=self.notes_archive_folder_name,
+                )
+
+        elif channel == "calendar" and self.calendar_egress:
+            event_id = source_context.get("event_id")
+            if event_id and hasattr(self.calendar_egress, "annotate_event"):
+                self.calendar_egress.annotate_event(event_id, f"\n\n[Codex Result]\n{result}")
+
     # --- Prompt Building ---
 
     def _build_non_mutating_prompt(self, kind: CommandKind, payload: str, workspace: str | None = None) -> str:
         ws = workspace or self.default_workspace
         if kind is CommandKind.CHAT:
             return (
-                "You are Codex Relay over iMessage for a coding workspace. "
+                "You are Apple Flow over iMessage for a coding workspace. "
                 f"Workspace path: {ws}. "
                 "Answer the user's exact request directly. "
                 "If they ask about files/directories, inspect the workspace and return concrete results. "

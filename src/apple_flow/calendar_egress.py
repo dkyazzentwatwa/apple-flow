@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import subprocess
 
-logger = logging.getLogger("codex_relay.calendar_egress")
+logger = logging.getLogger("apple_flow.calendar_egress")
 
 
 class AppleCalendarEgress:

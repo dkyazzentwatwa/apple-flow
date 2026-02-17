@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from .models import InboundMessage
 from .protocols import StoreProtocol
 
-logger = logging.getLogger("codex_relay.reminders_ingress")
+logger = logging.getLogger("apple_flow.reminders_ingress")
 
 # Store key prefix for tracking which reminder IDs have been processed.
 _PROCESSED_IDS_KEY = "reminders_processed_ids"

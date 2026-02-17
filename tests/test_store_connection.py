@@ -3,7 +3,7 @@
 import threading
 from pathlib import Path
 
-from codex_relay.store import SQLiteStore
+from apple_flow.store import SQLiteStore
 
 
 def test_store_connection_caching(tmp_path: Path):

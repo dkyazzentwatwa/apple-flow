@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from conftest import FakeStore
-from codex_relay.reminders_ingress import AppleRemindersIngress
+from apple_flow.reminders_ingress import AppleRemindersIngress
 
 
 def test_fetch_new_converts_to_inbound_messages(monkeypatch):

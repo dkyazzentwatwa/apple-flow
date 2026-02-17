@@ -3,13 +3,13 @@
 <plist version="1.0">
   <dict>
     <key>Label</key>
-    <string>com.codex.relay</string>
+    <string>com.apple-flow</string>
 
     <key>ProgramArguments</key>
     <array>
       <string>/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/bin/python3.14</string>
       <string>-m</string>
-      <string>codex_relay</string>
+      <string>apple_flow</string>
       <string>daemon</string>
     </array>
 
@@ -20,10 +20,10 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/cypher-server/Documents/code/codex-flow/logs/codex-relay.log</string>
+    <string>/Users/cypher-server/Documents/code/codex-flow/logs/apple-flow.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/cypher-server/Documents/code/codex-flow/logs/codex-relay.err.log</string>
+    <string>/Users/cypher-server/Documents/code/codex-flow/logs/apple-flow.err.log</string>
 
     <key>WorkingDirectory</key>
     <string>/Users/cypher-server/Documents/code/codex-flow</string>

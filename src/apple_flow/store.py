@@ -105,6 +105,14 @@ class SQLiteStore:
             )
             conn.commit()
 
+            # Migration: Add source_context column if it doesn't exist
+            try:
+                cursor = conn.execute("SELECT source_context FROM runs LIMIT 1")
+                cursor.fetchone()
+            except sqlite3.OperationalError:
+                conn.execute("ALTER TABLE runs ADD COLUMN source_context TEXT DEFAULT NULL")
+                conn.commit()
+
     @staticmethod
     def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
         if row is None:
@@ -152,15 +160,25 @@ class SQLiteStore:
             conn.commit()
             return cursor.rowcount == 1
 
-    def create_run(self, run_id: str, sender: str, intent: str, state: str, cwd: str, risk_level: str) -> None:
+    def create_run(
+        self,
+        run_id: str,
+        sender: str,
+        intent: str,
+        state: str,
+        cwd: str,
+        risk_level: str,
+        source_context: dict[str, Any] | None = None,
+    ) -> None:
         conn = self._connect()
         with self._lock:
+            source_context_json = json.dumps(source_context) if source_context else None
             conn.execute(
                 """
-                INSERT INTO runs(run_id, sender, intent, state, cwd, risk_level)
-                VALUES(?, ?, ?, ?, ?, ?)
+                INSERT INTO runs(run_id, sender, intent, state, cwd, risk_level, source_context)
+                VALUES(?, ?, ?, ?, ?, ?, ?)
                 """,
-                (run_id, sender, intent, state, cwd, risk_level),
+                (run_id, sender, intent, state, cwd, risk_level, source_context_json),
             )
             conn.commit()
 
@@ -178,6 +196,19 @@ class SQLiteStore:
         with self._lock:
             row = conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
             return self._row_to_dict(row)
+
+    def get_run_source_context(self, run_id: str) -> dict[str, Any] | None:
+        """Get the source context for a run (reminder_id, note_id, etc.)"""
+        run = self.get_run(run_id)
+        if not run:
+            return None
+        source_context_json = run.get("source_context")
+        if not source_context_json:
+            return None
+        try:
+            return json.loads(source_context_json)
+        except (json.JSONDecodeError, TypeError):
+            return None
 
     def create_approval(
         self, request_id: str, run_id: str, summary: str, command_preview: str, expires_at: str, sender: str

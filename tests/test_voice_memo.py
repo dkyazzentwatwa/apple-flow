@@ -5,10 +5,10 @@ import tempfile
 from unittest.mock import patch, MagicMock, call
 from dataclasses import dataclass, field
 
-from codex_relay.commanding import CommandKind
-from codex_relay.models import InboundMessage
-from codex_relay.orchestrator import RelayOrchestrator
-from codex_relay.voice_memo import generate_voice_memo, cleanup_voice_memo
+from apple_flow.commanding import CommandKind
+from apple_flow.models import InboundMessage
+from apple_flow.orchestrator import RelayOrchestrator
+from apple_flow.voice_memo import generate_voice_memo, cleanup_voice_memo
 
 from conftest import FakeConnector, FakeStore
 
@@ -39,7 +39,7 @@ class FakeEgressWithAttachment:
 # --- generate_voice_memo Unit Tests ---
 
 
-@patch("codex_relay.voice_memo.subprocess.run")
+@patch("apple_flow.voice_memo.subprocess.run")
 def test_generate_voice_memo_success(mock_run):
     """Test successful voice memo generation with say + afconvert."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -68,7 +68,7 @@ def test_generate_voice_memo_success(mock_run):
         assert mock_run.call_count == 2
 
 
-@patch("codex_relay.voice_memo.subprocess.run")
+@patch("apple_flow.voice_memo.subprocess.run")
 def test_generate_voice_memo_empty_text(mock_run):
     """Empty text returns None without calling subprocess."""
     result = generate_voice_memo("")
@@ -76,7 +76,7 @@ def test_generate_voice_memo_empty_text(mock_run):
     mock_run.assert_not_called()
 
 
-@patch("codex_relay.voice_memo.subprocess.run")
+@patch("apple_flow.voice_memo.subprocess.run")
 def test_generate_voice_memo_say_fails_with_fallback(mock_run):
     """When say fails with specified voice, tries default voice."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -112,7 +112,7 @@ def test_generate_voice_memo_say_fails_with_fallback(mock_run):
         assert call_count[0] == 3  # say(voice), say(default), afconvert
 
 
-@patch("codex_relay.voice_memo.subprocess.run")
+@patch("apple_flow.voice_memo.subprocess.run")
 def test_generate_voice_memo_say_completely_fails(mock_run):
     """When both say attempts fail, returns None."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -125,7 +125,7 @@ def test_generate_voice_memo_say_completely_fails(mock_run):
         assert path is None
 
 
-@patch("codex_relay.voice_memo.subprocess.run")
+@patch("apple_flow.voice_memo.subprocess.run")
 def test_generate_voice_memo_timeout(mock_run):
     """Timeout returns None."""
     import subprocess
@@ -136,7 +136,7 @@ def test_generate_voice_memo_timeout(mock_run):
         assert path is None
 
 
-@patch("codex_relay.voice_memo.subprocess.run")
+@patch("apple_flow.voice_memo.subprocess.run")
 def test_generate_voice_memo_not_found(mock_run):
     """FileNotFoundError (no macOS) returns None."""
     mock_run.side_effect = FileNotFoundError("say not found")
@@ -148,7 +148,7 @@ def test_generate_voice_memo_not_found(mock_run):
 
 def test_generate_voice_memo_truncates_long_text():
     """Text longer than max_chars gets truncated."""
-    with patch("codex_relay.voice_memo.subprocess.run") as mock_run:
+    with patch("apple_flow.voice_memo.subprocess.run") as mock_run:
         with tempfile.TemporaryDirectory() as tmpdir:
             def side_effect(cmd, **kwargs):
                 result = MagicMock()
@@ -218,7 +218,7 @@ def _msg(text, sender="+15551234567", msg_id="m1"):
     )
 
 
-@patch("codex_relay.orchestrator.generate_voice_memo")
+@patch("apple_flow.orchestrator.generate_voice_memo")
 def test_voice_memo_sent_with_text_response(mock_gen):
     mock_gen.return_value = "/tmp/memo.m4a"
     orch = _make_orchestrator(enable_voice=True, send_text_too=True)
@@ -233,7 +233,7 @@ def test_voice_memo_sent_with_text_response(mock_gen):
     assert orch.egress.attachments[0] == ("+15551234567", "/tmp/memo.m4a")
 
 
-@patch("codex_relay.orchestrator.generate_voice_memo")
+@patch("apple_flow.orchestrator.generate_voice_memo")
 def test_voice_memo_only_no_text(mock_gen):
     mock_gen.return_value = "/tmp/memo.m4a"
     orch = _make_orchestrator(enable_voice=True, send_text_too=False)
@@ -246,7 +246,7 @@ def test_voice_memo_only_no_text(mock_gen):
     assert len(orch.egress.attachments) == 1
 
 
-@patch("codex_relay.orchestrator.generate_voice_memo")
+@patch("apple_flow.orchestrator.generate_voice_memo")
 def test_voice_memo_disabled(mock_gen):
     orch = _make_orchestrator(enable_voice=False)
 
@@ -258,7 +258,7 @@ def test_voice_memo_disabled(mock_gen):
     mock_gen.assert_not_called()
 
 
-@patch("codex_relay.orchestrator.generate_voice_memo")
+@patch("apple_flow.orchestrator.generate_voice_memo")
 def test_voice_memo_generation_fails_gracefully(mock_gen):
     mock_gen.return_value = None  # Generation failed
     orch = _make_orchestrator(enable_voice=True, send_text_too=True)
@@ -270,8 +270,8 @@ def test_voice_memo_generation_fails_gracefully(mock_gen):
     assert len(orch.egress.attachments) == 0  # Nothing to attach
 
 
-@patch("codex_relay.orchestrator.cleanup_voice_memo")
-@patch("codex_relay.orchestrator.generate_voice_memo")
+@patch("apple_flow.orchestrator.cleanup_voice_memo")
+@patch("apple_flow.orchestrator.generate_voice_memo")
 def test_voice_memo_cleaned_up_after_send(mock_gen, mock_cleanup):
     mock_gen.return_value = "/tmp/memo.m4a"
     orch = _make_orchestrator(enable_voice=True)

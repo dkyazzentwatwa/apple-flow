@@ -1,4 +1,4 @@
-from codex_relay.store import SQLiteStore
+from apple_flow.store import SQLiteStore
 
 
 def test_store_bootstrap_and_session_roundtrip(tmp_path):

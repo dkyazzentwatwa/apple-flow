@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from codex_relay.mail_egress import AppleMailEgress
+from apple_flow.mail_egress import AppleMailEgress
 
 
 def test_suppresses_duplicate_outbound_within_window(monkeypatch):

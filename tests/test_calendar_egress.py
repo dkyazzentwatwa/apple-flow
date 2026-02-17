@@ -3,14 +3,14 @@
 from unittest.mock import patch, MagicMock
 import subprocess
 
-from codex_relay.calendar_egress import AppleCalendarEgress
+from apple_flow.calendar_egress import AppleCalendarEgress
 
 
 def _make_egress():
     return AppleCalendarEgress(calendar_name="Codex Schedule")
 
 
-@patch("codex_relay.calendar_egress.subprocess.run")
+@patch("apple_flow.calendar_egress.subprocess.run")
 def test_annotate_event_success(mock_run):
     result = MagicMock()
     result.returncode = 0
@@ -24,7 +24,7 @@ def test_annotate_event_success(mock_run):
     mock_run.assert_called_once()
 
 
-@patch("codex_relay.calendar_egress.subprocess.run")
+@patch("apple_flow.calendar_egress.subprocess.run")
 def test_annotate_event_failure(mock_run):
     result = MagicMock()
     result.returncode = 1
@@ -37,7 +37,7 @@ def test_annotate_event_failure(mock_run):
     assert ok is False
 
 
-@patch("codex_relay.calendar_egress.subprocess.run")
+@patch("apple_flow.calendar_egress.subprocess.run")
 def test_annotate_event_timeout(mock_run):
     mock_run.side_effect = subprocess.TimeoutExpired(cmd="osascript", timeout=15)
 
@@ -47,7 +47,7 @@ def test_annotate_event_timeout(mock_run):
     assert ok is False
 
 
-@patch("codex_relay.calendar_egress.subprocess.run")
+@patch("apple_flow.calendar_egress.subprocess.run")
 def test_annotate_event_osascript_not_found(mock_run):
     mock_run.side_effect = FileNotFoundError("osascript not found")
 
@@ -57,7 +57,7 @@ def test_annotate_event_osascript_not_found(mock_run):
     assert ok is False
 
 
-@patch("codex_relay.calendar_egress.subprocess.run")
+@patch("apple_flow.calendar_egress.subprocess.run")
 def test_annotate_event_escapes_special_chars(mock_run):
     result = MagicMock()
     result.returncode = 0

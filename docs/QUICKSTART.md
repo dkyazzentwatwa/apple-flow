@@ -1,6 +1,6 @@
-# Codex Relay - Quick Start Guide
+# Apple Flow - Quick Start Guide
 
-Get Codex Relay running in 5 steps. This guide assumes you're new to the project.
+Get Apple Flow running in 5 steps. This guide assumes you're new to the project.
 
 ## What You'll Get
 
@@ -23,8 +23,8 @@ Works via **iMessage** (default) or **Apple Mail** (optional).
 ## Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/codex-flow.git
-cd codex-flow
+git clone https://github.com/dkyazzentwatwa/apple-flow.git
+cd apple-flow
 ```
 
 ## Step 2: Grant Full Disk Access
@@ -78,11 +78,11 @@ Find and update these two settings:
 
 ```bash
 # 1. Your phone number in E.164 format (include country code)
-codex_relay_allowed_senders=+15551234567
+apple_flow_allowed_senders=+15551234567
 
 # 2. Your workspace paths (where Codex can work)
-codex_relay_allowed_workspaces=/Users/yourname/code
-codex_relay_default_workspace=/Users/yourname/code/my-project
+apple_flow_allowed_workspaces=/Users/yourname/code
+apple_flow_default_workspace=/Users/yourname/code/my-project
 ```
 
 **Phone Number Format:**
@@ -99,13 +99,13 @@ codex_relay_default_workspace=/Users/yourname/code/my-project
 
 ```bash
 # Require 'relay:' prefix for non-command messages
-codex_relay_require_chat_prefix=true
+apple_flow_require_chat_prefix=true
 
 # Send startup notification
-codex_relay_send_startup_intro=true
+apple_flow_send_startup_intro=true
 
 # Approval timeout (minutes)
-codex_relay_approval_ttl_minutes=20
+apple_flow_approval_ttl_minutes=20
 ```
 
 See `.env.example` for all available options.
@@ -122,24 +122,24 @@ The script will automatically:
 3. ✅ Create `.env` from `.env.example` if missing
 4. ✅ Validate your configuration
 5. ✅ Run 47 tests to ensure everything works
-6. 🚀 Start the Codex Relay daemon
+6. 🚀 Start the Apple Flow daemon
 
 **What you'll see:**
 ```
-== Codex Relay Beginner Setup ==
+== Apple Flow Beginner Setup ==
 Creating virtual environment...
 Installing dependencies...
 Running tests...
 ===== 47 passed in 0.36s =====
 
-Starting Codex Relay daemon...
-2026-02-16 14:00:00,000 INFO Codex Relay running (foreground)
+Starting Apple Flow daemon...
+2026-02-16 14:00:00,000 INFO Apple Flow running (foreground)
 2026-02-16 14:00:00,100 INFO Ready. Waiting for inbound iMessages. Press Ctrl+C to stop.
 ```
 
 ---
 
-## Using Codex Relay
+## Using Apple Flow
 
 ### Send Your First Message
 
@@ -236,7 +236,7 @@ Should show a number, not an error.
 **Fix**:
 ```bash
 nano .env
-# Set: codex_relay_allowed_senders=+15551234567
+# Set: apple_flow_allowed_senders=+15551234567
 ```
 
 ### "codex login not found"
@@ -274,7 +274,7 @@ pytest -v
 **Fix**:
 ```bash
 # Kill any existing processes
-pkill -f "codex_relay daemon"
+pkill -f "apple_flow daemon"
 
 # Remove stale lock
 rm -f ~/.codex/relay.daemon.lock
@@ -293,7 +293,7 @@ The relay includes a web API for monitoring:
 
 ```bash
 # In another terminal:
-python -m codex_relay admin
+python -m apple_flow admin
 ```
 
 Visit `http://localhost:8787` for:
@@ -310,10 +310,10 @@ For always-on operation, see `CLAUDE.md` for launchd setup.
 To use email instead of (or alongside) iMessage, add to `.env`:
 
 ```bash
-codex_relay_enable_mail_polling=true
-codex_relay_mail_allowed_senders=your.email@example.com
-codex_relay_mail_from_address=your.email@example.com
-codex_relay_mail_max_age_days=2
+apple_flow_enable_mail_polling=true
+apple_flow_mail_allowed_senders=your.email@example.com
+apple_flow_mail_from_address=your.email@example.com
+apple_flow_mail_max_age_days=2
 ```
 
 Then restart the daemon. Emails will:
@@ -367,7 +367,7 @@ For developers, see `CLAUDE.md` for architecture details.
 
 ## Getting Help
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/codex-flow/issues)
+- **Issues**: [GitHub Issues](https://github.com/dkyazzentwatwa/apple-flow/issues)
 - **Logs**: Check terminal output for errors
 - **Tests**: Run `pytest -v` to verify installation
 

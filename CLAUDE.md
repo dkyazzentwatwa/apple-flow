@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Codex Relay is a local-first daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar on macOS to Codex CLI/App Server. It polls the local Messages database and (optionally) Apple Mail, Reminders, Notes, and Calendar for inbound messages/tasks, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. Users can iMessage, email, add Reminders, write Notes, or schedule Calendar events for Codex. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
+Apple Flow is a local-first daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar on macOS to Codex CLI/App Server. It polls the local Messages database and (optionally) Apple Mail, Reminders, Notes, and Calendar for inbound messages/tasks, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. Users can iMessage, email, add Reminders, write Notes, or schedule Calendar events for Codex. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
 
-**Version:** 0.1.0 | **Python:** ≥3.11 | **Package name:** `codex-relay`
+**Version:** 0.2.0 | **Python:** ≥3.11 | **Package name:** `apple-flow`
 
 ## Development Commands
 
@@ -26,10 +26,10 @@ pytest tests/test_orchestrator.py -v
 pytest tests/test_orchestrator.py::test_function_name -v
 
 # Start daemon (foreground, polls iMessages)
-python -m codex_relay daemon
+python -m apple_flow daemon
 
 # Start admin API only
-python -m codex_relay admin
+python -m apple_flow admin
 
 # Beginner quickstart (creates venv, runs tests, starts daemon)
 ./scripts/start_beginner.sh
@@ -71,11 +71,11 @@ POST /task → FastAPI → Orchestrator → Codex Connector → iMessage Egress
   (Siri Shortcuts / curl bridge)
 ```
 
-### Core Modules (src/codex_relay/)
+### Core Modules (src/apple_flow/)
 
 | Module | Responsibility |
 |--------|---------------|
-| `__main__.py` | CLI entry point (`python -m codex_relay`), daemon lock management |
+| `__main__.py` | CLI entry point (`python -m apple_flow`), daemon lock management |
 | `daemon.py` | Main polling loop, graceful shutdown, signal handling, connector selection |
 | `orchestrator.py` | Command routing, approval gates, prompt construction, attachment/voice memo handling |
 | `commanding.py` | Parses command prefixes (idea:, plan:, task:, @alias extraction, CommandKind enum) |
@@ -83,7 +83,7 @@ POST /task → FastAPI → Orchestrator → Codex Connector → iMessage Egress
 | `egress.py` | Sends iMessages via AppleScript, deduplicates outbound messages |
 | `policy.py` | Sender allowlist, rate limiting enforcement |
 | `store.py` | Thread-safe SQLite with connection caching and indexes |
-| `config.py` | Pydantic settings with `codex_relay_` env prefix, path resolution |
+| `config.py` | Pydantic settings with `apple_flow_` env prefix, path resolution |
 | `codex_cli_connector.py` | Stateless CLI connector using `codex exec` (default, avoids state corruption) |
 | `codex_connector.py` | Stateful app-server connector via JSON-RPC (fallback option) |
 | `main.py` | FastAPI admin endpoints (/sessions, /approvals, /events, POST /task) |
@@ -164,85 +164,86 @@ class ApprovalRequest:
 
 ## Configuration
 
-All settings use `codex_relay_` env prefix. Key settings in `.env`:
+All settings use `apple_flow_` env prefix. Key settings in `.env`:
 
 ### Core Settings
 
-- `codex_relay_allowed_senders` - comma-separated phone numbers (E.164 format)
-- `codex_relay_allowed_workspaces` - paths Codex may access (auto-resolved to absolute)
-- `codex_relay_default_workspace` - default working directory for Codex
-- `codex_relay_messages_db_path` - usually `~/Library/Messages/chat.db`
+- `apple_flow_allowed_senders` - comma-separated phone numbers (E.164 format)
+- `apple_flow_allowed_workspaces` - paths Codex may access (auto-resolved to absolute)
+- `apple_flow_default_workspace` - default working directory for Codex
+- `apple_flow_messages_db_path` - usually `~/Library/Messages/chat.db`
 
 ### Safety Settings
 
-- `codex_relay_only_poll_allowed_senders` - filter at SQL query time (default: true)
-- `codex_relay_require_chat_prefix` - require `relay:` prefix on messages (default: true)
-- `codex_relay_chat_prefix` - custom prefix string (default: "relay:")
-- `codex_relay_approval_ttl_minutes` - how long approvals remain valid (default: 20)
-- `codex_relay_max_messages_per_minute` - rate limit per sender (default: 30)
+- `apple_flow_only_poll_allowed_senders` - filter at SQL query time (default: true)
+- `apple_flow_require_chat_prefix` - require `relay:` prefix on messages (default: true)
+- `apple_flow_chat_prefix` - custom prefix string (default: "relay:")
+- `apple_flow_approval_ttl_minutes` - how long approvals remain valid (default: 20)
+- `apple_flow_max_messages_per_minute` - rate limit per sender (default: 30)
 
 ### Connector Settings
 
-- `codex_relay_use_codex_cli` - use CLI connector instead of app-server (default: true, recommended)
-- `codex_relay_codex_cli_command` - path to codex binary (default: "codex")
-- `codex_relay_codex_cli_context_window` - number of recent exchanges to include as context (default: 3)
-- `codex_relay_codex_app_server_cmd` - app-server command (only used if use_codex_cli=false)
-- `codex_relay_codex_turn_timeout_seconds` - how long to wait for Codex responses (default: 300s/5min)
+- `apple_flow_use_codex_cli` - use CLI connector instead of app-server (default: true, recommended)
+- `apple_flow_codex_cli_command` - path to codex binary (default: "codex")
+- `apple_flow_codex_cli_context_window` - number of recent exchanges to include as context (default: 3)
+- `apple_flow_codex_cli_model` - model to pass via `-m` flag (e.g. `gpt-5.3-codex`; empty = codex default)
+- `apple_flow_codex_app_server_cmd` - app-server command (only used if use_codex_cli=false)
+- `apple_flow_codex_turn_timeout_seconds` - how long to wait for Codex responses (default: 300s/5min)
 
 ### Apple Mail Integration
 
-- `codex_relay_enable_mail_polling` - enable Apple Mail as additional ingress (default: false)
-- `codex_relay_mail_poll_account` - Mail.app account name to poll (empty = all/inbox)
-- `codex_relay_mail_poll_mailbox` - mailbox to poll (default: INBOX)
-- `codex_relay_mail_from_address` - sender address for outbound replies (empty = default)
-- `codex_relay_mail_allowed_senders` - comma-separated email addresses to accept
-- `codex_relay_mail_max_age_days` - only process emails from last N days (default: 2)
-- `codex_relay_mail_signature` - signature appended to all email replies (default: "Codex 🤖, Your 24/7 Assistant")
+- `apple_flow_enable_mail_polling` - enable Apple Mail as additional ingress (default: false)
+- `apple_flow_mail_poll_account` - Mail.app account name to poll (empty = all/inbox)
+- `apple_flow_mail_poll_mailbox` - mailbox to poll (default: INBOX)
+- `apple_flow_mail_from_address` - sender address for outbound replies (empty = default)
+- `apple_flow_mail_allowed_senders` - comma-separated email addresses to accept
+- `apple_flow_mail_max_age_days` - only process emails from last N days (default: 2)
+- `apple_flow_mail_signature` - signature appended to all email replies (default: "Codex 🤖, Your 24/7 Assistant")
 
 ### Apple Reminders Integration
 
-- `codex_relay_enable_reminders_polling` - enable Apple Reminders as task queue ingress (default: false)
-- `codex_relay_reminders_list_name` - Reminders list to poll (default: "Codex Tasks")
-- `codex_relay_reminders_owner` - sender identity for reminder tasks (e.g. phone number; defaults to first allowed_sender)
-- `codex_relay_reminders_auto_approve` - skip approval gate for reminder tasks (default: false)
-- `codex_relay_reminders_poll_interval_seconds` - poll interval for Reminders (default: 5s)
+- `apple_flow_enable_reminders_polling` - enable Apple Reminders as task queue ingress (default: false)
+- `apple_flow_reminders_list_name` - Reminders list to poll (default: "Codex Tasks")
+- `apple_flow_reminders_owner` - sender identity for reminder tasks (e.g. phone number; defaults to first allowed_sender)
+- `apple_flow_reminders_auto_approve` - skip approval gate for reminder tasks (default: false)
+- `apple_flow_reminders_poll_interval_seconds` - poll interval for Reminders (default: 5s)
 
 ### Apple Notes Integration
 
-- `codex_relay_enable_notes_polling` - enable Apple Notes as long-form task ingress (default: false)
-- `codex_relay_notes_folder_name` - Notes folder to poll (default: "Codex Inbox")
-- `codex_relay_notes_owner` - sender identity for note tasks (defaults to first allowed_sender)
-- `codex_relay_notes_auto_approve` - skip approval gate for note tasks (default: false)
-- `codex_relay_notes_poll_interval_seconds` - poll interval for Notes (default: 10s)
+- `apple_flow_enable_notes_polling` - enable Apple Notes as long-form task ingress (default: false)
+- `apple_flow_notes_folder_name` - Notes folder to poll (default: "Codex Inbox")
+- `apple_flow_notes_owner` - sender identity for note tasks (defaults to first allowed_sender)
+- `apple_flow_notes_auto_approve` - skip approval gate for note tasks (default: false)
+- `apple_flow_notes_poll_interval_seconds` - poll interval for Notes (default: 10s)
 
 ### Apple Calendar Integration
 
-- `codex_relay_enable_calendar_polling` - enable Apple Calendar as scheduled task ingress (default: false)
-- `codex_relay_calendar_name` - Calendar to poll (default: "Codex Schedule")
-- `codex_relay_calendar_owner` - sender identity for calendar tasks (defaults to first allowed_sender)
-- `codex_relay_calendar_auto_approve` - skip approval gate for calendar tasks (default: false)
-- `codex_relay_calendar_poll_interval_seconds` - poll interval for Calendar (default: 30s)
-- `codex_relay_calendar_lookahead_minutes` - how far ahead to look for due events (default: 5)
+- `apple_flow_enable_calendar_polling` - enable Apple Calendar as scheduled task ingress (default: false)
+- `apple_flow_calendar_name` - Calendar to poll (default: "Codex Schedule")
+- `apple_flow_calendar_owner` - sender identity for calendar tasks (defaults to first allowed_sender)
+- `apple_flow_calendar_auto_approve` - skip approval gate for calendar tasks (default: false)
+- `apple_flow_calendar_poll_interval_seconds` - poll interval for Calendar (default: 30s)
+- `apple_flow_calendar_lookahead_minutes` - how far ahead to look for due events (default: 5)
 
 ### Advanced Features
 
-- `codex_relay_workspace_aliases` - JSON dict mapping @alias names to workspace paths (default: empty)
-- `codex_relay_auto_context_messages` - number of recent messages to auto-inject as context (default: 0 = disabled)
-- `codex_relay_enable_progress_streaming` - send periodic progress updates during long tasks (default: false)
-- `codex_relay_progress_update_interval_seconds` - minimum seconds between progress updates (default: 30)
-- `codex_relay_enable_attachments` - enable reading inbound file attachments (default: false)
-- `codex_relay_max_attachment_size_mb` - max attachment size to process (default: 10)
-- `codex_relay_attachment_temp_dir` - temp directory for attachment processing (default: /tmp/codex_relay_attachments)
-- `codex_relay_enable_voice_memos` - convert responses to voice memos via macOS TTS (default: false)
-- `codex_relay_voice_memo_voice` - macOS TTS voice name (default: "Samantha")
-- `codex_relay_voice_memo_max_chars` - max characters to convert to speech (default: 2000)
-- `codex_relay_voice_memo_send_text_too` - also send text response alongside voice memo (default: true)
+- `apple_flow_workspace_aliases` - JSON dict mapping @alias names to workspace paths (default: empty)
+- `apple_flow_auto_context_messages` - number of recent messages to auto-inject as context (default: 0 = disabled)
+- `apple_flow_enable_progress_streaming` - send periodic progress updates during long tasks (default: false)
+- `apple_flow_progress_update_interval_seconds` - minimum seconds between progress updates (default: 30)
+- `apple_flow_enable_attachments` - enable reading inbound file attachments (default: false)
+- `apple_flow_max_attachment_size_mb` - max attachment size to process (default: 10)
+- `apple_flow_attachment_temp_dir` - temp directory for attachment processing (default: /tmp/apple_flow_attachments)
+- `apple_flow_enable_voice_memos` - convert responses to voice memos via macOS TTS (default: false)
+- `apple_flow_voice_memo_voice` - macOS TTS voice name (default: "Samantha")
+- `apple_flow_voice_memo_max_chars` - max characters to convert to speech (default: 2000)
+- `apple_flow_voice_memo_send_text_too` - also send text response alongside voice memo (default: true)
 
 See `.env.example` for full list. **When adding a new config field:** update both `config.py` and `.env.example`, add docs to `README.md`, and ensure a sensible default.
 
 ## Admin API
 
-The admin API runs on port 8787 by default (`python -m codex_relay admin`).
+The admin API runs on port 8787 by default (`python -m apple_flow admin`).
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -337,15 +338,15 @@ tests/test_admin_api.py           # FastAPI admin endpoints
 
 ```bash
 # Start/stop service
-launchctl start com.codex.relay
-launchctl stop com.codex.relay
+launchctl start com.apple-flow
+launchctl stop com.apple-flow
 
 # Check service status
 launchctl list | grep codex.relay
 
 # View logs
-tail -f logs/codex-relay.log
-tail -f logs/codex-relay.err.log
+tail -f logs/apple-flow.log
+tail -f logs/apple-flow.err.log
 ```
 
 ## Conventions for AI Assistants
@@ -357,7 +358,7 @@ Always run `pytest -q` to verify tests pass before considering the task complete
 Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`, add config fields to `config.py` and `.env.example`, wire up in `daemon.py`, and add test files `tests/test_<app>_ingress.py` and `tests/test_<app>_egress.py`.
 
 ### Adding a new config field
-1. Add the field with a default to `src/codex_relay/config.py`
+1. Add the field with a default to `src/apple_flow/config.py`
 2. Add the commented example to `.env.example`
 3. Document it in `README.md`
 4. Update `CLAUDE.md` (this file) if it's a key setting
@@ -371,7 +372,7 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 ### Connector selection
 - Default: `codex_cli_connector.py` (stateless, `codex exec`, recommended)
 - Fallback: `codex_connector.py` (stateful JSON-RPC app-server)
-- Selection controlled by `codex_relay_use_codex_cli` config flag
+- Selection controlled by `apple_flow_use_codex_cli` config flag
 
 ### Key patterns
 - All async I/O uses `asyncio`; test with `pytest-asyncio` (`asyncio_mode = "auto"`)

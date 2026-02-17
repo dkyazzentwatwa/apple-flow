@@ -3,7 +3,7 @@
 import json
 from unittest.mock import patch, MagicMock
 
-from codex_relay.calendar_ingress import AppleCalendarIngress
+from apple_flow.calendar_ingress import AppleCalendarIngress
 
 from conftest import FakeStore
 
@@ -29,7 +29,7 @@ def _mock_applescript_output(events):
 # --- Fetch Tests ---
 
 
-@patch("codex_relay.calendar_ingress.subprocess.run")
+@patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_new_returns_messages(mock_run):
     events = [
         {"id": "evt1", "summary": "Deploy staging", "description": "Push latest code", "start_date": "2026-02-17T10:00:00Z"},
@@ -47,7 +47,7 @@ def test_fetch_new_returns_messages(mock_run):
     assert messages[0].context["event_id"] == "evt1"
 
 
-@patch("codex_relay.calendar_ingress.subprocess.run")
+@patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_skips_processed_ids(mock_run):
     events = [
         {"id": "evt1", "summary": "Deploy", "description": "", "start_date": "2026-02-17T10:00:00Z"},
@@ -61,7 +61,7 @@ def test_fetch_skips_processed_ids(mock_run):
     assert len(messages) == 0
 
 
-@patch("codex_relay.calendar_ingress.subprocess.run")
+@patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_adds_task_prefix_by_default(mock_run):
     events = [
         {"id": "evt1", "summary": "Deploy", "description": "Details", "start_date": "2026-02-17T10:00:00Z"},
@@ -74,7 +74,7 @@ def test_fetch_adds_task_prefix_by_default(mock_run):
     assert messages[0].text.startswith("task:")
 
 
-@patch("codex_relay.calendar_ingress.subprocess.run")
+@patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_adds_relay_prefix_when_auto_approve(mock_run):
     events = [
         {"id": "evt1", "summary": "Deploy", "description": "Details", "start_date": "2026-02-17T10:00:00Z"},
@@ -87,7 +87,7 @@ def test_fetch_adds_relay_prefix_when_auto_approve(mock_run):
     assert messages[0].text.startswith("relay:")
 
 
-@patch("codex_relay.calendar_ingress.subprocess.run")
+@patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_skips_empty_events(mock_run):
     events = [
         {"id": "evt1", "summary": "", "description": "", "start_date": "2026-02-17T10:00:00Z"},
@@ -128,7 +128,7 @@ def test_processed_ids_loaded_from_store():
 # --- Error Handling ---
 
 
-@patch("codex_relay.calendar_ingress.subprocess.run")
+@patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_handles_applescript_error(mock_run):
     result = MagicMock()
     result.returncode = 1
@@ -140,7 +140,7 @@ def test_fetch_handles_applescript_error(mock_run):
     assert ingress.fetch_new() == []
 
 
-@patch("codex_relay.calendar_ingress.subprocess.run")
+@patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_handles_timeout(mock_run):
     import subprocess
     mock_run.side_effect = subprocess.TimeoutExpired(cmd="osascript", timeout=30)

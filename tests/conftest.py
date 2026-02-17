@@ -1,4 +1,4 @@
-"""Shared test fixtures for Codex Relay tests."""
+"""Shared test fixtures for Apple Flow tests."""
 
 from __future__ import annotations
 
@@ -101,7 +101,14 @@ class FakeStore:
         return list(self.sessions.values())
 
     def create_run(
-        self, run_id: str, sender: str, intent: str, state: str, cwd: str, risk_level: str
+        self,
+        run_id: str,
+        sender: str,
+        intent: str,
+        state: str,
+        cwd: str,
+        risk_level: str,
+        source_context: dict[str, Any] | None = None,
     ) -> None:
         self.runs[run_id] = {
             "run_id": run_id,
@@ -110,6 +117,7 @@ class FakeStore:
             "intent": intent,
             "cwd": cwd,
             "risk_level": risk_level,
+            "source_context": source_context,
         }
 
     def update_run_state(self, run_id: str, state: str) -> None:
@@ -118,6 +126,13 @@ class FakeStore:
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         return self.runs.get(run_id)
+
+    def get_run_source_context(self, run_id: str) -> dict[str, Any] | None:
+        """Get the source context for a run (reminder_id, note_id, etc.)"""
+        run = self.get_run(run_id)
+        if not run:
+            return None
+        return run.get("source_context")
 
     def create_approval(
         self,

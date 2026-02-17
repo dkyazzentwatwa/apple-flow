@@ -9,7 +9,7 @@ import time
 import uuid
 from typing import Any
 
-logger = logging.getLogger("codex_relay.connector")
+logger = logging.getLogger("apple_flow.connector")
 
 
 class CodexAppServerConnector:
@@ -152,7 +152,7 @@ class CodexAppServerConnector:
             "initialize",
             {
                 "clientInfo": {
-                    "name": "codex-relay",
+                    "name": "apple-flow",
                     "version": "0.1.0",
                 }
             },

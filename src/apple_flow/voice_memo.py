@@ -12,12 +12,12 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-logger = logging.getLogger("codex_relay.voice_memo")
+logger = logging.getLogger("apple_flow.voice_memo")
 
 
 def generate_voice_memo(
     text: str,
-    output_dir: str = "/tmp/codex_relay_attachments",
+    output_dir: str = "/tmp/apple_flow_attachments",
     voice: str = "Samantha",
     max_chars: int = 2000,
 ) -> str | None:

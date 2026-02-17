@@ -4,9 +4,9 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
-from codex_relay.commanding import CommandKind
-from codex_relay.main import build_app
-from codex_relay.orchestrator import OrchestrationResult
+from apple_flow.commanding import CommandKind
+from apple_flow.main import build_app
+from apple_flow.orchestrator import OrchestrationResult
 
 
 class TaskStore:
@@ -46,8 +46,8 @@ def test_task_endpoint_returns_503_without_orchestrator():
 def test_task_endpoint_processes_message():
     import os
     # Temporarily clear allowed_senders so no sender check blocks us
-    old_val = os.environ.get("codex_relay_allowed_senders")
-    os.environ["codex_relay_allowed_senders"] = ""
+    old_val = os.environ.get("apple_flow_allowed_senders")
+    os.environ["apple_flow_allowed_senders"] = ""
     try:
         app = build_app(store=TaskStore())
         mock_orch = MagicMock()
@@ -68,16 +68,16 @@ def test_task_endpoint_processes_message():
         assert mock_orch.handle_message.called
     finally:
         if old_val is not None:
-            os.environ["codex_relay_allowed_senders"] = old_val
+            os.environ["apple_flow_allowed_senders"] = old_val
         else:
-            os.environ.pop("codex_relay_allowed_senders", None)
+            os.environ.pop("apple_flow_allowed_senders", None)
 
 
 def test_task_endpoint_validates_sender():
     """When allowed_senders is set, non-allowlisted senders get 403."""
     import os
-    old_val = os.environ.get("codex_relay_allowed_senders")
-    os.environ["codex_relay_allowed_senders"] = "+15551234567"
+    old_val = os.environ.get("apple_flow_allowed_senders")
+    os.environ["apple_flow_allowed_senders"] = "+15551234567"
     try:
         app = build_app(store=TaskStore())
         mock_orch = MagicMock()
@@ -88,9 +88,9 @@ def test_task_endpoint_validates_sender():
         assert resp.status_code == 403
     finally:
         if old_val is not None:
-            os.environ["codex_relay_allowed_senders"] = old_val
+            os.environ["apple_flow_allowed_senders"] = old_val
         else:
-            os.environ.pop("codex_relay_allowed_senders", None)
+            os.environ.pop("apple_flow_allowed_senders", None)
 
 
 def test_task_endpoint_requires_fields():

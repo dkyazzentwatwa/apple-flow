@@ -1,4 +1,4 @@
-"""Admin API client for Codex Relay."""
+"""Admin API client for Apple Flow."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import httpx
 
 
 class AdminClient:
-    """Client for interacting with the Codex Relay admin API."""
+    """Client for interacting with the Apple Flow admin API."""
 
     def __init__(self, base_url: str = "http://127.0.0.1:8787", timeout: float = 10.0):
         self.base_url = base_url.rstrip("/")

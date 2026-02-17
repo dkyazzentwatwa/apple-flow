@@ -1,6 +1,6 @@
 import sqlite3
 
-from codex_relay.ingress import IMessageIngress
+from apple_flow.ingress import IMessageIngress
 
 
 def test_latest_rowid_reads_max(tmp_path):

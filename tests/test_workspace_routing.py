@@ -1,8 +1,8 @@
 """Tests for multi-workspace routing via @alias syntax."""
 
-from codex_relay.commanding import CommandKind, parse_command
-from codex_relay.models import InboundMessage
-from codex_relay.orchestrator import RelayOrchestrator
+from apple_flow.commanding import CommandKind, parse_command
+from apple_flow.models import InboundMessage
+from apple_flow.orchestrator import RelayOrchestrator
 
 from conftest import FakeConnector, FakeEgress, FakeStore
 

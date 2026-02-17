@@ -24,7 +24,7 @@ def _acquire_daemon_lock() -> tuple[int, Path]:
         fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError as exc:
         raise RuntimeError(
-            f"Another Codex Relay daemon appears to be running (lock: {lock_path})."
+            f"Another Apple Flow daemon appears to be running (lock: {lock_path})."
         ) from exc
     lock_fd.write(str(Path.cwd()))
     lock_fd.flush()
@@ -35,7 +35,7 @@ def _acquire_daemon_lock() -> tuple[int, Path]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Codex Relay runtime")
+    parser = argparse.ArgumentParser(description="Apple Flow runtime")
     parser.add_argument("mode", choices=["daemon", "admin"], nargs="?", default="daemon")
     args = parser.parse_args()
 
@@ -49,7 +49,7 @@ def main() -> None:
         return
 
     settings = RelaySettings()
-    uvicorn.run("codex_relay.main:app", host=settings.admin_host, port=settings.admin_port, reload=False)
+    uvicorn.run("apple_flow.main:app", host=settings.admin_host, port=settings.admin_port, reload=False)
 
 
 if __name__ == "__main__":
