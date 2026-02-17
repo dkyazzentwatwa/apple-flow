@@ -32,8 +32,11 @@ python -m codex_relay admin
 # Beginner quickstart (creates venv, runs tests, starts daemon)
 ./scripts/start_beginner.sh
 
-# Auto-start at boot (installs launchd service)
-./scripts/install_autostart.sh
+# One-command auto-start setup (does everything!)
+./scripts/setup_autostart.sh
+# Creates venv, installs deps, configures service, enables auto-start at boot
+# Only manual step: edit .env and grant Full Disk Access
+# See docs/AUTO_START_SETUP.md for details
 
 # Uninstall auto-start
 ./scripts/uninstall_autostart.sh

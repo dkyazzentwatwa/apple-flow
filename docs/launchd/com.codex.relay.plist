@@ -7,7 +7,7 @@
 
     <key>ProgramArguments</key>
     <array>
-      <string>/Users/cypher-server/Documents/code/codex-flow/.venv/bin/python</string>
+      <string>/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/bin/python3.14</string>
       <string>-m</string>
       <string>codex_relay</string>
       <string>daemon</string>
@@ -31,7 +31,11 @@
     <key>EnvironmentVariables</key>
     <dict>
       <key>PATH</key>
-      <string>/Users/cypher-server/Documents/code/codex-flow/.venv/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <string>/Users/cypher-server/Documents/code/codex-flow/.venv/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>PYTHONPATH</key>
+      <string>/Users/cypher-server/Documents/code/codex-flow/.venv/lib/python3.14/site-packages:/Users/cypher-server/Documents/code/codex-flow/src</string>
+      <key>VIRTUAL_ENV</key>
+      <string>/Users/cypher-server/Documents/code/codex-flow/.venv</string>
     </dict>
   </dict>
 </plist>
