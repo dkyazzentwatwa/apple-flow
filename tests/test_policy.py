@@ -1,5 +1,5 @@
-from codex_relay.config import RelaySettings
-from codex_relay.policy import PolicyEngine
+from apple_flow.config import RelaySettings
+from apple_flow.policy import PolicyEngine
 
 
 def test_sender_allowlist_enforced():

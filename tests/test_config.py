@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from codex_relay.config import RelaySettings
+from apple_flow.config import RelaySettings
 
 
 def test_parse_csv_lists_from_settings_init():

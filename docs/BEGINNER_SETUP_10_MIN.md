@@ -1,6 +1,6 @@
 # Codex Flow Beginner Setup in 10 Minutes
 
-This guide gets `codex-flow` running fast on macOS with the safest default path.
+This guide gets `apple-flow` running fast on macOS with the safest default path.
 
 ## What you need first
 
@@ -13,7 +13,7 @@ This guide gets `codex-flow` running fast on macOS with the safest default path.
 ## 1) Go to the project (30 sec)
 
 ```bash
-cd /Users/cypher/Public/code/codex-flow
+cd /Users/cypher/Public/code/apple-flow
 ```
 
 ## 2) Create your local env file (30 sec)
@@ -26,11 +26,11 @@ cp .env.example .env
 
 Open `.env` and confirm these at minimum:
 
-- `codex_relay_allowed_senders=+1YOURNUMBER`
-- `codex_relay_allowed_workspaces=/Users/cypher/Public/code/codex-flow`
-- `codex_relay_default_workspace=/Users/cypher/Public/code/codex-flow`
+- `apple_flow_allowed_senders=+1YOURNUMBER`
+- `apple_flow_allowed_workspaces=/Users/cypher/Public/code/apple-flow`
+- `apple_flow_default_workspace=/Users/cypher/Public/code/apple-flow`
 
-Important: your own phone number must be in `codex_relay_allowed_senders` or relay messages will be blocked.
+Important: your own phone number must be in `apple_flow_allowed_senders` or relay messages will be blocked.
 
 ## 4) Authenticate Codex once (1 min)
 
@@ -67,12 +67,12 @@ In the terminal running the daemon, press `Ctrl+C`.
 
 ## Fast troubleshooting
 
-- `Safety stop: codex_relay_allowed_senders is empty`
+- `Safety stop: apple_flow_allowed_senders is empty`
   - Set your number in `.env` (example: `+15551234567`).
 - `Messages DB not found`
-  - Check `codex_relay_messages_db_path` (default should be `~/Library/Messages/chat.db`).
+  - Check `apple_flow_messages_db_path` (default should be `~/Library/Messages/chat.db`).
 - No responses to your texts
-  - Confirm your sender number exactly matches `codex_relay_allowed_senders`.
+  - Confirm your sender number exactly matches `apple_flow_allowed_senders`.
   - Confirm your message uses the prefix `relay:` (default safety setting).
 
 ## Optional manual run (without helper script)
@@ -82,5 +82,5 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 pytest -q
-python -m codex_relay daemon
+python -m apple_flow daemon
 ```

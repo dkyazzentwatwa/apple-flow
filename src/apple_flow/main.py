@@ -28,7 +28,7 @@ def build_app(store: Any | None = None) -> FastAPI:
     if hasattr(active_store, "bootstrap"):
         active_store.bootstrap()
 
-    app = FastAPI(title="Codex Relay Admin API", version="0.1.0")
+    app = FastAPI(title="Apple Flow Admin API", version="0.1.0")
     app.state.store = active_store
     # orchestrator is injected by daemon at startup (if running alongside polling)
     app.state.orchestrator = None

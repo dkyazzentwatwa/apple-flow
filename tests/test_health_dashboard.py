@@ -1,8 +1,8 @@
 """Tests for health dashboard command."""
 
-from codex_relay.commanding import CommandKind
-from codex_relay.models import InboundMessage
-from codex_relay.orchestrator import RelayOrchestrator
+from apple_flow.commanding import CommandKind
+from apple_flow.models import InboundMessage
+from apple_flow.orchestrator import RelayOrchestrator
 
 from conftest import FakeConnector, FakeEgress, FakeStore
 
@@ -30,7 +30,7 @@ def test_health_command_returns_stats():
     )
     result = orch.handle_message(msg)
     assert result.kind is CommandKind.HEALTH
-    assert "Codex Relay Health" in result.response
+    assert "Apple Flow Health" in result.response
     assert "Sessions: 2" in result.response
 
 

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from .models import InboundMessage
 from .utils import normalize_sender
 
-logger = logging.getLogger("codex_relay.mail_ingress")
+logger = logging.getLogger("apple_flow.mail_ingress")
 
 
 class AppleMailIngress:

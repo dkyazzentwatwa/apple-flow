@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from codex_relay.config import RelaySettings
+from apple_flow.config import RelaySettings
 
 
 def test_csv_dotenv_values_load_without_json(monkeypatch, tmp_path):
@@ -8,9 +8,9 @@ def test_csv_dotenv_values_load_without_json(monkeypatch, tmp_path):
     dotenv.write_text(
         "\n".join(
             [
-                "codex_relay_allowed_senders=+15551234567,+15550000000",
-                "codex_relay_allowed_workspaces=/Users/cypher/Public/code/codex-flow,/tmp/safe",
-                "codex_relay_codex_app_server_cmd=codex app-server",
+                "apple_flow_allowed_senders=+15551234567,+15550000000",
+                "apple_flow_allowed_workspaces=/Users/cypher/Public/code/codex-flow,/tmp/safe",
+                "apple_flow_codex_app_server_cmd=codex app-server",
             ]
         )
     )

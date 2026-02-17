@@ -1,36 +1,36 @@
 ---
-name: codex-flow-ops
-description: Use when working on Codex Relay in the codex-flow repository. Enforces safe defaults, beginner-first startup, focused debugging, config hygiene, and required verification.
+name: apple-flow-ops
+description: Use when working on Apple Flow in the apple-flow repository. Enforces safe defaults, beginner-first startup, focused debugging, config hygiene, and required verification.
 ---
 
 # Codex Flow Ops
 
 ## Overview
 Use this skill for changes, debugging, and operations in:
-- `/Users/cypher/Public/code/codex-flow`
+- `/Users/cypher/Public/code/apple-flow`
 
-Codex Relay is a local-first iMessage bridge to Codex App Server. This skill keeps workflow safe-by-default and beginner-friendly while giving concrete operator steps.
+Apple Flow is a local-first iMessage bridge to Codex App Server. This skill keeps workflow safe-by-default and beginner-friendly while giving concrete operator steps.
 
 ## When to Use
 Use this skill when the task involves any of:
 - Starting or troubleshooting the relay daemon
-- Editing relay behavior in `src/codex_relay/*`
+- Editing relay behavior in `src/apple_flow/*`
 - Updating runtime config fields or `.env.example`
 - Improving ingress/egress/orchestration/logging behavior
 - Verifying safety gates around sender allowlist, chat prefix, or approvals
 
 ## Non-Negotiable Safety Defaults
 Keep these defaults unless the user explicitly asks otherwise:
-- `codex_relay_only_poll_allowed_senders=true`
-- `codex_relay_require_chat_prefix=true`
-- `codex_relay_chat_prefix=relay:`
-- `codex_relay_process_historical_on_first_start=false`
-- `codex_relay_notify_blocked_senders=false`
-- `codex_relay_notify_rate_limited_senders=false`
+- `apple_flow_only_poll_allowed_senders=true`
+- `apple_flow_require_chat_prefix=true`
+- `apple_flow_chat_prefix=relay:`
+- `apple_flow_process_historical_on_first_start=false`
+- `apple_flow_notify_blocked_senders=false`
+- `apple_flow_notify_rate_limited_senders=false`
 - Keep mutating workflows behind approval (`task:` and `project:`)
 
 Do not remove duplicate/echo suppression without explicit request:
-- `codex_relay_suppress_duplicate_outbound_seconds`
+- `apple_flow_suppress_duplicate_outbound_seconds`
 - `IMessageEgress.was_recent_outbound(...)`
 
 ## Primary Workflow
@@ -38,28 +38,28 @@ Do not remove duplicate/echo suppression without explicit request:
 ### 1) Reproduce First
 Use beginner path before changing code:
 ```bash
-cd /Users/cypher/Public/code/codex-flow
+cd /Users/cypher/Public/code/apple-flow
 ./scripts/start_beginner.sh
 ```
 
 If startup appears idle, verify:
 - Full Disk Access for terminal host app
-- `codex_relay_messages_db_path` points to a real `chat.db`
+- `apple_flow_messages_db_path` points to a real `chat.db`
 - `codex login` is completed
 
 ### 2) Identify Root Cause
 Inspect the right layer first:
-- Runtime settings: `src/codex_relay/config.py`
-- Polling/loop/logs: `src/codex_relay/daemon.py`
-- Messages DB reads: `src/codex_relay/ingress.py`
-- iMessage send and suppression: `src/codex_relay/egress.py`
-- command routing and approvals: `src/codex_relay/orchestrator.py`
+- Runtime settings: `src/apple_flow/config.py`
+- Polling/loop/logs: `src/apple_flow/daemon.py`
+- Messages DB reads: `src/apple_flow/ingress.py`
+- iMessage send and suppression: `src/apple_flow/egress.py`
+- command routing and approvals: `src/apple_flow/orchestrator.py`
 
 Prefer minimal, focused patches once the cause is clear.
 
 ### 3) Keep Config Hygiene
 For every new config field:
-1. Add sensible default in `src/codex_relay/config.py`
+1. Add sensible default in `src/apple_flow/config.py`
 2. Document in `README.md`
 3. Add sample in `.env.example`
 
@@ -95,7 +95,7 @@ If tests fail, report failing tests and root cause before claiming completion.
 4. Re-run script and confirm daemon foreground readiness
 
 ### B) No Replies in iMessage
-1. Confirm sender matches `codex_relay_allowed_senders`
+1. Confirm sender matches `apple_flow_allowed_senders`
 2. Confirm message uses `relay:` prefix (or explicit command prefix)
 3. Confirm sender allowlist polling is on and non-empty
 4. Check logs for ignore reason (`ignored_missing_chat_prefix`, echo suppression, rate limit)
@@ -107,7 +107,7 @@ If tests fail, report failing tests and root cause before claiming completion.
 4. Confirm expiration handling and status transitions are preserved
 
 ## Acceptance Checklist
-Before finishing a codex-flow task, confirm:
+Before finishing a apple-flow task, confirm:
 - Safety defaults preserved (unless explicitly changed by request)
 - Patch is minimal and scoped to root cause
 - Config/docs/examples are in sync if config changed

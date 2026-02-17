@@ -1,4 +1,4 @@
-"""Protocol interfaces for Codex Relay components.
+"""Protocol interfaces for Apple Flow components.
 
 These protocols define the interfaces that store, connector, and egress
 components must implement, enabling proper type checking and easier testing.

@@ -1,6 +1,6 @@
 # Auto-Start Setup Guide
 
-This guide explains how to configure codex-relay to start automatically when your Mac boots.
+This guide explains how to configure apple-flow to start automatically when your Mac boots.
 
 ## One-Command Setup (Recommended)
 
@@ -12,7 +12,7 @@ Just run:
 
 This single script does **everything**:
 1. ✓ Creates virtual environment
-2. ✓ Installs codex-relay and all dependencies
+2. ✓ Installs apple-flow and all dependencies
 3. ✓ Creates .env from template (prompts you to edit it)
 4. ✓ Generates launchd plist with correct paths
 5. ✓ Installs and starts the service
@@ -47,8 +47,8 @@ This only configures and installs the auto-start service.
 
 5. **Restart the service:**
    ```bash
-   launchctl stop com.codex.relay
-   launchctl start com.codex.relay
+   launchctl stop com.apple-flow
+   launchctl start com.apple-flow
    ```
 
 ## Verify It's Running
@@ -58,20 +58,20 @@ This only configures and installs the auto-start service.
 launchctl list | grep codex.relay
 
 # Watch logs in real-time
-tail -f logs/codex-relay.log
+tail -f logs/apple-flow.log
 
 # Check for errors
-tail -f logs/codex-relay.err.log
+tail -f logs/apple-flow.err.log
 ```
 
 ## Managing the Service
 
 ```bash
 # Start manually
-launchctl start com.codex.relay
+launchctl start com.apple-flow
 
 # Stop manually
-launchctl stop com.codex.relay
+launchctl stop com.apple-flow
 
 # Check status
 launchctl list | grep codex.relay
@@ -99,12 +99,12 @@ This means the setup is **portable** - it works regardless of:
 
 ```bash
 launchctl list | grep codex.relay
-# Output: -    1    com.codex.relay (- means not running, 1 is exit code)
+# Output: -    1    com.apple-flow (- means not running, 1 is exit code)
 ```
 
 **Check the error log:**
 ```bash
-tail -30 logs/codex-relay.err.log
+tail -30 logs/apple-flow.err.log
 ```
 
 **Common issues:**
@@ -125,7 +125,7 @@ Then re-grant Full Disk Access to the **new** Python binary path.
 ### Service runs but doesn't respond to messages
 
 Check that:
-1. `.env` file is configured with correct `codex_relay_allowed_senders`
+1. `.env` file is configured with correct `apple_flow_allowed_senders`
 2. Messages app is signed in to iMessage
 3. Database path is correct: `~/Library/Messages/chat.db`
 
@@ -133,5 +133,5 @@ Check that:
 
 - Only the specific Python binary gets Full Disk Access
 - The daemon runs as your user (not root)
-- It can only access paths in `codex_relay_allowed_workspaces`
+- It can only access paths in `apple_flow_allowed_workspaces`
 - Mutating operations require explicit approval via the approval workflow

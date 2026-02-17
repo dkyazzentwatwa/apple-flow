@@ -7,12 +7,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from codex_relay.codex_cli_connector import CodexCliConnector
+from apple_flow.codex_cli_connector import CodexCliConnector
 
 
 def test_cli_connector_implements_protocol():
     """Verify CLI connector implements ConnectorProtocol."""
-    from codex_relay.protocols import ConnectorProtocol
+    from apple_flow.protocols import ConnectorProtocol
 
     connector = CodexCliConnector()
     assert isinstance(connector, ConnectorProtocol)
@@ -86,6 +86,38 @@ def test_run_turn_success():
 
         # Verify response
         assert response == "This is a test response"
+
+
+def test_run_turn_with_model_flag():
+    """Test that -m flag is included when model is configured."""
+    connector = CodexCliConnector(codex_command="codex", model="gpt-5.3-codex")
+
+    mock_result = Mock()
+    mock_result.returncode = 0
+    mock_result.stdout = "response"
+    mock_result.stderr = ""
+
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
+        connector.run_turn("+15551234567", "test prompt")
+
+        args, _ = mock_run.call_args
+        assert args[0] == ["codex", "exec", "--skip-git-repo-check", "--yolo", "-m", "gpt-5.3-codex", "test prompt"]
+
+
+def test_run_turn_no_model_flag_when_empty():
+    """Test that -m flag is omitted when model is empty."""
+    connector = CodexCliConnector(codex_command="codex", model="")
+
+    mock_result = Mock()
+    mock_result.returncode = 0
+    mock_result.stdout = "response"
+    mock_result.stderr = ""
+
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
+        connector.run_turn("+15551234567", "test prompt")
+
+        args, _ = mock_run.call_args
+        assert "-m" not in args[0]
 
 
 def test_run_turn_with_context():
@@ -188,3 +220,38 @@ def test_context_window_limiting():
         assert "Message 4" in connector._sender_contexts[sender][-1]
         # Message 0 should not be in history
         assert not any("Message 0" in ctx for ctx in connector._sender_contexts[sender])
+
+
+def test_run_turn_streaming_with_model_flag():
+    """Test that run_turn_streaming includes -m flag when model is set."""
+    connector = CodexCliConnector(codex_command="codex", model="gpt-5.3-codex")
+
+    mock_proc = Mock()
+    mock_proc.stdout = iter(["line1\n", "line2\n"])
+    mock_proc.returncode = 0
+    mock_proc.stderr = Mock()
+
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+        mock_proc.wait = Mock(return_value=0)
+        connector.run_turn_streaming("+15551234567", "test prompt")
+
+        args, _ = mock_popen.call_args
+        assert "-m" in args[0]
+        assert "gpt-5.3-codex" in args[0]
+
+
+def test_run_turn_streaming_no_model_flag_when_empty():
+    """Test that run_turn_streaming omits -m flag when model is empty."""
+    connector = CodexCliConnector(codex_command="codex", model="")
+
+    mock_proc = Mock()
+    mock_proc.stdout = iter(["response\n"])
+    mock_proc.returncode = 0
+    mock_proc.stderr = Mock()
+
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+        mock_proc.wait = Mock(return_value=0)
+        connector.run_turn_streaming("+15551234567", "test prompt")
+
+        args, _ = mock_popen.call_args
+        assert "-m" not in args[0]

@@ -3,14 +3,15 @@
 import json
 from unittest.mock import patch, MagicMock
 
-from codex_relay.notes_ingress import AppleNotesIngress
+from apple_flow.notes_ingress import AppleNotesIngress
 
 from conftest import FakeStore
 
 
-def _make_ingress(store=None, auto_approve=False):
+def _make_ingress(store=None, auto_approve=False, trigger_tag=""):
     return AppleNotesIngress(
         folder_name="Codex Inbox",
+        trigger_tag=trigger_tag,
         owner_sender="+15551234567",
         auto_approve=auto_approve,
         store=store,
@@ -29,7 +30,7 @@ def _mock_applescript_output(notes):
 # --- Fetch Tests ---
 
 
-@patch("codex_relay.notes_ingress.subprocess.run")
+@patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_new_returns_messages(mock_run):
     notes = [
         {"id": "note1", "name": "task: Fix login bug", "body": "Login fails on mobile", "modification_date": "2026-02-17T10:00:00Z"},
@@ -47,7 +48,7 @@ def test_fetch_new_returns_messages(mock_run):
     assert messages[0].context["note_id"] == "note1"
 
 
-@patch("codex_relay.notes_ingress.subprocess.run")
+@patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_skips_processed_ids(mock_run):
     notes = [
         {"id": "note1", "name": "task: Fix bug", "body": "Details", "modification_date": "2026-02-17T10:00:00Z"},
@@ -61,7 +62,7 @@ def test_fetch_skips_processed_ids(mock_run):
     assert len(messages) == 0
 
 
-@patch("codex_relay.notes_ingress.subprocess.run")
+@patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_adds_task_prefix_when_no_command_prefix(mock_run):
     notes = [
         {"id": "note1", "name": "Fix the login", "body": "Details", "modification_date": "2026-02-17T10:00:00Z"},
@@ -74,7 +75,7 @@ def test_fetch_adds_task_prefix_when_no_command_prefix(mock_run):
     assert messages[0].text.startswith("task:")
 
 
-@patch("codex_relay.notes_ingress.subprocess.run")
+@patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_adds_relay_prefix_when_auto_approve(mock_run):
     notes = [
         {"id": "note1", "name": "Fix the login", "body": "Details", "modification_date": "2026-02-17T10:00:00Z"},
@@ -87,7 +88,7 @@ def test_fetch_adds_relay_prefix_when_auto_approve(mock_run):
     assert messages[0].text.startswith("relay:")
 
 
-@patch("codex_relay.notes_ingress.subprocess.run")
+@patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_preserves_existing_command_prefix(mock_run):
     notes = [
         {"id": "note1", "name": "idea: brainstorm features", "body": "List options", "modification_date": "2026-02-17T10:00:00Z"},
@@ -102,7 +103,7 @@ def test_fetch_preserves_existing_command_prefix(mock_run):
     assert not messages[0].text.startswith("task: idea:")
 
 
-@patch("codex_relay.notes_ingress.subprocess.run")
+@patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_skips_empty_notes(mock_run):
     notes = [
         {"id": "note1", "name": "", "body": "", "modification_date": "2026-02-17T10:00:00Z"},
@@ -146,7 +147,7 @@ def test_processed_ids_loaded_from_store():
 # --- AppleScript Error Handling ---
 
 
-@patch("codex_relay.notes_ingress.subprocess.run")
+@patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_handles_applescript_error(mock_run):
     result = MagicMock()
     result.returncode = 1
@@ -160,7 +161,7 @@ def test_fetch_handles_applescript_error(mock_run):
     assert messages == []
 
 
-@patch("codex_relay.notes_ingress.subprocess.run")
+@patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_handles_timeout(mock_run):
     import subprocess
     mock_run.side_effect = subprocess.TimeoutExpired(cmd="osascript", timeout=30)
@@ -171,7 +172,7 @@ def test_fetch_handles_timeout(mock_run):
     assert messages == []
 
 
-@patch("codex_relay.notes_ingress.subprocess.run")
+@patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_handles_invalid_json(mock_run):
     result = MagicMock()
     result.returncode = 0
@@ -202,3 +203,105 @@ def test_compose_text_body_only():
 
 def test_compose_text_both_empty():
     assert AppleNotesIngress._compose_text("", "") == ""
+
+
+# --- Trigger Tag Tests ---
+
+
+@patch("apple_flow.notes_ingress.subprocess.run")
+def test_fetch_skips_notes_without_trigger_tag(mock_run):
+    """Notes without the trigger tag should be skipped."""
+    notes = [
+        {"id": "note1", "name": "Incomplete note", "body": "Work in progress...", "modification_date": "2026-02-17T10:00:00Z"},
+        {"id": "note2", "name": "Ready note", "body": "Deploy to prod #codex", "modification_date": "2026-02-17T11:00:00Z"},
+    ]
+    mock_run.return_value = _mock_applescript_output(notes)
+
+    ingress = AppleNotesIngress(
+        folder_name="Codex Inbox",
+        trigger_tag="#codex",
+        owner_sender="+15551234567",
+    )
+    messages = ingress.fetch_new()
+
+    # Only note2 should be processed
+    assert len(messages) == 1
+    assert messages[0].context["note_id"] == "note2"
+
+
+@patch("apple_flow.notes_ingress.subprocess.run")
+def test_fetch_processes_notes_with_trigger_tag_in_title(mock_run):
+    """Notes with trigger tag in title should be processed."""
+    notes = [
+        {"id": "note1", "name": "task: Fix bug #codex", "body": "Details here", "modification_date": "2026-02-17T10:00:00Z"},
+    ]
+    mock_run.return_value = _mock_applescript_output(notes)
+
+    ingress = AppleNotesIngress(
+        folder_name="Codex Inbox",
+        trigger_tag="#codex",
+        owner_sender="+15551234567",
+    )
+    messages = ingress.fetch_new()
+
+    assert len(messages) == 1
+    assert messages[0].context["note_id"] == "note1"
+
+
+@patch("apple_flow.notes_ingress.subprocess.run")
+def test_fetch_processes_notes_with_trigger_tag_in_body(mock_run):
+    """Notes with trigger tag in body should be processed."""
+    notes = [
+        {"id": "note1", "name": "Deploy updates", "body": "Push to production\n\n#codex", "modification_date": "2026-02-17T10:00:00Z"},
+    ]
+    mock_run.return_value = _mock_applescript_output(notes)
+
+    ingress = AppleNotesIngress(
+        folder_name="Codex Inbox",
+        trigger_tag="#codex",
+        owner_sender="+15551234567",
+    )
+    messages = ingress.fetch_new()
+
+    assert len(messages) == 1
+    assert messages[0].context["note_id"] == "note1"
+
+
+@patch("apple_flow.notes_ingress.subprocess.run")
+def test_fetch_processes_all_notes_when_trigger_tag_empty(mock_run):
+    """When trigger tag is empty, all notes should be processed (backward compatibility)."""
+    notes = [
+        {"id": "note1", "name": "Note without tag", "body": "Some content", "modification_date": "2026-02-17T10:00:00Z"},
+        {"id": "note2", "name": "Another note", "body": "More content", "modification_date": "2026-02-17T11:00:00Z"},
+    ]
+    mock_run.return_value = _mock_applescript_output(notes)
+
+    ingress = AppleNotesIngress(
+        folder_name="Codex Inbox",
+        trigger_tag="",
+        owner_sender="+15551234567",
+    )
+    messages = ingress.fetch_new()
+
+    assert len(messages) == 2
+
+
+@patch("apple_flow.notes_ingress.subprocess.run")
+def test_fetch_custom_trigger_tag(mock_run):
+    """Should support custom trigger tags."""
+    notes = [
+        {"id": "note1", "name": "Deploy", "body": "Deploy to staging @go", "modification_date": "2026-02-17T10:00:00Z"},
+        {"id": "note2", "name": "Deploy", "body": "Deploy to prod #codex", "modification_date": "2026-02-17T11:00:00Z"},
+    ]
+    mock_run.return_value = _mock_applescript_output(notes)
+
+    ingress = AppleNotesIngress(
+        folder_name="Codex Inbox",
+        trigger_tag="@go",
+        owner_sender="+15551234567",
+    )
+    messages = ingress.fetch_new()
+
+    # Only note1 with @go should be processed
+    assert len(messages) == 1
+    assert messages[0].context["note_id"] == "note1"

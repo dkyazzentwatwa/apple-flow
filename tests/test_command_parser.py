@@ -1,4 +1,4 @@
-from codex_relay.commanding import CommandKind, parse_command
+from apple_flow.commanding import CommandKind, parse_command
 
 
 def test_parse_prefixed_idea_command():

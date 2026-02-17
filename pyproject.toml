@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codex-relay"
-version = "0.1.0"
-description = "Local-first iMessage to Codex App Server relay daemon"
+name = "apple-flow"
+version = "0.2.0"
+description = "Local-first macOS daemon bridging iMessage, Mail, Reminders, Notes, and Calendar to AI CLI tools"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -24,7 +24,7 @@ dev = [
 ]
 
 [project.scripts]
-codex-relay = "codex_relay.__main__:main"
+apple-flow = "apple_flow.__main__:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -1,19 +1,19 @@
 #!/bin/bash
 set -e
 
-# Codex Relay Complete Setup & Auto-Start Installation
+# Apple Flow Complete Setup & Auto-Start Installation
 # One script to set up everything and enable auto-start at boot
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PLIST_DEST="$HOME/Library/LaunchAgents/com.codex.relay.plist"
+PLIST_DEST="$HOME/Library/LaunchAgents/com.apple-flow.plist"
 LOGS_DIR="$PROJECT_DIR/logs"
 VENV_DIR="$PROJECT_DIR/.venv"
 ENV_FILE="$PROJECT_DIR/.env"
 ENV_EXAMPLE="$PROJECT_DIR/.env.example"
 
 echo "=========================================="
-echo "  Codex Relay Complete Setup"
+echo "  Apple Flow Complete Setup"
 echo "=========================================="
 echo ""
 
@@ -28,7 +28,7 @@ fi
 
 # Step 2: Install package and dependencies
 echo ""
-echo "[2/5] Installing codex-relay and dependencies..."
+echo "[2/5] Installing apple-flow and dependencies..."
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
 "$VENV_DIR/bin/pip" install --quiet -e "$PROJECT_DIR[dev]"
 echo "✓ Installation complete"
@@ -46,8 +46,8 @@ if [ ! -f "$ENV_FILE" ]; then
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
         echo "Required settings:"
-        echo "  - codex_relay_allowed_senders (phone numbers)"
-        echo "  - codex_relay_allowed_workspaces (directories)"
+        echo "  - apple_flow_allowed_senders (phone numbers)"
+        echo "  - apple_flow_allowed_workspaces (directories)"
         echo ""
         echo "Run: nano .env  (or use your preferred editor)"
         echo ""
@@ -82,7 +82,7 @@ mkdir -p "$LOGS_DIR"
 mkdir -p "$HOME/Library/LaunchAgents"
 
 # Stop existing service if running
-if launchctl list 2>/dev/null | grep -q "com.codex.relay"; then
+if launchctl list 2>/dev/null | grep -q "com.apple-flow"; then
     echo "Stopping existing service..."
     launchctl unload "$PLIST_DEST" 2>/dev/null || true
 fi
@@ -94,13 +94,13 @@ cat > "$PLIST_DEST" << EOF
 <plist version="1.0">
   <dict>
     <key>Label</key>
-    <string>com.codex.relay</string>
+    <string>com.apple-flow</string>
 
     <key>ProgramArguments</key>
     <array>
       <string>$ACTUAL_PYTHON</string>
       <string>-m</string>
-      <string>codex_relay</string>
+      <string>apple_flow</string>
       <string>daemon</string>
     </array>
 
@@ -111,10 +111,10 @@ cat > "$PLIST_DEST" << EOF
     <true/>
 
     <key>StandardOutPath</key>
-    <string>$LOGS_DIR/codex-relay.log</string>
+    <string>$LOGS_DIR/apple-flow.log</string>
 
     <key>StandardErrorPath</key>
-    <string>$LOGS_DIR/codex-relay.err.log</string>
+    <string>$LOGS_DIR/apple-flow.err.log</string>
 
     <key>WorkingDirectory</key>
     <string>$PROJECT_DIR</string>
@@ -162,17 +162,17 @@ echo ""
 echo "4. Click 'Open' and enable the toggle"
 echo ""
 echo "5. Restart the service:"
-echo "   launchctl stop com.codex.relay"
-echo "   launchctl start com.codex.relay"
+echo "   launchctl stop com.apple-flow"
+echo "   launchctl start com.apple-flow"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "Useful Commands:"
-echo "  Check status:  launchctl list | grep codex.relay"
-echo "  View logs:     tail -f $LOGS_DIR/codex-relay.log"
-echo "  View errors:   tail -f $LOGS_DIR/codex-relay.err.log"
-echo "  Stop service:  launchctl stop com.codex.relay"
-echo "  Start service: launchctl start com.codex.relay"
+echo "  Check status:  launchctl list | grep apple-flow"
+echo "  View logs:     tail -f $LOGS_DIR/apple-flow.log"
+echo "  View errors:   tail -f $LOGS_DIR/apple-flow.err.log"
+echo "  Stop service:  launchctl stop com.apple-flow"
+echo "  Start service: launchctl start com.apple-flow"
 echo "  Uninstall:     ./scripts/uninstall_autostart.sh"
 echo ""
 echo "The daemon will now auto-start on every boot!"

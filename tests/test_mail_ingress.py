@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from codex_relay.mail_ingress import AppleMailIngress
+from apple_flow.mail_ingress import AppleMailIngress
 
 
 def test_extract_email_address_with_angle_brackets():

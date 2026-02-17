@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from codex_relay.main import build_app
+from apple_flow.main import build_app
 
 
 class InMemoryStore:

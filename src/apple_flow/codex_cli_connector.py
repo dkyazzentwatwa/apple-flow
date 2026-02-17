@@ -4,7 +4,7 @@ import logging
 import subprocess
 from typing import Any
 
-logger = logging.getLogger("codex_relay.cli_connector")
+logger = logging.getLogger("apple_flow.cli_connector")
 
 
 class CodexCliConnector:
@@ -21,6 +21,7 @@ class CodexCliConnector:
         workspace: str | None = None,
         timeout: float = 300.0,
         context_window: int = 3,
+        model: str = "",
     ):
         """Initialize the CLI connector.
 
@@ -29,11 +30,13 @@ class CodexCliConnector:
             workspace: Working directory for codex exec (default: None)
             timeout: Timeout in seconds for each exec (default: 300s/5min)
             context_window: Number of recent message pairs to include as context (default: 3)
+            model: Model to use (e.g., "sonnet", "opus", "haiku"). Empty = use codex default
         """
         self.codex_command = codex_command
         self.workspace = workspace
         self.timeout = timeout
         self.context_window = context_window
+        self.model = model.strip()
 
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
@@ -80,7 +83,10 @@ class CodexCliConnector:
         # Build command with --skip-git-repo-check and --yolo flags
         # (relay has its own workspace security via allowed_workspaces
         # and approval workflow, so we bypass codex's sandbox)
-        cmd = [self.codex_command, "exec", "--skip-git-repo-check", "--yolo", full_prompt]
+        cmd = [self.codex_command, "exec", "--skip-git-repo-check", "--yolo"]
+        if self.model:
+            cmd.extend(["-m", self.model])
+        cmd.append(full_prompt)
 
         logger.info(
             "Executing codex CLI: sender=%s workspace=%s timeout=%.1fs context_items=%d",
@@ -135,10 +141,10 @@ class CodexCliConnector:
                 self.timeout,
                 sender,
             )
-            return f"Error: Request timed out after {int(self.timeout)}s. Try a simpler request or increase codex_relay_codex_turn_timeout_seconds."
+            return f"Error: Request timed out after {int(self.timeout)}s. Try a simpler request or increase apple_flow_codex_turn_timeout_seconds."
         except FileNotFoundError:
             logger.error("Codex binary not found: %s", self.codex_command)
-            return f"Error: Codex CLI not found at '{self.codex_command}'. Check codex_relay_codex_cli_command setting."
+            return f"Error: Codex CLI not found at '{self.codex_command}'. Check apple_flow_codex_cli_command setting."
         except Exception as exc:
             logger.exception("Unexpected error during codex exec: %s", exc)
             return f"Error: {type(exc).__name__}: {exc}"
@@ -150,7 +156,10 @@ class CodexCliConnector:
         """
         sender = thread_id
         full_prompt = self._build_prompt_with_context(sender, prompt)
-        cmd = [self.codex_command, "exec", "--skip-git-repo-check", "--yolo", full_prompt]
+        cmd = [self.codex_command, "exec", "--skip-git-repo-check", "--yolo"]
+        if self.model:
+            cmd.extend(["-m", self.model])
+        cmd.append(full_prompt)
 
         logger.info("Executing codex CLI (streaming): sender=%s", sender)
 

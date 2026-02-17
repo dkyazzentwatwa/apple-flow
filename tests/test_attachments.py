@@ -1,8 +1,8 @@
 """Tests for file attachment support."""
 
-from codex_relay.commanding import CommandKind
-from codex_relay.models import InboundMessage
-from codex_relay.orchestrator import RelayOrchestrator
+from apple_flow.commanding import CommandKind
+from apple_flow.models import InboundMessage
+from apple_flow.orchestrator import RelayOrchestrator
 
 from conftest import FakeConnector, FakeEgress, FakeStore
 
@@ -112,7 +112,7 @@ def test_multiple_attachments_all_listed():
 
 def test_egress_send_attachment():
     """Test egress send_attachment method exists and handles empty path."""
-    from codex_relay.egress import IMessageEgress
+    from apple_flow.egress import IMessageEgress
 
     egress = IMessageEgress()
     # Empty path should return without error

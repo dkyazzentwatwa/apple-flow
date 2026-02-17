@@ -1,4 +1,4 @@
-from codex_relay.egress import IMessageEgress
+from apple_flow.egress import IMessageEgress
 
 
 def test_suppresses_duplicate_outbound_within_window(monkeypatch):

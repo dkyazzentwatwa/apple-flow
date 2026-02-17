@@ -1,4 +1,4 @@
-"""Shared utility functions for Codex Relay."""
+"""Shared utility functions for Apple Flow."""
 
 from __future__ import annotations
 

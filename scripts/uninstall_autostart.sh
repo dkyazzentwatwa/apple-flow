@@ -1,11 +1,11 @@
 #!/bin/bash
 set -e
 
-# Codex Relay Auto-Start Uninstallation Script
+# Apple Flow Auto-Start Uninstallation Script
 
-PLIST_DEST="$HOME/Library/LaunchAgents/com.codex.relay.plist"
+PLIST_DEST="$HOME/Library/LaunchAgents/com.apple-flow.plist"
 
-echo "=== Codex Relay Auto-Start Uninstallation ==="
+echo "=== Apple Flow Auto-Start Uninstallation ==="
 echo ""
 
 if [ ! -f "$PLIST_DEST" ]; then
@@ -24,6 +24,6 @@ rm "$PLIST_DEST"
 echo ""
 echo "=== Uninstallation Complete ==="
 echo ""
-echo "The codex-relay daemon will no longer start automatically."
+echo "The apple-flow daemon will no longer start automatically."
 echo "Logs are preserved in the project's logs/ directory."
 echo ""

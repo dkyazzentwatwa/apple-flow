@@ -1,6 +1,6 @@
 import sqlite3
 
-from codex_relay.ingress import IMessageIngress
+from apple_flow.ingress import IMessageIngress
 
 
 def _create_messages_db(path):

@@ -8,7 +8,7 @@ import time
 
 from .utils import normalize_sender
 
-logger = logging.getLogger("codex_relay.egress")
+logger = logging.getLogger("apple_flow.egress")
 
 
 class IMessageEgress:
@@ -37,7 +37,8 @@ class IMessageEgress:
 
     @staticmethod
     def _osascript_send(recipient: str, text: str) -> None:
-        escaped_text = text.replace('"', '\\"')
+        # Escape backslashes first, then quotes
+        escaped_text = text.replace('\\', '\\\\').replace('"', '\\"')
         script = f'''
         tell application "Messages"
             set targetService to 1st service whose service type = iMessage

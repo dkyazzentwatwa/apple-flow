@@ -2,7 +2,7 @@
 
 import pytest
 
-from codex_relay.egress import IMessageEgress
+from apple_flow.egress import IMessageEgress
 
 
 def test_chunk_short_message():

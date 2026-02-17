@@ -26,7 +26,7 @@ from .reminders_egress import AppleRemindersEgress
 from .reminders_ingress import AppleRemindersIngress
 from .store import SQLiteStore
 
-logger = logging.getLogger("codex_relay.daemon")
+logger = logging.getLogger("apple_flow.daemon")
 
 
 class RelayDaemon:
@@ -52,6 +52,7 @@ class RelayDaemon:
                 workspace=settings.default_workspace,
                 timeout=settings.codex_turn_timeout_seconds,
                 context_window=settings.codex_cli_context_window,
+                model=settings.codex_cli_model,
             )
         else:
             logger.info("Using app-server connector (JSON-RPC with persistent threads)")
@@ -81,9 +82,27 @@ class RelayDaemon:
             voice_memo_output_dir=settings.attachment_temp_dir,
         )
 
+        # Create channel-specific egress objects first so they can be passed to main orchestrator
+        # (for post-execution cleanup after approval)
+        reminders_egress_obj = None
+        notes_egress_obj = None
+        calendar_egress_obj = None
+
+        if settings.enable_reminders_polling:
+            reminders_egress_obj = AppleRemindersEgress(list_name=settings.reminders_list_name)
+        if settings.enable_notes_polling:
+            notes_egress_obj = AppleNotesEgress(folder_name=settings.notes_folder_name)
+        if settings.enable_calendar_polling:
+            calendar_egress_obj = AppleCalendarEgress(calendar_name=settings.calendar_name)
+
         self.orchestrator = RelayOrchestrator(
             egress=self.egress,
             require_chat_prefix=settings.require_chat_prefix,
+            reminders_egress=reminders_egress_obj,
+            reminders_archive_list_name=settings.reminders_archive_list_name,
+            notes_egress=notes_egress_obj,
+            notes_archive_folder_name=settings.notes_archive_folder_name,
+            calendar_egress=calendar_egress_obj,
             **orchestrator_kwargs,
         )
 
@@ -115,7 +134,7 @@ class RelayDaemon:
 
         # Apple Reminders integration (optional task-queue ingress)
         self.reminders_ingress: AppleRemindersIngress | None = None
-        self.reminders_egress: AppleRemindersEgress | None = None
+        self.reminders_egress: AppleRemindersEgress | None = reminders_egress_obj
         self.reminders_orchestrator: RelayOrchestrator | None = None
         if settings.enable_reminders_polling:
             owner = settings.reminders_owner
@@ -133,9 +152,6 @@ class RelayDaemon:
                 auto_approve=settings.reminders_auto_approve,
                 store=self.store,
             )
-            self.reminders_egress = AppleRemindersEgress(
-                list_name=settings.reminders_list_name,
-            )
             self.reminders_orchestrator = RelayOrchestrator(
                 egress=self.egress,
                 require_chat_prefix=False,
@@ -144,24 +160,25 @@ class RelayDaemon:
 
         # Apple Notes integration (optional long-form ingress)
         self.notes_ingress: AppleNotesIngress | None = None
-        self.notes_egress: AppleNotesEgress | None = None
+        self.notes_egress: AppleNotesEgress | None = notes_egress_obj
         self.notes_orchestrator: RelayOrchestrator | None = None
         if settings.enable_notes_polling:
             notes_owner = settings.notes_owner
             if not notes_owner and settings.allowed_senders:
                 notes_owner = settings.allowed_senders[0]
             logger.info(
-                "Apple Notes polling enabled (folder=%r, owner=%s)",
+                "Apple Notes polling enabled (folder=%r, trigger_tag=%r, owner=%s)",
                 settings.notes_folder_name,
+                settings.notes_trigger_tag,
                 notes_owner or "(unset)",
             )
             self.notes_ingress = AppleNotesIngress(
                 folder_name=settings.notes_folder_name,
+                trigger_tag=settings.notes_trigger_tag,
                 owner_sender=notes_owner,
                 auto_approve=settings.notes_auto_approve,
                 store=self.store,
             )
-            self.notes_egress = AppleNotesEgress(folder_name=settings.notes_folder_name)
             self.notes_orchestrator = RelayOrchestrator(
                 egress=self.egress,
                 require_chat_prefix=False,
@@ -170,7 +187,7 @@ class RelayDaemon:
 
         # Apple Calendar integration (optional scheduled-task ingress)
         self.calendar_ingress: AppleCalendarIngress | None = None
-        self.calendar_egress: AppleCalendarEgress | None = None
+        self.calendar_egress: AppleCalendarEgress | None = calendar_egress_obj
         self.calendar_orchestrator: RelayOrchestrator | None = None
         if settings.enable_calendar_polling:
             cal_owner = settings.calendar_owner
@@ -189,7 +206,6 @@ class RelayDaemon:
                 lookahead_minutes=settings.calendar_lookahead_minutes,
                 store=self.store,
             )
-            self.calendar_egress = AppleCalendarEgress(calendar_name=settings.calendar_name)
             self.calendar_orchestrator = RelayOrchestrator(
                 egress=self.egress,
                 require_chat_prefix=False,
@@ -265,7 +281,7 @@ class RelayDaemon:
                 if not self.settings.messages_db_path.exists():
                     self._throttled_messages_db_warning(
                         f"Messages DB not found at {self.settings.messages_db_path}. "
-                        "Update codex_relay_messages_db_path in .env and ensure Messages is enabled on this Mac."
+                        "Update apple_flow_messages_db_path in .env and ensure Messages is enabled on this Mac."
                     )
                     await asyncio.sleep(self.settings.poll_interval_seconds)
                     continue
@@ -282,7 +298,7 @@ class RelayDaemon:
                         self.store.set_state("last_rowid", str(self._last_rowid))
                     except sqlite3.OperationalError as exc:
                         self._throttled_state_db_warning(
-                            f"State DB write failed ({exc}). Check codex_relay_db_path and filesystem permissions."
+                            f"State DB write failed ({exc}). Check apple_flow_db_path and filesystem permissions."
                         )
                         continue
                     if msg.is_from_me:
@@ -303,12 +319,12 @@ class RelayDaemon:
                     if not self.policy.is_sender_allowed(msg.sender):
                         logger.info("Blocked message from non-allowlisted sender: %s", msg.sender)
                         if self.settings.notify_blocked_senders:
-                            self.egress.send(msg.sender, "Codex Relay: sender not authorized for this relay.")
+                            self.egress.send(msg.sender, "Apple Flow: sender not authorized for this relay.")
                         continue
                     if not self.policy.is_under_rate_limit(msg.sender, datetime.now(UTC)):
                         logger.info("Rate limit triggered for sender: %s", msg.sender)
                         if self.settings.notify_rate_limited_senders:
-                            self.egress.send(msg.sender, "Codex Relay: rate limit exceeded, please retry in a minute.")
+                            self.egress.send(msg.sender, "Apple Flow: rate limit exceeded, please retry in a minute.")
                         continue
                     started_at = time.monotonic()
                     result = self.orchestrator.handle_message(msg)
@@ -333,7 +349,7 @@ class RelayDaemon:
                 if "unable to open database file" in str(exc).lower():
                     self._throttled_messages_db_warning(
                         f"Messages DB open failed ({exc}). Grant Terminal Full Disk Access and verify "
-                        f"codex_relay_messages_db_path={self.settings.messages_db_path} "
+                        f"apple_flow_messages_db_path={self.settings.messages_db_path} "
                         f"(exists={self.settings.messages_db_path.exists()})"
                     )
                 else:
@@ -445,9 +461,13 @@ class RelayDaemon:
                                 f"[Codex] Awaiting approval — check iMessage.\n\n{result.response[:500]}",
                             )
                         else:
-                            self.reminders_egress.complete_reminder(
-                                reminder_id,
-                                f"[Codex Result]\n\n{result.response}",
+                            # Move completed reminders to archive list
+                            list_name = msg.context.get("list_name", self.settings.reminders_list_name)
+                            self.reminders_egress.move_to_archive(
+                                reminder_id=reminder_id,
+                                result_text=f"[Codex Result]\n\n{result.response}",
+                                source_list_name=list_name,
+                                archive_list_name=self.settings.reminders_archive_list_name,
                             )
             except Exception as exc:
                 logger.exception("Reminders polling loop error: %s", exc)
@@ -483,7 +503,14 @@ class RelayDaemon:
                     logger.info("Handled note id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
 
                     if result.response and note_id:
-                        self.notes_egress.append_result(note_id, result.response)
+                        # Move completed notes to archive subfolder
+                        folder_name = msg.context.get("folder_name", self.settings.notes_folder_name)
+                        self.notes_egress.move_to_archive(
+                            note_id=note_id,
+                            result_text=f"\n\n[Codex Result]\n{result.response}",
+                            source_folder_name=folder_name,
+                            archive_subfolder_name=self.settings.notes_archive_folder_name,
+                        )
             except Exception as exc:
                 logger.exception("Notes polling loop error: %s", exc)
 
@@ -529,23 +556,35 @@ class RelayDaemon:
             logger.info("Startup intro skipped: no allowed_senders configured.")
             return
         recipient = self.settings.allowed_senders[0]
+
+        model_line = f"🧠 Model: {self.settings.codex_cli_model}" if self.settings.codex_cli_model else "🧠 Model: codex default"
+        connector_line = "⚙️  Engine: codex exec (stateless)" if self.settings.use_codex_cli else "⚙️  Engine: app-server (stateful)"
+
         commands = [
-            f"{self.settings.chat_prefix} <message> (general chat)",
-            "idea: <prompt>",
-            "plan: <goal>",
-            "task: <instruction> (approval required)",
-            "project: <spec> (approval required)",
-            "approve <request_id> / deny <request_id>",
-            "status",
-            "health (daemon stats)",
-            "history: [query] (message history)",
-            "clear context (or: new chat / reset context)",
+            f"💬 {self.settings.chat_prefix} <msg>      chat",
+            "💡 idea: <prompt>     brainstorm",
+            "📋 plan: <goal>       create plan",
+            "⚡ task: <cmd>        execute  (needs ✅)",
+            "🚀 project: <spec>    multi-step (needs ✅)",
+            "✅ approve <id>       approve task",
+            "❌ deny <id>          deny task",
+            "📊 status             pending approvals",
+            "🏥 health             daemon stats",
+            "🔍 history: [query]   search messages",
+            "🔄 clear context      fresh start",
         ]
         intro = (
-            "Codex-Flow is online\n"
-            f"Workspace: {self.settings.default_workspace}\n"
-            f"Allowed sender mode: {self.settings.only_poll_allowed_senders}\n"
-            "Commands:\n- " + "\n- ".join(commands)
+            "🤖✨ CODEX-FLOW ONLINE ✨🤖\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{connector_line}\n"
+            f"{model_line}\n"
+            f"📂 Workspace: {self.settings.default_workspace}\n"
+            f"🔐 Auth: {'allowed senders only' if self.settings.only_poll_allowed_senders else 'open'}\n"
+            f"⏱️  Timeout: {int(self.settings.codex_turn_timeout_seconds)}s\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚡ COMMANDS\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            + "\n".join(commands)
         )
         try:
             self.egress.send(recipient, intro)
@@ -592,7 +631,7 @@ async def run() -> None:
         channels.append("Apple Calendar")
 
     logger.info(
-        "Codex Relay running (foreground). Allowed senders=%s, strict_sender_poll=%s, channels=%s",
+        "Apple Flow running (foreground). Allowed senders=%s, strict_sender_poll=%s, channels=%s",
         len(settings.allowed_senders),
         settings.only_poll_allowed_senders,
         " + ".join(channels),

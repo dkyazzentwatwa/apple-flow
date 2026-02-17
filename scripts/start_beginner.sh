@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-echo "== Codex Relay Beginner Setup =="
+echo "== Apple Flow Beginner Setup =="
 
 if [[ ! -f ".venv/bin/activate" ]]; then
   echo "Creating virtual environment..."
@@ -13,15 +13,15 @@ fi
 
 source .venv/bin/activate
 
-if pgrep -f "codex_relay daemon" >/dev/null 2>&1; then
+if pgrep -f "apple_flow daemon" >/dev/null 2>&1; then
   echo
-  echo "Stopping existing Codex Relay daemon process..."
-  pkill -f "codex_relay daemon" || true
+  echo "Stopping existing Apple Flow daemon process..."
+  pkill -f "apple_flow daemon" || true
   sleep 1
 fi
 
 LOCK_PATH="$HOME/.codex/relay.daemon.lock"
-if [[ -f "$LOCK_PATH" ]] && ! pgrep -f "codex_relay daemon" >/dev/null 2>&1; then
+if [[ -f "$LOCK_PATH" ]] && ! pgrep -f "apple_flow daemon" >/dev/null 2>&1; then
   echo "Removing stale daemon lock: $LOCK_PATH"
   rm -f "$LOCK_PATH"
 fi
@@ -41,24 +41,24 @@ if grep -q "REPLACE_WITH_YOUR" .env; then
   exit 1
 fi
 
-ALLOWED_SENDERS_LINE="$(grep -E '^codex_relay_allowed_senders=' .env || true)"
-ALLOWED_SENDERS_VALUE="${ALLOWED_SENDERS_LINE#codex_relay_allowed_senders=}"
+ALLOWED_SENDERS_LINE="$(grep -E '^apple_flow_allowed_senders=' .env || true)"
+ALLOWED_SENDERS_VALUE="${ALLOWED_SENDERS_LINE#apple_flow_allowed_senders=}"
 if [[ -z "${ALLOWED_SENDERS_VALUE//[[:space:]]/}" ]]; then
   echo
-  echo "Safety stop: codex_relay_allowed_senders is empty in .env"
-  echo "Set your number first, e.g. codex_relay_allowed_senders=+15551234567"
+  echo "Safety stop: apple_flow_allowed_senders is empty in .env"
+  echo "Set your number first, e.g. apple_flow_allowed_senders=+15551234567"
   exit 1
 fi
 
-MESSAGES_DB_LINE="$(grep -E '^codex_relay_messages_db_path=' .env || true)"
-MESSAGES_DB_PATH="${MESSAGES_DB_LINE#codex_relay_messages_db_path=}"
+MESSAGES_DB_LINE="$(grep -E '^apple_flow_messages_db_path=' .env || true)"
+MESSAGES_DB_PATH="${MESSAGES_DB_LINE#apple_flow_messages_db_path=}"
 if [[ -z "${MESSAGES_DB_PATH//[[:space:]]/}" ]]; then
   MESSAGES_DB_PATH="$HOME/Library/Messages/chat.db"
 fi
 if [[ ! -f "$MESSAGES_DB_PATH" ]]; then
   echo
   echo "Safety stop: Messages DB not found at: $MESSAGES_DB_PATH"
-  echo "Update codex_relay_messages_db_path in .env"
+  echo "Update apple_flow_messages_db_path in .env"
   exit 1
 fi
 
@@ -75,6 +75,6 @@ pytest -q
 
 echo
 
-echo "Starting Codex Relay daemon..."
+echo "Starting Apple Flow daemon..."
 echo "Foreground mode: this stays running and waits for iMessages. Press Ctrl+C to stop."
-python -m codex_relay daemon
+python -m apple_flow daemon

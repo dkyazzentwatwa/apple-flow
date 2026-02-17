@@ -14,7 +14,7 @@ import time
 
 from .utils import normalize_sender
 
-logger = logging.getLogger("codex_relay.mail_egress")
+logger = logging.getLogger("apple_flow.mail_egress")
 
 
 class AppleMailEgress:
@@ -59,9 +59,9 @@ class AppleMailEgress:
         logger.info("Sending email to %s (%s chars)", recipient, len(text_with_signature))
         chunks = self._chunk(text_with_signature)
         for i, chunk in enumerate(chunks):
-            subject = "Codex Relay Response"
+            subject = "Apple Flow Response"
             if len(chunks) > 1:
-                subject = f"Codex Relay Response (part {i + 1}/{len(chunks)})"
+                subject = f"Apple Flow Response (part {i + 1}/{len(chunks)})"
 
             last_error: Exception | None = None
             for attempt in range(1, self.retries + 1):
