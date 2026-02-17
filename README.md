@@ -11,15 +11,16 @@ Codex Relay is a local-first daemon that bridges iMessage on macOS to Codex App 
 **TL;DR** for experienced users:
 
 ```bash
-# 1. Grant Full Disk Access to Terminal (System Settings)
-# 2. Authenticate
+# 1. Authenticate with Codex
 codex login
 
-# 3. Configure
+# 2. One-command setup with auto-start at boot
+./scripts/setup_autostart.sh
+# Edit .env when prompted, then grant Full Disk Access to Python binary
+
+# OR manual foreground run
 cp .env.example .env
 nano .env  # Set your phone number and workspace
-
-# 4. Run
 ./scripts/start_beginner.sh
 ```
 
