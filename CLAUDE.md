@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Codex Relay is a local-first daemon that bridges iMessage and Apple Mail on macOS to Codex CLI/App Server. It polls the local Messages database and (optionally) Apple Mail for inbound messages, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. Users can iMessage **or** email Codex. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
+Codex Relay is a local-first daemon that bridges iMessage, Apple Mail, and Apple Reminders on macOS to Codex CLI/App Server. It polls the local Messages database, (optionally) Apple Mail, and (optionally) a designated Reminders list for inbound messages/tasks, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. Users can iMessage, email, **or** add Reminders for Codex. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
 
 ## Development Commands
 
@@ -52,6 +52,10 @@ iMessage DB → Ingress → Policy → Orchestrator → Codex Connector → Egre
 
 Apple Mail → MailIngress → Orchestrator → Codex Connector → MailEgress → AppleScript Mail.app
   (optional, polls unread)                                    (sends reply emails)
+
+Reminders.app → RemindersIngress → Orchestrator → Codex Connector → iMessage Egress (approvals)
+  (optional, polls incomplete)         ↓                               ↓
+                                     Store              RemindersEgress → annotate/complete reminder
 ```
 
 ### Core Modules (src/codex_relay/)
@@ -73,7 +77,9 @@ Apple Mail → MailIngress → Orchestrator → Codex Connector → MailEgress �
 | `utils.py` | Shared utilities (normalize_sender) |
 | `mail_ingress.py` | Reads unread emails from Apple Mail via AppleScript |
 | `mail_egress.py` | Sends reply emails via Apple Mail AppleScript |
-| `models.py` | Data models and enums (RunState, ApprovalStatus) |
+| `reminders_ingress.py` | Polls Apple Reminders for incomplete tasks via AppleScript |
+| `reminders_egress.py` | Writes results back to reminders and marks them complete |
+| `models.py` | Data models and enums (RunState, ApprovalStatus, InboundMessage) |
 
 ### Command Types
 
@@ -109,6 +115,11 @@ All settings use `codex_relay_` env prefix. Key settings in `.env`:
 - `codex_relay_mail_allowed_senders` - comma-separated email addresses to accept
 - `codex_relay_mail_max_age_days` - only process emails from last N days (default: 2)
 - `codex_relay_mail_signature` - signature appended to all email replies (default: "Codex 🤖, Your 24/7 Assistant")
+- `codex_relay_enable_reminders_polling` - enable Apple Reminders as task queue ingress (default: false)
+- `codex_relay_reminders_list_name` - Reminders list to poll (default: "Codex Tasks")
+- `codex_relay_reminders_owner` - sender identity for reminder tasks (e.g. phone number; defaults to first allowed_sender)
+- `codex_relay_reminders_auto_approve` - skip approval gate for reminder tasks (default: false)
+- `codex_relay_reminders_poll_interval_seconds` - poll interval for Reminders (default: 5s)
 
 See `.env.example` for full list. Changes to config fields require updates to both `config.py` and `.env.example`.
 
@@ -134,6 +145,8 @@ tests/test_egress_chunking.py   # Message chunking, fingerprinting
 tests/test_utils.py             # Shared utilities
 tests/test_mail_ingress.py     # Apple Mail ingress
 tests/test_mail_egress.py      # Apple Mail egress
+tests/test_reminders_ingress.py # Apple Reminders ingress
+tests/test_reminders_egress.py  # Apple Reminders egress
 ```
 
 ## Security Model
@@ -149,3 +162,4 @@ tests/test_mail_egress.py      # Apple Mail egress
 - Full Disk Access granted to terminal app (for reading chat.db)
 - `codex login` run once for Codex authentication
 - For Apple Mail integration: Apple Mail configured and running on this Mac
+- For Apple Reminders integration: Reminders.app on this Mac, a list named per config (default: "Codex Tasks")

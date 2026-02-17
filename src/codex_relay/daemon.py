@@ -18,6 +18,8 @@ from .mail_ingress import AppleMailIngress
 from .orchestrator import RelayOrchestrator
 from .policy import PolicyEngine
 from .protocols import ConnectorProtocol
+from .reminders_egress import AppleRemindersEgress
+from .reminders_ingress import AppleRemindersIngress
 from .store import SQLiteStore
 
 logger = logging.getLogger("codex_relay.daemon")
@@ -92,6 +94,42 @@ class RelayDaemon:
                 chat_prefix=settings.chat_prefix,
             )
 
+        # Apple Reminders integration (optional task-queue ingress)
+        self.reminders_ingress: AppleRemindersIngress | None = None
+        self.reminders_egress: AppleRemindersEgress | None = None
+        self.reminders_orchestrator: RelayOrchestrator | None = None
+        if settings.enable_reminders_polling:
+            owner = settings.reminders_owner
+            if not owner and settings.allowed_senders:
+                owner = settings.allowed_senders[0]
+            logger.info(
+                "Apple Reminders polling enabled (list=%r, owner=%s, auto_approve=%s)",
+                settings.reminders_list_name,
+                owner or "(unset)",
+                settings.reminders_auto_approve,
+            )
+            self.reminders_ingress = AppleRemindersIngress(
+                list_name=settings.reminders_list_name,
+                owner_sender=owner,
+                auto_approve=settings.reminders_auto_approve,
+                store=self.store,
+            )
+            self.reminders_egress = AppleRemindersEgress(
+                list_name=settings.reminders_list_name,
+            )
+            # Hybrid: approval conversations route through iMessage egress,
+            # results also get written back to the reminder itself.
+            self.reminders_orchestrator = RelayOrchestrator(
+                connector=self.connector,
+                egress=self.egress,  # iMessage for conversational replies & approvals
+                store=self.store,
+                allowed_workspaces=settings.allowed_workspaces,
+                default_workspace=settings.default_workspace,
+                approval_ttl_minutes=settings.approval_ttl_minutes,
+                require_chat_prefix=False,  # reminders don't need relay: prefix
+                chat_prefix=settings.chat_prefix,
+            )
+
         persisted_cursor = self.store.get_state("last_rowid")
         self._last_rowid: int | None = int(persisted_cursor) if persisted_cursor is not None else None
         self._last_messages_db_error_at: float = 0.0
@@ -136,6 +174,8 @@ class RelayDaemon:
         tasks = [self._poll_imessage_loop()]
         if self.mail_ingress is not None:
             tasks.append(self._poll_mail_loop())
+        if self.reminders_ingress is not None:
+            tasks.append(self._poll_reminders_loop())
         await asyncio.gather(*tasks)
 
     async def _poll_imessage_loop(self) -> None:
@@ -284,6 +324,69 @@ class RelayDaemon:
 
             await asyncio.sleep(self.settings.poll_interval_seconds)
 
+    async def _poll_reminders_loop(self) -> None:
+        """Apple Reminders polling loop — runs alongside iMessage/Mail when enabled."""
+        assert self.reminders_ingress is not None
+        assert self.reminders_egress is not None
+        assert self.reminders_orchestrator is not None
+
+        logger.info("Apple Reminders polling loop started (list=%r)", self.settings.reminders_list_name)
+        while not self._shutdown_requested:
+            try:
+                messages = self.reminders_ingress.fetch_new()
+                for msg in messages:
+                    if self._shutdown_requested:
+                        break
+                    if not msg.text.strip():
+                        logger.info("Ignoring empty reminder id=%s", msg.id)
+                        continue
+
+                    reminder_id = msg.context.get("reminder_id", "")
+                    reminder_name = msg.context.get("reminder_name", "")
+                    logger.info(
+                        "Inbound reminder id=%s name=%r sender=%s chars=%s",
+                        msg.id,
+                        reminder_name,
+                        msg.sender,
+                        len(msg.text),
+                    )
+
+                    # Mark as processed immediately so it won't be re-fetched
+                    # even if orchestration fails partway through.
+                    self.reminders_ingress.mark_processed(reminder_id)
+
+                    started_at = time.monotonic()
+                    result = self.reminders_orchestrator.handle_message(msg)
+                    duration = time.monotonic() - started_at
+
+                    logger.info(
+                        "Handled reminder id=%s kind=%s run_id=%s duration=%.2fs",
+                        msg.id,
+                        result.kind.value,
+                        result.run_id,
+                        duration,
+                    )
+
+                    # Write results back to the reminder itself.
+                    if result.response and reminder_id:
+                        if result.kind.value in ("task", "project"):
+                            # For approval-gated commands, annotate with the plan
+                            # but don't complete yet (completion happens after approval).
+                            self.reminders_egress.annotate_reminder(
+                                reminder_id,
+                                f"[Codex] Awaiting approval — check iMessage.\n\n{result.response[:500]}",
+                            )
+                        else:
+                            # For non-mutating results, write and complete.
+                            self.reminders_egress.complete_reminder(
+                                reminder_id,
+                                f"[Codex Result]\n\n{result.response}",
+                            )
+            except Exception as exc:
+                logger.exception("Reminders polling loop error: %s", exc)
+
+            await asyncio.sleep(self.settings.reminders_poll_interval_seconds)
+
     def send_startup_intro(self) -> None:
         if not self.settings.allowed_senders:
             logger.info("Startup intro skipped: no allowed_senders configured.")
@@ -340,17 +443,20 @@ async def run() -> None:
         loop.add_signal_handler(sig, handle_signal, sig)
 
     logger.info(
-        "Codex Relay running (foreground). Allowed senders=%s, strict_sender_poll=%s, messages_db=%s, mail_enabled=%s",
+        "Codex Relay running (foreground). Allowed senders=%s, strict_sender_poll=%s, messages_db=%s, mail_enabled=%s, reminders_enabled=%s",
         len(settings.allowed_senders),
         settings.only_poll_allowed_senders,
         settings.messages_db_path,
         settings.enable_mail_polling,
+        settings.enable_reminders_polling,
     )
     if settings.send_startup_intro:
         daemon.send_startup_intro()
     channels = "iMessages"
     if settings.enable_mail_polling:
         channels += " + Apple Mail"
+    if settings.enable_reminders_polling:
+        channels += " + Apple Reminders"
     logger.info("Ready. Waiting for inbound %s. Press Ctrl+C to stop.", channels)
 
     try:

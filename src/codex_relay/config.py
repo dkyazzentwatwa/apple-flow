@@ -56,6 +56,13 @@ class RelaySettings(BaseSettings):
     mail_max_age_days: int = 2  # Only process emails from the last N days (default: 2)
     mail_signature: str = "\n\n—\nCodex 🤖, Your 24/7 Assistant"  # Email signature appended to all replies
 
+    # Apple Reminders integration settings
+    enable_reminders_polling: bool = False  # Enable Apple Reminders as an additional ingress
+    reminders_list_name: str = "Codex Tasks"  # Reminders list to poll for tasks
+    reminders_owner: str = ""  # Sender identity for reminder-originated messages (e.g. phone number)
+    reminders_auto_approve: bool = False  # If true, skip approval gate for reminder tasks
+    reminders_poll_interval_seconds: float = 5.0  # Poll interval (reminders change less frequently)
+
     @field_validator("allowed_senders", "allowed_workspaces", "mail_allowed_senders", mode="before")
     @classmethod
     def _parse_csv_or_json_list(cls, value: Any) -> Any:
