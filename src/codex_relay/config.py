@@ -40,6 +40,7 @@ class RelaySettings(BaseSettings):
     chat_prefix: str = "relay:"
     suppress_duplicate_outbound_seconds: float = 90.0
     send_startup_intro: bool = True
+    codex_turn_timeout_seconds: float = 300.0  # 5 minutes for Codex to respond
 
     @field_validator("allowed_senders", "allowed_workspaces", mode="before")
     @classmethod

@@ -91,6 +91,8 @@ All settings use `codex_relay_` env prefix. Key settings in `.env`:
 - `codex_relay_allowed_senders` - comma-separated phone numbers
 - `codex_relay_allowed_workspaces` - paths Codex may access (auto-resolved to absolute)
 - `codex_relay_messages_db_path` - usually `~/Library/Messages/chat.db`
+- `codex_relay_codex_app_server_cmd` - should include `--dangerously-bypass-approvals-and-sandbox` since relay has its own approval workflow
+- `codex_relay_codex_turn_timeout_seconds` - how long to wait for Codex responses (default: 300s/5min)
 
 See `.env.example` for full list. Changes to config fields require updates to both `config.py` and `.env.example`.
 
