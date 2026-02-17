@@ -41,14 +41,17 @@ class AppleMailIngress:
         if require_sender_filter and not sender_allowlist:
             return []
 
-        normalized_allowlist: set[str] | None = None
+        # Extract email addresses from allowlist for AppleScript filtering
+        email_filters: list[str] | None = None
         if sender_allowlist:
-            normalized_allowlist = set()
+            email_filters = []
             for s in sender_allowlist:
-                ns = normalize_sender(s)
-                normalized_allowlist.add(ns.lower())
+                # Extract just the email part (strips phone numbers, normalizes)
+                email = self._extract_email_address(s)
+                if email and "@" in email:
+                    email_filters.append(email.lower())
 
-        raw_messages = self._fetch_unread_via_applescript(limit)
+        raw_messages = self._fetch_unread_via_applescript(limit, sender_filter=email_filters)
         messages: list[InboundMessage] = []
         for raw in raw_messages:
             msg_id = raw.get("id", "")
@@ -58,11 +61,6 @@ class AppleMailIngress:
             date_str = raw.get("date", "")
 
             sender = self._extract_email_address(sender_raw)
-            normalized = normalize_sender(sender).lower()
-
-            if normalized_allowlist and normalized not in normalized_allowlist:
-                logger.debug("Skipping email from non-allowlisted sender: %s", sender)
-                continue
 
             # Combine subject and body for the task text
             text = self._compose_text(subject, body)
@@ -92,18 +90,36 @@ class AppleMailIngress:
         """Not applicable for Mail (uses unread status). Returns 0 as sentinel."""
         return 0
 
-    def _fetch_unread_via_applescript(self, limit: int) -> list[dict[str, str]]:
-        """Run AppleScript to get unread emails as JSON."""
+    def _fetch_unread_via_applescript(self, limit: int, sender_filter: list[str] | None = None) -> list[dict[str, str]]:
+        """Run AppleScript to get unread emails as JSON.
+
+        Args:
+            limit: Maximum number of messages to fetch
+            sender_filter: Optional list of email addresses to filter by (e.g., ["user@example.com"])
+        """
         if self.account:
             mailbox_ref = f'mailbox "{self.mailbox}" of account "{self.account}"'
         else:
             mailbox_ref = "inbox"
 
+        # Build sender filter clause for AppleScript
+        if sender_filter:
+            # Build: (sender contains "email1" or sender contains "email2")
+            sender_conditions = []
+            for email in sender_filter:
+                # Escape quotes in email addresses
+                escaped_email = email.replace('"', '\\"')
+                sender_conditions.append(f'sender contains "{escaped_email}"')
+            sender_clause = " or ".join(sender_conditions)
+            where_clause = f"whose read status is false and ({sender_clause})"
+        else:
+            where_clause = "whose read status is false"
+
         script = f'''
         tell application "Mail"
             set maxCount to {int(limit)}
             set resultList to {{}}
-            set unreadMessages to (every message of {mailbox_ref} whose read status is false)
+            set unreadMessages to (every message of {mailbox_ref} {where_clause})
             set msgCount to count of unreadMessages
             if msgCount > maxCount then set msgCount to maxCount
 

@@ -44,11 +44,11 @@ def test_compose_text_both_empty():
 
 def test_fetch_new_skips_non_allowlisted_senders(monkeypatch):
     ingress = AppleMailIngress()
+    # With AppleScript filtering, only alice's email would be returned
     raw_messages = [
         {"id": "1", "sender": "alice@example.com", "subject": "relay: hi", "body": "hello", "date": ""},
-        {"id": "2", "sender": "bob@example.com", "subject": "relay: hi", "body": "hello", "date": ""},
     ]
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit: raw_messages)
+    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: None)
 
     messages = ingress.fetch_new(sender_allowlist=["alice@example.com"])
@@ -73,7 +73,7 @@ def test_fetch_new_converts_to_inbound_messages(monkeypatch):
             "date": "2025-01-15T10:00:00",
         },
     ]
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit: raw_messages)
+    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: None)
 
     messages = ingress.fetch_new()
@@ -91,7 +91,7 @@ def test_fetch_new_skips_empty_messages(monkeypatch):
     raw_messages = [
         {"id": "1", "sender": "test@example.com", "subject": "", "body": "", "date": ""},
     ]
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit: raw_messages)
+    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: None)
 
     messages = ingress.fetch_new()
@@ -109,7 +109,7 @@ def test_fetch_new_marks_messages_as_read(monkeypatch):
         {"id": "10", "sender": "test@example.com", "subject": "relay: hello", "body": "world", "date": ""},
     ]
     marked_ids: list[list[str]] = []
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit: raw_messages)
+    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: marked_ids.append(ids))
 
     ingress.fetch_new()
