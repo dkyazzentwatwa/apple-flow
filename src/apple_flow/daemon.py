@@ -574,7 +574,7 @@ class RelayDaemon:
             "🔄 clear context      fresh start",
         ]
         intro = (
-            "🤖✨ CODEX-FLOW ONLINE ✨🤖\n"
+            "🤖✨ APPLE FLOW ONLINE ✨🤖\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"{connector_line}\n"
             f"{model_line}\n"
