@@ -37,11 +37,12 @@ class IMessageEgress:
 
     @staticmethod
     def _osascript_send(recipient: str, text: str) -> None:
+        escaped_text = text.replace('"', '\\"')
         script = f'''
         tell application "Messages"
             set targetService to 1st service whose service type = iMessage
             set targetBuddy to buddy "{recipient}" of targetService
-            send "{text.replace('"', '\\"')}" to targetBuddy
+            send "{escaped_text}" to targetBuddy
         end tell
         '''
         subprocess.run(["osascript", "-e", script], check=True, capture_output=True, text=True)
