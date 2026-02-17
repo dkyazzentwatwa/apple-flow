@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Codex Relay is a local-first daemon that bridges iMessage on macOS to Codex App Server. It polls the local Messages database, routes allowlisted senders to Codex threads, enforces approval workflows for mutating operations, and replies via AppleScript.
+Codex Relay is a local-first daemon that bridges iMessage on macOS to Codex CLI/App Server. It polls the local Messages database, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
 
 ## Development Commands
 
@@ -63,7 +63,8 @@ iMessage DB → Ingress → Policy → Orchestrator → Codex Connector → Egre
 | `store.py` | Thread-safe SQLite with connection caching and indexes |
 | `config.py` | Pydantic settings with `codex_relay_` env prefix, path resolution |
 | `commanding.py` | Parses command prefixes (idea:, plan:, task:, etc.) |
-| `codex_connector.py` | Thread management, Codex app-server integration, stderr logging |
+| `codex_cli_connector.py` | Stateless CLI connector using `codex exec` (default, avoids state corruption) |
+| `codex_connector.py` | Stateful app-server connector via JSON-RPC (fallback option) |
 | `main.py` | FastAPI admin endpoints |
 | `protocols.py` | Protocol interfaces for type-safe component injection |
 | `utils.py` | Shared utilities (normalize_sender) |
@@ -91,7 +92,10 @@ All settings use `codex_relay_` env prefix. Key settings in `.env`:
 - `codex_relay_allowed_senders` - comma-separated phone numbers
 - `codex_relay_allowed_workspaces` - paths Codex may access (auto-resolved to absolute)
 - `codex_relay_messages_db_path` - usually `~/Library/Messages/chat.db`
-- `codex_relay_codex_app_server_cmd` - should include `--dangerously-bypass-approvals-and-sandbox` since relay has its own approval workflow
+- `codex_relay_use_codex_cli` - use CLI connector instead of app-server (default: true, recommended)
+- `codex_relay_codex_cli_command` - path to codex binary (default: "codex")
+- `codex_relay_codex_cli_context_window` - number of recent exchanges to include as context (default: 3)
+- `codex_relay_codex_app_server_cmd` - app-server command (only used if use_codex_cli=false)
 - `codex_relay_codex_turn_timeout_seconds` - how long to wait for Codex responses (default: 300s/5min)
 
 See `.env.example` for full list. Changes to config fields require updates to both `config.py` and `.env.example`.

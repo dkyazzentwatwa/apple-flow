@@ -27,6 +27,11 @@ class RelaySettings(BaseSettings):
 
     codex_app_server_cmd: list[str] = Field(default_factory=lambda: ["codex", "app-server"])
 
+    # CLI connector settings (preferred over app-server)
+    use_codex_cli: bool = True  # Use CLI instead of app-server (default: true)
+    codex_cli_command: str = "codex"  # Path to codex binary
+    codex_cli_context_window: int = 3  # Number of recent exchanges to include as context
+
     admin_host: str = "127.0.0.1"
     admin_port: int = 8787
 
