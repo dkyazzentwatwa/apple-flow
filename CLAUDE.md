@@ -94,6 +94,7 @@ POST /task → FastAPI → Orchestrator → Codex Connector → iMessage Egress
 | `notes_egress.py` | Appends Codex results back to note body |
 | `calendar_ingress.py` | Polls Apple Calendar for due events via AppleScript |
 | `calendar_egress.py` | Writes Codex results into event description/notes |
+| `voice_memo.py` | Generates voice memos from text via macOS `say` + `afconvert` |
 | `models.py` | Data models and enums (RunState, ApprovalStatus, InboundMessage) |
 
 ### Command Types
@@ -156,6 +157,10 @@ All settings use `codex_relay_` env prefix. Key settings in `.env`:
 - `codex_relay_enable_attachments` - enable reading inbound file attachments (default: false)
 - `codex_relay_max_attachment_size_mb` - max attachment size to process (default: 10)
 - `codex_relay_attachment_temp_dir` - temp directory for attachment processing (default: /tmp/codex_relay_attachments)
+- `codex_relay_enable_voice_memos` - convert responses to voice memos via macOS TTS (default: false)
+- `codex_relay_voice_memo_voice` - macOS TTS voice name (default: "Samantha")
+- `codex_relay_voice_memo_max_chars` - max characters to convert to speech (default: 2000)
+- `codex_relay_voice_memo_send_text_too` - also send text response alongside voice memo (default: true)
 
 See `.env.example` for full list. Changes to config fields require updates to both `config.py` and `.env.example`.
 
@@ -193,6 +198,7 @@ tests/test_conversation_memory.py # History command + auto-context
 tests/test_progress_streaming.py  # Progress streaming during tasks
 tests/test_attachments.py       # File attachment support
 tests/test_siri_shortcuts.py    # POST /task Siri Shortcuts bridge
+tests/test_voice_memo.py        # Voice memo generation + orchestrator integration
 ```
 
 ## Security Model

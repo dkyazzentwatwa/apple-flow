@@ -11,6 +11,7 @@ from uuid import uuid4
 from .commanding import CommandKind, ParsedCommand, parse_command
 from .models import InboundMessage, RunState
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
+from .voice_memo import cleanup_voice_memo, generate_voice_memo
 
 
 @dataclass(slots=True)
@@ -37,6 +38,11 @@ class RelayOrchestrator:
         enable_progress_streaming: bool = False,
         progress_update_interval_seconds: float = 30.0,
         enable_attachments: bool = False,
+        enable_voice_memos: bool = False,
+        voice_memo_voice: str = "Samantha",
+        voice_memo_max_chars: int = 2000,
+        voice_memo_send_text_too: bool = True,
+        voice_memo_output_dir: str = "/tmp/codex_relay_attachments",
     ):
         self.connector = connector
         self.egress = egress
@@ -51,6 +57,11 @@ class RelayOrchestrator:
         self.enable_progress_streaming = enable_progress_streaming
         self.progress_update_interval_seconds = progress_update_interval_seconds
         self.enable_attachments = enable_attachments
+        self.enable_voice_memos = enable_voice_memos
+        self.voice_memo_voice = voice_memo_voice
+        self.voice_memo_max_chars = voice_memo_max_chars
+        self.voice_memo_send_text_too = voice_memo_send_text_too
+        self.voice_memo_output_dir = voice_memo_output_dir
 
     # --- Workspace Resolution (Feature 1) ---
 
@@ -137,7 +148,11 @@ class RelayOrchestrator:
         prompt = self._inject_attachment_context(message, prompt)
 
         response = self.connector.run_turn(thread_id, prompt)
-        self.egress.send(message.sender, response)
+        if self.enable_voice_memos and not self.voice_memo_send_text_too:
+            self._send_voice_memo(message.sender, response)
+        else:
+            self.egress.send(message.sender, response)
+            self._send_voice_memo(message.sender, response)
         return OrchestrationResult(kind=command.kind, response=response)
 
     # --- Feature 2: Health Dashboard ---
@@ -318,6 +333,7 @@ class RelayOrchestrator:
         )
         final = f"Execution:\n{execution_output}\n\nVerification:\n{verification_output}"
         self.egress.send(sender, final)
+        self._send_voice_memo(sender, verification_output)
         return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=final)
 
     def _handle_approval_required_command(
@@ -394,6 +410,26 @@ class RelayOrchestrator:
                 last_update = now
 
         return self.connector.run_turn_streaming(thread_id, prompt, on_progress)
+
+    # --- Voice Memo ---
+
+    def _send_voice_memo(self, sender: str, text: str) -> None:
+        """Generate and send a voice memo for the given text."""
+        if not self.enable_voice_memos:
+            return
+        if not hasattr(self.egress, "send_attachment"):
+            return
+        memo_path = generate_voice_memo(
+            text=text,
+            output_dir=self.voice_memo_output_dir,
+            voice=self.voice_memo_voice,
+            max_chars=self.voice_memo_max_chars,
+        )
+        if memo_path:
+            try:
+                self.egress.send_attachment(sender, memo_path)
+            finally:
+                cleanup_voice_memo(memo_path)
 
     # --- Prompt Building ---
 
