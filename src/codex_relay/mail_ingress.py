@@ -191,7 +191,7 @@ class AppleMailIngress:
             mailbox_ref = "inbox"
 
         # Build AppleScript to mark specific messages as read
-        id_checks = " or ".join([f'id of msg is {mid}' for mid in message_ids if mid])
+        id_checks = " or ".join([f'(id of msg as text) is "{mid}"' for mid in message_ids if mid])
         if not id_checks:
             return
 
