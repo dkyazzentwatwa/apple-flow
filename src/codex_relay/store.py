@@ -262,3 +262,57 @@ class SQLiteStore:
             if row is None:
                 return None
             return str(row["value"])
+
+    # --- Feature 2: Health Dashboard ---
+
+    def get_stats(self) -> dict[str, Any]:
+        """Return aggregate stats for the health dashboard."""
+        conn = self._connect()
+        with self._lock:
+            session_count = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+            message_count = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+            pending_count = conn.execute(
+                "SELECT COUNT(*) FROM approvals WHERE status = 'pending'"
+            ).fetchone()[0]
+
+            # Runs by state
+            rows = conn.execute(
+                "SELECT state, COUNT(*) as cnt FROM runs GROUP BY state"
+            ).fetchall()
+            runs_by_state = {row["state"]: row["cnt"] for row in rows}
+
+            # Most recent event
+            last_event_row = conn.execute(
+                "SELECT * FROM events ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+            last_event = self._row_to_dict(last_event_row)
+
+            return {
+                "active_sessions": session_count,
+                "total_messages": message_count,
+                "pending_approvals": pending_count,
+                "runs_by_state": runs_by_state,
+                "last_event": last_event,
+            }
+
+    # --- Feature 3: Conversation Memory ---
+
+    def recent_messages(self, sender: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Fetch the most recent messages from a sender."""
+        conn = self._connect()
+        with self._lock:
+            rows = conn.execute(
+                "SELECT * FROM messages WHERE sender = ? ORDER BY received_at DESC LIMIT ?",
+                (sender, limit),
+            ).fetchall()
+            return [self._row_to_dict(row) for row in rows if row is not None]
+
+    def search_messages(self, sender: str, query: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Search messages from a sender by text content."""
+        conn = self._connect()
+        with self._lock:
+            rows = conn.execute(
+                "SELECT * FROM messages WHERE sender = ? AND text LIKE ? ORDER BY received_at DESC LIMIT ?",
+                (sender, f"%{query}%", limit),
+            ).fetchall()
+            return [self._row_to_dict(row) for row in rows if row is not None]

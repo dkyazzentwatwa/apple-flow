@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -7,11 +8,18 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .config import RelaySettings
+from .models import InboundMessage
 from .store import SQLiteStore
 
 
 class ApprovalOverrideBody(BaseModel):
     status: str = Field(pattern="^(approved|denied)$")
+
+
+class TaskSubmission(BaseModel):
+    """Request body for POST /task (Siri Shortcuts / curl bridge)."""
+    sender: str = Field(min_length=1)
+    text: str = Field(min_length=1)
 
 
 def build_app(store: Any | None = None) -> FastAPI:
@@ -22,6 +30,8 @@ def build_app(store: Any | None = None) -> FastAPI:
 
     app = FastAPI(title="Codex Relay Admin API", version="0.1.0")
     app.state.store = active_store
+    # orchestrator is injected by daemon at startup (if running alongside polling)
+    app.state.orchestrator = None
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -63,6 +73,40 @@ def build_app(store: Any | None = None) -> FastAPI:
         if not hasattr(app.state.store, "list_events"):
             return []
         return app.state.store.list_events(limit=limit)
+
+    # --- Feature 4: Siri Shortcuts / Programmatic Task Submission ---
+
+    @app.post("/task")
+    def submit_task(body: TaskSubmission) -> dict[str, Any]:
+        """Submit a task programmatically (for Shortcuts.app, curl, scripts).
+
+        Requires an orchestrator to be injected via app.state.orchestrator.
+        """
+        if app.state.orchestrator is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Orchestrator not available. Start the daemon to enable task submission.",
+            )
+
+        # Validate sender against allowed list
+        allowed = settings.allowed_senders
+        if allowed and body.sender not in allowed:
+            raise HTTPException(status_code=403, detail="Sender not in allowlist")
+
+        msg = InboundMessage(
+            id=f"api_{datetime.now(UTC).strftime('%Y%m%d%H%M%S%f')}",
+            sender=body.sender,
+            text=body.text,
+            received_at=datetime.now(UTC).isoformat(),
+            is_from_me=False,
+        )
+        result = app.state.orchestrator.handle_message(msg)
+        return {
+            "kind": result.kind.value,
+            "response": result.response,
+            "run_id": result.run_id,
+            "approval_request_id": result.approval_request_id,
+        }
 
     return app
 

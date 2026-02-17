@@ -67,7 +67,6 @@ class AppleMailEgress:
             for attempt in range(1, self.retries + 1):
                 try:
                     self._osascript_send(recipient, subject, chunk)
-                    self.mark_outbound(recipient, chunk)
                     logger.info("Sent email chunk to %s (%s chars)", recipient, len(chunk))
                     last_error = None
                     break
@@ -77,6 +76,10 @@ class AppleMailEgress:
                     time.sleep(0.5 * attempt)
             if last_error is not None:
                 raise RuntimeError(f"Failed to send email after retries: {last_error}") from last_error
+
+        # Mark outbound using original text (without signature) for fingerprint consistency
+        # This ensures the dedup check at the top of send() matches what we record here
+        self.mark_outbound(recipient, text)
 
     def _osascript_send(self, recipient: str, subject: str, body: str) -> None:
         """Send an email reply using Apple Mail via osascript.
@@ -119,6 +122,46 @@ class AppleMailEgress:
                 end tell
                 send newMessage
             end if
+        end tell
+        '''
+
+        subprocess.run(
+            ["osascript", "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+    def send_attachment(self, recipient: str, file_path: str) -> None:
+        """Send a file as an email attachment via Mail.app."""
+        if not file_path:
+            return
+        try:
+            self._osascript_send_attachment(recipient, file_path)
+            logger.info("Sent email attachment to %s: %s", recipient, file_path)
+        except Exception as exc:
+            logger.warning("Failed to send email attachment to %s: %s", recipient, exc)
+
+    def _osascript_send_attachment(self, recipient: str, file_path: str) -> None:
+        """Attach a file to an outgoing email via AppleScript."""
+        escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_path = file_path.replace("\\", "\\\\").replace('"', '\\"')
+
+        if self.from_address:
+            escaped_from = self.from_address.replace("\\", "\\\\").replace('"', '\\"')
+            sender_prop = f', sender:"{escaped_from}"'
+        else:
+            sender_prop = ""
+
+        script = f'''
+        tell application "Mail"
+            set newMessage to make new outgoing message with properties {{subject:"Codex Voice Memo", content:"Voice memo attached.", visible:false{sender_prop}}}
+            tell newMessage
+                make new to recipient at end of to recipients with properties {{address:"{escaped_recipient}"}}
+                make new attachment with properties {{file name:(POSIX file "{escaped_path}" as alias)}} at after the last paragraph
+            end tell
+            send newMessage
         end tell
         '''
 
