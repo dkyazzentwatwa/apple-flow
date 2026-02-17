@@ -4,11 +4,13 @@ Get Codex Relay running in 5 steps. This guide assumes you're new to the project
 
 ## What You'll Get
 
-Text yourself on iMessage to:
+Text or email yourself to:
 - Chat with Claude about your code: `relay: what files handle authentication?`
 - Brainstorm ideas: `idea: build a task manager app`
 - Get implementation plans: `plan: add user authentication`
 - Execute tasks with approval: `task: create a hello world script`
+
+Works via **iMessage** (default) or **Apple Mail** (optional).
 
 ## Prerequisites
 
@@ -303,6 +305,23 @@ Visit `http://localhost:8787` for:
 
 For always-on operation, see `CLAUDE.md` for launchd setup.
 
+### Enable Apple Mail Integration (Optional)
+
+To use email instead of (or alongside) iMessage, add to `.env`:
+
+```bash
+codex_relay_enable_mail_polling=true
+codex_relay_mail_allowed_senders=your.email@example.com
+codex_relay_mail_from_address=your.email@example.com
+codex_relay_mail_max_age_days=2
+```
+
+Then restart the daemon. Emails will:
+- Reply in the same thread
+- Include signature: "Codex 🤖, Your 24/7 Assistant"
+- Only process last 2 days of emails
+- Work seamlessly alongside iMessage
+
 ### Advanced Configuration
 
 See `.env.example` for all settings:
@@ -310,31 +329,37 @@ See `.env.example` for all settings:
 - Polling intervals
 - Custom workspace paths
 - Admin API settings
+- Apple Mail configuration
 
 ---
 
 ## Architecture Overview
 
 ```
-iMessage → Ingress → Policy → Orchestrator → Codex → Egress → iMessage
+iMessage → Ingress → Policy → Orchestrator → Codex CLI → Egress → iMessage
+                                  ↓                          ↓
+Email → MailIngress ──────────────┘                    MailEgress → Email
                                   ↓
                               Store (SQLite)
 ```
 
 - **Ingress**: Reads from macOS Messages database
+- **MailIngress**: Reads from Apple Mail (optional)
 - **Policy**: Enforces sender allowlist and rate limits
 - **Orchestrator**: Routes commands and manages approvals
-- **Codex Connector**: Manages Codex app-server threads
+- **Codex CLI Connector**: Stateless `codex exec` for reliable execution (default)
 - **Store**: Persists sessions, runs, and approvals
-- **Egress**: Sends replies via AppleScript
+- **Egress**: Sends iMessage replies via AppleScript
+- **MailEgress**: Sends threaded email replies (optional)
 
-### Recent Optimizations (v0.1.0)
+### Recent Features (v0.2.0)
 
-- ⚡ Database connection caching + indexes for 10x faster queries
+- 📧 Apple Mail integration with threaded replies and custom signatures
+- ⚡ Stateless CLI connector - eliminates freezing from state corruption
 - 🔒 Approval sender verification (only you can approve your tasks)
+- 💾 Database connection caching + indexes for 10x faster queries
 - 🛡️ Graceful shutdown with signal handling
-- 📝 Codex subprocess stderr logging for easier debugging
-- 🧪 47 comprehensive tests with shared fixtures
+- 🧪 80+ comprehensive tests with shared fixtures
 
 For developers, see `CLAUDE.md` for architecture details.
 

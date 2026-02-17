@@ -1,8 +1,8 @@
 # Codex Relay
 
-Codex Relay is a local-first daemon that bridges iMessage on macOS to Codex CLI/App Server, with policy gating, approval workflows, and an admin API. By default, it uses the stateless CLI connector to avoid state corruption issues.
+Codex Relay is a local-first daemon that bridges iMessage and Apple Mail on macOS to Codex CLI/App Server, with policy gating, approval workflows, and an admin API. By default, it uses the stateless CLI connector to avoid state corruption issues.
 
-**Text yourself to chat with Claude, brainstorm ideas, and execute tasks in your workspace!**
+**Text or email yourself to chat with Claude, brainstorm ideas, and execute tasks in your workspace!**
 
 ## 🚀 Quick Start
 
@@ -47,12 +47,14 @@ launchctl list | grep codex.relay  # Should show PID if running
 ## Features
 
 - Poll inbound iMessages from local Apple Messages database
+- **NEW**: Apple Mail integration - text OR email Claude with threaded replies
 - Map sender handles to persistent Codex threads
 - Human-in-the-loop approval for mutating tasks
 - Workspace allowlist policy enforcement
 - Local FastAPI admin endpoints
 - Launchd service profile for always-on operation
 - **NEW**: Stateless CLI connector (default) - eliminates state corruption freezes
+- **NEW**: Email signatures and automatic threading
 - **NEW**: Database connection caching + indexes for performance
 - **NEW**: Approval sender verification for security
 - **NEW**: Graceful shutdown with signal handling
@@ -90,7 +92,9 @@ Run admin API only:
 python -m codex_relay admin
 ```
 
-## Commands Over iMessage
+## Commands Over iMessage or Email
+
+Same commands work via iMessage or email (when mail integration is enabled):
 
 - `relay: <message>`: general chat mode (default safety trigger)
 - `idea: <prompt>`: brainstorming and options
@@ -101,6 +105,22 @@ python -m codex_relay admin
 - `approve <request_id>`: executes a queued request
 - `deny <request_id>`: cancels a queued request
 - `status`: pending approval count
+
+### Email Integration (Optional)
+
+Enable Apple Mail polling in `.env`:
+```bash
+codex_relay_enable_mail_polling=true
+codex_relay_mail_allowed_senders=your.email@example.com
+codex_relay_mail_from_address=your.email@example.com
+codex_relay_mail_max_age_days=2
+```
+
+Features:
+- Replies stay in the same email thread
+- Custom signature: "Codex 🤖, Your 24/7 Assistant"
+- Only processes recent emails (2 days by default)
+- Works alongside iMessage seamlessly
 
 If `codex_relay_send_startup_intro=true`, relay sends an intro iMessage on startup with current workspace + command list.
 
