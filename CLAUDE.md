@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Codex Relay is a local-first daemon that bridges iMessage, Apple Mail, and Apple Reminders on macOS to Codex CLI/App Server. It polls the local Messages database, (optionally) Apple Mail, and (optionally) a designated Reminders list for inbound messages/tasks, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. Users can iMessage, email, **or** add Reminders for Codex. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
+Codex Relay is a local-first daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar on macOS to Codex CLI/App Server. It polls the local Messages database and (optionally) Apple Mail, Reminders, Notes, and Calendar for inbound messages/tasks, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. Users can iMessage, email, add Reminders, write Notes, or schedule Calendar events for Codex. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
 
 ## Development Commands
 
@@ -56,6 +56,17 @@ Apple Mail → MailIngress → Orchestrator → Codex Connector → MailEgress �
 Reminders.app → RemindersIngress → Orchestrator → Codex Connector → iMessage Egress (approvals)
   (optional, polls incomplete)         ↓                               ↓
                                      Store              RemindersEgress → annotate/complete reminder
+
+Notes.app → NotesIngress → Orchestrator → Codex Connector → iMessage Egress (approvals)
+  (optional, polls folder)        ↓                               ↓
+                                Store                NotesEgress → append result to note
+
+Calendar.app → CalendarIngress → Orchestrator → Codex Connector → iMessage Egress (approvals)
+  (optional, polls due events)      ↓                               ↓
+                                  Store              CalendarEgress → annotate event description
+
+POST /task → FastAPI → Orchestrator → Codex Connector → iMessage Egress
+  (Siri Shortcuts / curl bridge)
 ```
 
 ### Core Modules (src/codex_relay/)
@@ -79,6 +90,10 @@ Reminders.app → RemindersIngress → Orchestrator → Codex Connector → iMes
 | `mail_egress.py` | Sends reply emails via Apple Mail AppleScript |
 | `reminders_ingress.py` | Polls Apple Reminders for incomplete tasks via AppleScript |
 | `reminders_egress.py` | Writes results back to reminders and marks them complete |
+| `notes_ingress.py` | Polls Apple Notes folder for new notes via AppleScript |
+| `notes_egress.py` | Appends Codex results back to note body |
+| `calendar_ingress.py` | Polls Apple Calendar for due events via AppleScript |
+| `calendar_egress.py` | Writes Codex results into event description/notes |
 | `models.py` | Data models and enums (RunState, ApprovalStatus, InboundMessage) |
 
 ### Command Types
@@ -86,6 +101,9 @@ Reminders.app → RemindersIngress → Orchestrator → Codex Connector → iMes
 - **Non-mutating** (execute immediately): `relay:`, `idea:`, `plan:`
 - **Mutating** (require approval): `task:`, `project:`
 - **Control**: `approve <id>`, `deny <id>`, `status`, `clear context`
+- **Dashboard**: `health` (daemon stats, uptime, session count)
+- **Memory**: `history:` (recent messages), `history: <query>` (search messages)
+- **Workspace routing**: `@alias` prefix on any command (e.g. `task: @web-app deploy`)
 
 ### Key Safety Invariants
 
@@ -120,6 +138,24 @@ All settings use `codex_relay_` env prefix. Key settings in `.env`:
 - `codex_relay_reminders_owner` - sender identity for reminder tasks (e.g. phone number; defaults to first allowed_sender)
 - `codex_relay_reminders_auto_approve` - skip approval gate for reminder tasks (default: false)
 - `codex_relay_reminders_poll_interval_seconds` - poll interval for Reminders (default: 5s)
+- `codex_relay_workspace_aliases` - JSON dict mapping @alias names to workspace paths (default: empty)
+- `codex_relay_auto_context_messages` - number of recent messages to auto-inject as context (default: 0 = disabled)
+- `codex_relay_enable_notes_polling` - enable Apple Notes as long-form task ingress (default: false)
+- `codex_relay_notes_folder_name` - Notes folder to poll (default: "Codex Inbox")
+- `codex_relay_notes_owner` - sender identity for note tasks (defaults to first allowed_sender)
+- `codex_relay_notes_auto_approve` - skip approval gate for note tasks (default: false)
+- `codex_relay_notes_poll_interval_seconds` - poll interval for Notes (default: 10s)
+- `codex_relay_enable_calendar_polling` - enable Apple Calendar as scheduled task ingress (default: false)
+- `codex_relay_calendar_name` - Calendar to poll (default: "Codex Schedule")
+- `codex_relay_calendar_owner` - sender identity for calendar tasks (defaults to first allowed_sender)
+- `codex_relay_calendar_auto_approve` - skip approval gate for calendar tasks (default: false)
+- `codex_relay_calendar_poll_interval_seconds` - poll interval for Calendar (default: 30s)
+- `codex_relay_calendar_lookahead_minutes` - how far ahead to look for due events (default: 5)
+- `codex_relay_enable_progress_streaming` - send periodic progress updates during long tasks (default: false)
+- `codex_relay_progress_update_interval_seconds` - minimum seconds between progress updates (default: 30)
+- `codex_relay_enable_attachments` - enable reading inbound file attachments (default: false)
+- `codex_relay_max_attachment_size_mb` - max attachment size to process (default: 10)
+- `codex_relay_attachment_temp_dir` - temp directory for attachment processing (default: /tmp/codex_relay_attachments)
 
 See `.env.example` for full list. Changes to config fields require updates to both `config.py` and `.env.example`.
 
@@ -147,6 +183,16 @@ tests/test_mail_ingress.py     # Apple Mail ingress
 tests/test_mail_egress.py      # Apple Mail egress
 tests/test_reminders_ingress.py # Apple Reminders ingress
 tests/test_reminders_egress.py  # Apple Reminders egress
+tests/test_notes_ingress.py     # Apple Notes ingress
+tests/test_notes_egress.py      # Apple Notes egress
+tests/test_calendar_ingress.py  # Apple Calendar ingress
+tests/test_calendar_egress.py   # Apple Calendar egress
+tests/test_workspace_routing.py # Multi-workspace @alias routing
+tests/test_health_dashboard.py  # Health dashboard command
+tests/test_conversation_memory.py # History command + auto-context
+tests/test_progress_streaming.py  # Progress streaming during tasks
+tests/test_attachments.py       # File attachment support
+tests/test_siri_shortcuts.py    # POST /task Siri Shortcuts bridge
 ```
 
 ## Security Model
@@ -163,3 +209,5 @@ tests/test_reminders_egress.py  # Apple Reminders egress
 - `codex login` run once for Codex authentication
 - For Apple Mail integration: Apple Mail configured and running on this Mac
 - For Apple Reminders integration: Reminders.app on this Mac, a list named per config (default: "Codex Tasks")
+- For Apple Notes integration: Notes.app on this Mac, a folder named per config (default: "Codex Inbox")
+- For Apple Calendar integration: Calendar.app on this Mac, a calendar named per config (default: "Codex Schedule")

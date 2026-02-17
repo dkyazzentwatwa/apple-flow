@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -11,8 +12,10 @@ from .utils import normalize_sender
 class IMessageIngress:
     """Reads inbound message rows from the local Messages SQLite database."""
 
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, enable_attachments: bool = False, max_attachment_size_mb: int = 10):
         self.db_path = Path(db_path)
+        self.enable_attachments = enable_attachments
+        self.max_attachment_size_mb = max_attachment_size_mb
         self._conn: sqlite3.Connection | None = None
 
     def _connect(self) -> sqlite3.Connection:
@@ -98,6 +101,11 @@ class IMessageIngress:
 
         messages = []
         for row in rows:
+            context: dict[str, Any] = {}
+            if self.enable_attachments:
+                attachments = self._fetch_attachments(int(row["rowid"]))
+                if attachments:
+                    context["attachments"] = attachments
             messages.append(
                 InboundMessage(
                     id=str(row["rowid"]),
@@ -105,9 +113,42 @@ class IMessageIngress:
                     text=row["text"],
                     received_at=row["received_at"],
                     is_from_me=bool(row["is_from_me"]),
+                    context=context,
                 )
             )
         return messages
+
+    def _fetch_attachments(self, message_rowid: int) -> list[dict[str, str]]:
+        """Fetch attachment metadata for a message from chat.db."""
+        query = """
+            SELECT a.filename, a.mime_type, a.total_bytes
+            FROM attachment a
+            JOIN message_attachment_join maj ON maj.attachment_id = a.ROWID
+            WHERE maj.message_id = ?
+        """
+        try:
+            rows = self._query_all(query, [message_rowid])
+        except Exception:
+            return []
+
+        attachments = []
+        max_bytes = self.max_attachment_size_mb * 1024 * 1024
+        for row in rows:
+            filename = row["filename"] or ""
+            # Expand ~ in paths
+            if filename.startswith("~"):
+                filename = os.path.expanduser(filename)
+            size = row["total_bytes"] or 0
+            if size > max_bytes:
+                continue
+            mime = row["mime_type"] or "application/octet-stream"
+            attachments.append({
+                "path": filename,
+                "filename": Path(filename).name if filename else "unknown",
+                "mime_type": mime,
+                "size_bytes": str(size),
+            })
+        return attachments
 
     def latest_rowid(self) -> int | None:
         if not self.db_path.exists():

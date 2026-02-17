@@ -143,6 +143,56 @@ class CodexCliConnector:
             logger.exception("Unexpected error during codex exec: %s", exc)
             return f"Error: {type(exc).__name__}: {exc}"
 
+    def run_turn_streaming(self, thread_id: str, prompt: str, on_progress: Any = None) -> str:
+        """Execute a turn with line-by-line streaming, calling on_progress for each line.
+
+        Falls back to regular run_turn if streaming fails.
+        """
+        sender = thread_id
+        full_prompt = self._build_prompt_with_context(sender, prompt)
+        cmd = [self.codex_command, "exec", "--skip-git-repo-check", "--yolo", full_prompt]
+
+        logger.info("Executing codex CLI (streaming): sender=%s", sender)
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=self.workspace,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            output_lines: list[str] = []
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                output_lines.append(line)
+                if on_progress:
+                    on_progress(line)
+
+            proc.wait(timeout=self.timeout)
+
+            if proc.returncode != 0:
+                error_msg = proc.stderr.read() if proc.stderr else "Unknown error"
+                logger.error("Codex exec (streaming) failed: rc=%d", proc.returncode)
+                return f"Error: Codex execution failed (exit code {proc.returncode}). {error_msg}"
+
+            response = "".join(output_lines).strip()
+            if not response:
+                response = "No response generated."
+
+            self._store_exchange(sender, prompt, response)
+            return response
+
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            logger.error("Codex exec (streaming) timed out after %.1fs", self.timeout)
+            return f"Error: Request timed out after {int(self.timeout)}s."
+        except Exception as exc:
+            logger.exception("Streaming exec error: %s", exc)
+            # Fall back to regular execution
+            return self.run_turn(thread_id, prompt)
+
     def shutdown(self) -> None:
         """No-op: no persistent process to shut down."""
         logger.info("CLI connector shutdown (no-op)")

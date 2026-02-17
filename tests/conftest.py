@@ -172,6 +172,32 @@ class FakeStore:
     def get_state(self, key: str) -> str | None:
         return self.state.get(key)
 
+    def get_stats(self) -> dict[str, Any]:
+        runs_by_state: dict[str, int] = {}
+        for run in self.runs.values():
+            state = run.get("state", "unknown")
+            runs_by_state[state] = runs_by_state.get(state, 0) + 1
+        return {
+            "active_sessions": len(self.sessions),
+            "total_messages": len(self.messages),
+            "pending_approvals": len(self.list_pending_approvals()),
+            "runs_by_state": runs_by_state,
+            "last_event": self.events[-1] if self.events else None,
+        }
+
+    def recent_messages(self, sender: str, limit: int = 10) -> list[dict[str, Any]]:
+        sender_msgs = [
+            m for mid, m in self.messages.items() if m.get("sender") == sender
+        ]
+        return sender_msgs[:limit]
+
+    def search_messages(self, sender: str, query: str, limit: int = 10) -> list[dict[str, Any]]:
+        results = [
+            m for mid, m in self.messages.items()
+            if m.get("sender") == sender and query.lower() in (m.get("text", "")).lower()
+        ]
+        return results[:limit]
+
 
 @pytest.fixture
 def fake_connector() -> FakeConnector:
