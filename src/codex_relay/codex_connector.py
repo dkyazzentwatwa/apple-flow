@@ -156,6 +156,7 @@ class CodexAppServerConnector:
                     "version": "0.1.0",
                 }
             },
+            timeout_seconds=60.0,  # Give Codex more time to start up
         )
         self._initialized = True
 

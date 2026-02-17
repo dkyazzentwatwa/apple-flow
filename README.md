@@ -1,6 +1,6 @@
 # Codex Relay
 
-Codex Relay is a local-first daemon that bridges iMessage on macOS to Codex App Server, with policy gating, approval workflows, and an admin API.
+Codex Relay is a local-first daemon that bridges iMessage on macOS to Codex CLI/App Server, with policy gating, approval workflows, and an admin API. By default, it uses the stateless CLI connector to avoid state corruption issues.
 
 **Text yourself to chat with Claude, brainstorm ideas, and execute tasks in your workspace!**
 
@@ -52,6 +52,7 @@ launchctl list | grep codex.relay  # Should show PID if running
 - Workspace allowlist policy enforcement
 - Local FastAPI admin endpoints
 - Launchd service profile for always-on operation
+- **NEW**: Stateless CLI connector (default) - eliminates state corruption freezes
 - **NEW**: Database connection caching + indexes for performance
 - **NEW**: Approval sender verification for security
 - **NEW**: Graceful shutdown with signal handling
@@ -110,7 +111,7 @@ If `codex_relay_send_startup_intro=true`, relay sends an intro iMessage on start
 - Human approval required for mutating requests (`task:` and `project:`)
 - Per-sender rate limiting
 
-## Codex Auth and App Server
+## Codex Authentication
 
 Authenticate locally once:
 
@@ -118,7 +119,7 @@ Authenticate locally once:
 codex login
 ```
 
-Then relay uses `codex app-server` as the default runtime command.
+Relay uses `codex exec` by default (stateless CLI connector) to avoid thread state corruption. You can switch to the app-server connector by setting `codex_relay_use_codex_cli=false` in `.env`.
 
 ## Beginner Checklist
 

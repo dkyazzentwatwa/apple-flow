@@ -8,12 +8,14 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
 from .config import RelaySettings
 from .egress import IMessageEgress
 from .ingress import IMessageIngress
 from .orchestrator import RelayOrchestrator
 from .policy import PolicyEngine
+from .protocols import ConnectorProtocol
 from .store import SQLiteStore
 
 logger = logging.getLogger("codex_relay.daemon")
@@ -29,10 +31,22 @@ class RelayDaemon:
         self.egress = IMessageEgress(
             suppress_duplicate_outbound_seconds=settings.suppress_duplicate_outbound_seconds
         )
-        self.connector = CodexAppServerConnector(
-            settings.codex_app_server_cmd,
-            turn_timeout_seconds=settings.codex_turn_timeout_seconds
-        )
+
+        # Choose connector based on configuration
+        if settings.use_codex_cli:
+            logger.info("Using CLI connector (codex exec) for stateless execution")
+            self.connector: ConnectorProtocol = CodexCliConnector(
+                codex_command=settings.codex_cli_command,
+                workspace=settings.default_workspace,
+                timeout=settings.codex_turn_timeout_seconds,
+                context_window=settings.codex_cli_context_window,
+            )
+        else:
+            logger.info("Using app-server connector (JSON-RPC with persistent threads)")
+            self.connector = CodexAppServerConnector(
+                settings.codex_app_server_cmd,
+                turn_timeout_seconds=settings.codex_turn_timeout_seconds,
+            )
         self.orchestrator = RelayOrchestrator(
             connector=self.connector,
             egress=self.egress,
