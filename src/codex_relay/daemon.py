@@ -13,6 +13,8 @@ from .codex_connector import CodexAppServerConnector
 from .config import RelaySettings
 from .egress import IMessageEgress
 from .ingress import IMessageIngress
+from .mail_egress import AppleMailEgress
+from .mail_ingress import AppleMailIngress
 from .orchestrator import RelayOrchestrator
 from .policy import PolicyEngine
 from .protocols import ConnectorProtocol
@@ -57,6 +59,37 @@ class RelayDaemon:
             require_chat_prefix=settings.require_chat_prefix,
             chat_prefix=settings.chat_prefix,
         )
+
+        # Apple Mail integration (optional second ingress channel)
+        self.mail_ingress: AppleMailIngress | None = None
+        self.mail_egress: AppleMailEgress | None = None
+        self.mail_orchestrator: RelayOrchestrator | None = None
+        if settings.enable_mail_polling:
+            logger.info(
+                "Apple Mail polling enabled (account=%r, mailbox=%r, allowed_senders=%s)",
+                settings.mail_poll_account or "(all)",
+                settings.mail_poll_mailbox,
+                len(settings.mail_allowed_senders),
+            )
+            self.mail_ingress = AppleMailIngress(
+                account=settings.mail_poll_account,
+                mailbox=settings.mail_poll_mailbox,
+            )
+            self.mail_egress = AppleMailEgress(
+                from_address=settings.mail_from_address,
+            )
+            # Mail gets its own orchestrator so replies route through email egress
+            self.mail_orchestrator = RelayOrchestrator(
+                connector=self.connector,
+                egress=self.mail_egress,
+                store=self.store,
+                allowed_workspaces=settings.allowed_workspaces,
+                default_workspace=settings.default_workspace,
+                approval_ttl_minutes=settings.approval_ttl_minutes,
+                require_chat_prefix=settings.require_chat_prefix,
+                chat_prefix=settings.chat_prefix,
+            )
+
         persisted_cursor = self.store.get_state("last_rowid")
         self._last_rowid: int | None = int(persisted_cursor) if persisted_cursor is not None else None
         self._last_messages_db_error_at: float = 0.0
@@ -98,6 +131,13 @@ class RelayDaemon:
         logger.info("Shutdown complete")
 
     async def run_forever(self) -> None:
+        tasks = [self._poll_imessage_loop()]
+        if self.mail_ingress is not None:
+            tasks.append(self._poll_mail_loop())
+        await asyncio.gather(*tasks)
+
+    async def _poll_imessage_loop(self) -> None:
+        """iMessage polling loop (original behaviour)."""
         while not self._shutdown_requested:
             try:
                 sender_allowlist = self.settings.allowed_senders if self.settings.only_poll_allowed_senders else None
@@ -188,6 +228,60 @@ class RelayDaemon:
 
             await asyncio.sleep(self.settings.poll_interval_seconds)
 
+    async def _poll_mail_loop(self) -> None:
+        """Apple Mail polling loop — runs alongside iMessage when enabled."""
+        assert self.mail_ingress is not None
+        assert self.mail_egress is not None
+        assert self.mail_orchestrator is not None
+
+        logger.info("Apple Mail polling loop started")
+        while not self._shutdown_requested:
+            try:
+                mail_allowlist = self.settings.mail_allowed_senders or None
+                messages = self.mail_ingress.fetch_new(
+                    sender_allowlist=mail_allowlist,
+                    require_sender_filter=bool(mail_allowlist),
+                )
+                for msg in messages:
+                    if self._shutdown_requested:
+                        break
+                    if not msg.text.strip():
+                        logger.info("Ignoring empty inbound email id=%s sender=%s", msg.id, msg.sender)
+                        continue
+                    logger.info(
+                        "Inbound email id=%s sender=%s chars=%s text=%r",
+                        msg.id,
+                        msg.sender,
+                        len(msg.text),
+                        msg.text[:120],
+                    )
+                    if self.mail_egress.was_recent_outbound(msg.sender, msg.text):
+                        logger.info("Ignoring probable outbound echo from %s (id=%s)", msg.sender, msg.id)
+                        continue
+                    started_at = time.monotonic()
+                    result = self.mail_orchestrator.handle_message(msg)
+                    duration = time.monotonic() - started_at
+                    if result.response in {"ignored_empty", "ignored_missing_chat_prefix"}:
+                        logger.info(
+                            "Ignored email id=%s sender=%s reason=%s",
+                            msg.id,
+                            msg.sender,
+                            result.response,
+                        )
+                        continue
+                    logger.info(
+                        "Handled email id=%s sender=%s kind=%s run_id=%s duration=%.2fs",
+                        msg.id,
+                        msg.sender,
+                        result.kind.value,
+                        result.run_id,
+                        duration,
+                    )
+            except Exception as exc:
+                logger.exception("Mail polling loop error: %s", exc)
+
+            await asyncio.sleep(self.settings.poll_interval_seconds)
+
     def send_startup_intro(self) -> None:
         if not self.settings.allowed_senders:
             logger.info("Startup intro skipped: no allowed_senders configured.")
@@ -244,14 +338,18 @@ async def run() -> None:
         loop.add_signal_handler(sig, handle_signal, sig)
 
     logger.info(
-        "Codex Relay running (foreground). Allowed senders=%s, strict_sender_poll=%s, messages_db=%s",
+        "Codex Relay running (foreground). Allowed senders=%s, strict_sender_poll=%s, messages_db=%s, mail_enabled=%s",
         len(settings.allowed_senders),
         settings.only_poll_allowed_senders,
         settings.messages_db_path,
+        settings.enable_mail_polling,
     )
     if settings.send_startup_intro:
         daemon.send_startup_intro()
-    logger.info("Ready. Waiting for inbound iMessages. Press Ctrl+C to stop.")
+    channels = "iMessages"
+    if settings.enable_mail_polling:
+        channels += " + Apple Mail"
+    logger.info("Ready. Waiting for inbound %s. Press Ctrl+C to stop.", channels)
 
     try:
         await daemon.run_forever()

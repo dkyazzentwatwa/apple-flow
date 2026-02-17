@@ -47,7 +47,14 @@ class RelaySettings(BaseSettings):
     send_startup_intro: bool = True
     codex_turn_timeout_seconds: float = 300.0  # 5 minutes for Codex to respond
 
-    @field_validator("allowed_senders", "allowed_workspaces", mode="before")
+    # Apple Mail integration settings
+    enable_mail_polling: bool = False  # Enable Apple Mail as an additional ingress
+    mail_poll_account: str = ""  # Mail.app account name (empty = all accounts / inbox)
+    mail_poll_mailbox: str = "INBOX"  # Mailbox to poll within the account
+    mail_from_address: str = ""  # Sender address for outbound replies (empty = default)
+    mail_allowed_senders: list[str] = Field(default_factory=list)  # Email addresses to accept from
+
+    @field_validator("allowed_senders", "allowed_workspaces", "mail_allowed_senders", mode="before")
     @classmethod
     def _parse_csv_or_json_list(cls, value: Any) -> Any:
         if isinstance(value, list):

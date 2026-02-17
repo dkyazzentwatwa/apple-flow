@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Codex Relay is a local-first daemon that bridges iMessage on macOS to Codex CLI/App Server. It polls the local Messages database, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
+Codex Relay is a local-first daemon that bridges iMessage and Apple Mail on macOS to Codex CLI/App Server. It polls the local Messages database and (optionally) Apple Mail for inbound messages, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. Users can iMessage **or** email Codex. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
 
 ## Development Commands
 
@@ -46,9 +46,12 @@ python -m codex_relay admin
 
 ### Data Flow
 ```
-iMessage DB → Ingress → Policy → Orchestrator → Codex Connector → Egress → AppleScript send
+iMessage DB → Ingress → Policy → Orchestrator → Codex Connector → Egress → AppleScript iMessage
                                      ↓
                                    Store (SQLite state + approvals)
+
+Apple Mail → MailIngress → Orchestrator → Codex Connector → MailEgress → AppleScript Mail.app
+  (optional, polls unread)                                    (sends reply emails)
 ```
 
 ### Core Modules (src/codex_relay/)
@@ -68,6 +71,8 @@ iMessage DB → Ingress → Policy → Orchestrator → Codex Connector → Egre
 | `main.py` | FastAPI admin endpoints |
 | `protocols.py` | Protocol interfaces for type-safe component injection |
 | `utils.py` | Shared utilities (normalize_sender) |
+| `mail_ingress.py` | Reads unread emails from Apple Mail via AppleScript |
+| `mail_egress.py` | Sends reply emails via Apple Mail AppleScript |
 | `models.py` | Data models and enums (RunState, ApprovalStatus) |
 
 ### Command Types
@@ -97,6 +102,11 @@ All settings use `codex_relay_` env prefix. Key settings in `.env`:
 - `codex_relay_codex_cli_context_window` - number of recent exchanges to include as context (default: 3)
 - `codex_relay_codex_app_server_cmd` - app-server command (only used if use_codex_cli=false)
 - `codex_relay_codex_turn_timeout_seconds` - how long to wait for Codex responses (default: 300s/5min)
+- `codex_relay_enable_mail_polling` - enable Apple Mail as additional ingress (default: false)
+- `codex_relay_mail_poll_account` - Mail.app account name to poll (empty = all/inbox)
+- `codex_relay_mail_poll_mailbox` - mailbox to poll (default: INBOX)
+- `codex_relay_mail_from_address` - sender address for outbound replies (empty = default)
+- `codex_relay_mail_allowed_senders` - comma-separated email addresses to accept
 
 See `.env.example` for full list. Changes to config fields require updates to both `config.py` and `.env.example`.
 
@@ -120,6 +130,8 @@ tests/test_approval_security.py # Sender verification
 tests/test_store_connection.py  # Connection caching, thread safety
 tests/test_egress_chunking.py   # Message chunking, fingerprinting
 tests/test_utils.py             # Shared utilities
+tests/test_mail_ingress.py     # Apple Mail ingress
+tests/test_mail_egress.py      # Apple Mail egress
 ```
 
 ## Security Model
@@ -134,3 +146,4 @@ tests/test_utils.py             # Shared utilities
 - macOS with iMessage signed in
 - Full Disk Access granted to terminal app (for reading chat.db)
 - `codex login` run once for Codex authentication
+- For Apple Mail integration: Apple Mail configured and running on this Mac
