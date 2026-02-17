@@ -24,6 +24,26 @@ nano .env  # Set your phone number and workspace
 ./scripts/start_beginner.sh
 ```
 
+## Logs and Monitoring
+
+When running as a service (via `setup_autostart.sh`), logs are stored in:
+
+```bash
+logs/codex-relay.log       # Standard output
+logs/codex-relay.err.log   # Errors and diagnostics
+```
+
+**View logs in real-time:**
+```bash
+tail -f logs/codex-relay.log      # Watch daemon activity
+tail -f logs/codex-relay.err.log  # Watch for errors
+```
+
+**Check service status:**
+```bash
+launchctl list | grep codex.relay  # Should show PID if running
+```
+
 ## Features
 
 - Poll inbound iMessages from local Apple Messages database
