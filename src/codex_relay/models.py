@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class RunState(str, Enum):
@@ -33,6 +34,7 @@ class InboundMessage:
     text: str
     received_at: str
     is_from_me: bool
+    context: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

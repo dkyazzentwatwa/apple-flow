@@ -8,6 +8,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .calendar_egress import AppleCalendarEgress
+from .calendar_ingress import AppleCalendarIngress
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
 from .config import RelaySettings
@@ -15,9 +17,13 @@ from .egress import IMessageEgress
 from .ingress import IMessageIngress
 from .mail_egress import AppleMailEgress
 from .mail_ingress import AppleMailIngress
+from .notes_egress import AppleNotesEgress
+from .notes_ingress import AppleNotesIngress
 from .orchestrator import RelayOrchestrator
 from .policy import PolicyEngine
 from .protocols import ConnectorProtocol
+from .reminders_egress import AppleRemindersEgress
+from .reminders_ingress import AppleRemindersIngress
 from .store import SQLiteStore
 
 logger = logging.getLogger("codex_relay.daemon")
@@ -29,7 +35,11 @@ class RelayDaemon:
         self.store = SQLiteStore(Path(settings.db_path))
         self.store.bootstrap()
         self.policy = PolicyEngine(settings)
-        self.ingress = IMessageIngress(settings.messages_db_path)
+        self.ingress = IMessageIngress(
+            settings.messages_db_path,
+            enable_attachments=settings.enable_attachments,
+            max_attachment_size_mb=settings.max_attachment_size_mb,
+        )
         self.egress = IMessageEgress(
             suppress_duplicate_outbound_seconds=settings.suppress_duplicate_outbound_seconds
         )
@@ -49,15 +59,32 @@ class RelayDaemon:
                 settings.codex_app_server_cmd,
                 turn_timeout_seconds=settings.codex_turn_timeout_seconds,
             )
-        self.orchestrator = RelayOrchestrator(
+
+        # Shared orchestrator params
+        workspace_aliases = settings.get_workspace_aliases()
+        orchestrator_kwargs = dict(
             connector=self.connector,
-            egress=self.egress,
             store=self.store,
             allowed_workspaces=settings.allowed_workspaces,
             default_workspace=settings.default_workspace,
             approval_ttl_minutes=settings.approval_ttl_minutes,
-            require_chat_prefix=settings.require_chat_prefix,
             chat_prefix=settings.chat_prefix,
+            workspace_aliases=workspace_aliases,
+            auto_context_messages=settings.auto_context_messages,
+            enable_progress_streaming=settings.enable_progress_streaming,
+            progress_update_interval_seconds=settings.progress_update_interval_seconds,
+            enable_attachments=settings.enable_attachments,
+            enable_voice_memos=settings.enable_voice_memos,
+            voice_memo_voice=settings.voice_memo_voice,
+            voice_memo_max_chars=settings.voice_memo_max_chars,
+            voice_memo_send_text_too=settings.voice_memo_send_text_too,
+            voice_memo_output_dir=settings.attachment_temp_dir,
+        )
+
+        self.orchestrator = RelayOrchestrator(
+            egress=self.egress,
+            require_chat_prefix=settings.require_chat_prefix,
+            **orchestrator_kwargs,
         )
 
         # Apple Mail integration (optional second ingress channel)
@@ -80,16 +107,93 @@ class RelayDaemon:
                 from_address=settings.mail_from_address,
                 signature=settings.mail_signature,
             )
-            # Mail gets its own orchestrator so replies route through email egress
             self.mail_orchestrator = RelayOrchestrator(
-                connector=self.connector,
                 egress=self.mail_egress,
-                store=self.store,
-                allowed_workspaces=settings.allowed_workspaces,
-                default_workspace=settings.default_workspace,
-                approval_ttl_minutes=settings.approval_ttl_minutes,
                 require_chat_prefix=settings.require_chat_prefix,
-                chat_prefix=settings.chat_prefix,
+                **orchestrator_kwargs,
+            )
+
+        # Apple Reminders integration (optional task-queue ingress)
+        self.reminders_ingress: AppleRemindersIngress | None = None
+        self.reminders_egress: AppleRemindersEgress | None = None
+        self.reminders_orchestrator: RelayOrchestrator | None = None
+        if settings.enable_reminders_polling:
+            owner = settings.reminders_owner
+            if not owner and settings.allowed_senders:
+                owner = settings.allowed_senders[0]
+            logger.info(
+                "Apple Reminders polling enabled (list=%r, owner=%s, auto_approve=%s)",
+                settings.reminders_list_name,
+                owner or "(unset)",
+                settings.reminders_auto_approve,
+            )
+            self.reminders_ingress = AppleRemindersIngress(
+                list_name=settings.reminders_list_name,
+                owner_sender=owner,
+                auto_approve=settings.reminders_auto_approve,
+                store=self.store,
+            )
+            self.reminders_egress = AppleRemindersEgress(
+                list_name=settings.reminders_list_name,
+            )
+            self.reminders_orchestrator = RelayOrchestrator(
+                egress=self.egress,
+                require_chat_prefix=False,
+                **orchestrator_kwargs,
+            )
+
+        # Apple Notes integration (optional long-form ingress)
+        self.notes_ingress: AppleNotesIngress | None = None
+        self.notes_egress: AppleNotesEgress | None = None
+        self.notes_orchestrator: RelayOrchestrator | None = None
+        if settings.enable_notes_polling:
+            notes_owner = settings.notes_owner
+            if not notes_owner and settings.allowed_senders:
+                notes_owner = settings.allowed_senders[0]
+            logger.info(
+                "Apple Notes polling enabled (folder=%r, owner=%s)",
+                settings.notes_folder_name,
+                notes_owner or "(unset)",
+            )
+            self.notes_ingress = AppleNotesIngress(
+                folder_name=settings.notes_folder_name,
+                owner_sender=notes_owner,
+                auto_approve=settings.notes_auto_approve,
+                store=self.store,
+            )
+            self.notes_egress = AppleNotesEgress(folder_name=settings.notes_folder_name)
+            self.notes_orchestrator = RelayOrchestrator(
+                egress=self.egress,
+                require_chat_prefix=False,
+                **orchestrator_kwargs,
+            )
+
+        # Apple Calendar integration (optional scheduled-task ingress)
+        self.calendar_ingress: AppleCalendarIngress | None = None
+        self.calendar_egress: AppleCalendarEgress | None = None
+        self.calendar_orchestrator: RelayOrchestrator | None = None
+        if settings.enable_calendar_polling:
+            cal_owner = settings.calendar_owner
+            if not cal_owner and settings.allowed_senders:
+                cal_owner = settings.allowed_senders[0]
+            logger.info(
+                "Apple Calendar polling enabled (calendar=%r, owner=%s, lookahead=%dm)",
+                settings.calendar_name,
+                cal_owner or "(unset)",
+                settings.calendar_lookahead_minutes,
+            )
+            self.calendar_ingress = AppleCalendarIngress(
+                calendar_name=settings.calendar_name,
+                owner_sender=cal_owner,
+                auto_approve=settings.calendar_auto_approve,
+                lookahead_minutes=settings.calendar_lookahead_minutes,
+                store=self.store,
+            )
+            self.calendar_egress = AppleCalendarEgress(calendar_name=settings.calendar_name)
+            self.calendar_orchestrator = RelayOrchestrator(
+                egress=self.egress,
+                require_chat_prefix=False,
+                **orchestrator_kwargs,
             )
 
         persisted_cursor = self.store.get_state("last_rowid")
@@ -114,6 +218,9 @@ class RelayDaemon:
                 self._last_rowid = latest
                 self.store.set_state("last_rowid", str(latest))
 
+        # Record daemon start time for health dashboard
+        self.store.set_state("daemon_started_at", datetime.now(UTC).isoformat())
+
     def request_shutdown(self) -> None:
         """Request graceful shutdown of the daemon."""
         logger.info("Shutdown requested")
@@ -136,6 +243,12 @@ class RelayDaemon:
         tasks = [self._poll_imessage_loop()]
         if self.mail_ingress is not None:
             tasks.append(self._poll_mail_loop())
+        if self.reminders_ingress is not None:
+            tasks.append(self._poll_reminders_loop())
+        if self.notes_ingress is not None:
+            tasks.append(self._poll_notes_loop())
+        if self.calendar_ingress is not None:
+            tasks.append(self._poll_calendar_loop())
         await asyncio.gather(*tasks)
 
     async def _poll_imessage_loop(self) -> None:
@@ -284,6 +397,133 @@ class RelayDaemon:
 
             await asyncio.sleep(self.settings.poll_interval_seconds)
 
+    async def _poll_reminders_loop(self) -> None:
+        """Apple Reminders polling loop — runs alongside iMessage/Mail when enabled."""
+        assert self.reminders_ingress is not None
+        assert self.reminders_egress is not None
+        assert self.reminders_orchestrator is not None
+
+        logger.info("Apple Reminders polling loop started (list=%r)", self.settings.reminders_list_name)
+        while not self._shutdown_requested:
+            try:
+                messages = self.reminders_ingress.fetch_new()
+                for msg in messages:
+                    if self._shutdown_requested:
+                        break
+                    if not msg.text.strip():
+                        logger.info("Ignoring empty reminder id=%s", msg.id)
+                        continue
+
+                    reminder_id = msg.context.get("reminder_id", "")
+                    reminder_name = msg.context.get("reminder_name", "")
+                    logger.info(
+                        "Inbound reminder id=%s name=%r sender=%s chars=%s",
+                        msg.id,
+                        reminder_name,
+                        msg.sender,
+                        len(msg.text),
+                    )
+
+                    self.reminders_ingress.mark_processed(reminder_id)
+
+                    started_at = time.monotonic()
+                    result = self.reminders_orchestrator.handle_message(msg)
+                    duration = time.monotonic() - started_at
+
+                    logger.info(
+                        "Handled reminder id=%s kind=%s run_id=%s duration=%.2fs",
+                        msg.id,
+                        result.kind.value,
+                        result.run_id,
+                        duration,
+                    )
+
+                    if result.response and reminder_id:
+                        if result.kind.value in ("task", "project"):
+                            self.reminders_egress.annotate_reminder(
+                                reminder_id,
+                                f"[Codex] Awaiting approval — check iMessage.\n\n{result.response[:500]}",
+                            )
+                        else:
+                            self.reminders_egress.complete_reminder(
+                                reminder_id,
+                                f"[Codex Result]\n\n{result.response}",
+                            )
+            except Exception as exc:
+                logger.exception("Reminders polling loop error: %s", exc)
+
+            await asyncio.sleep(self.settings.reminders_poll_interval_seconds)
+
+    async def _poll_notes_loop(self) -> None:
+        """Apple Notes polling loop."""
+        assert self.notes_ingress is not None
+        assert self.notes_egress is not None
+        assert self.notes_orchestrator is not None
+
+        logger.info("Apple Notes polling loop started (folder=%r)", self.settings.notes_folder_name)
+        while not self._shutdown_requested:
+            try:
+                messages = self.notes_ingress.fetch_new()
+                for msg in messages:
+                    if self._shutdown_requested:
+                        break
+                    if not msg.text.strip():
+                        continue
+
+                    note_id = msg.context.get("note_id", "")
+                    note_title = msg.context.get("note_title", "")
+                    logger.info("Inbound note id=%s title=%r chars=%s", msg.id, note_title, len(msg.text))
+
+                    self.notes_ingress.mark_processed(note_id)
+
+                    started_at = time.monotonic()
+                    result = self.notes_orchestrator.handle_message(msg)
+                    duration = time.monotonic() - started_at
+
+                    logger.info("Handled note id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
+
+                    if result.response and note_id:
+                        self.notes_egress.append_result(note_id, result.response)
+            except Exception as exc:
+                logger.exception("Notes polling loop error: %s", exc)
+
+            await asyncio.sleep(self.settings.notes_poll_interval_seconds)
+
+    async def _poll_calendar_loop(self) -> None:
+        """Apple Calendar polling loop."""
+        assert self.calendar_ingress is not None
+        assert self.calendar_egress is not None
+        assert self.calendar_orchestrator is not None
+
+        logger.info("Apple Calendar polling loop started (calendar=%r)", self.settings.calendar_name)
+        while not self._shutdown_requested:
+            try:
+                messages = self.calendar_ingress.fetch_new()
+                for msg in messages:
+                    if self._shutdown_requested:
+                        break
+                    if not msg.text.strip():
+                        continue
+
+                    event_id = msg.context.get("event_id", "")
+                    event_summary = msg.context.get("event_summary", "")
+                    logger.info("Inbound calendar event id=%s summary=%r chars=%s", msg.id, event_summary, len(msg.text))
+
+                    self.calendar_ingress.mark_processed(event_id)
+
+                    started_at = time.monotonic()
+                    result = self.calendar_orchestrator.handle_message(msg)
+                    duration = time.monotonic() - started_at
+
+                    logger.info("Handled calendar event id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
+
+                    if result.response and event_id:
+                        self.calendar_egress.annotate_event(event_id, result.response)
+            except Exception as exc:
+                logger.exception("Calendar polling loop error: %s", exc)
+
+            await asyncio.sleep(self.settings.calendar_poll_interval_seconds)
+
     def send_startup_intro(self) -> None:
         if not self.settings.allowed_senders:
             logger.info("Startup intro skipped: no allowed_senders configured.")
@@ -297,6 +537,8 @@ class RelayDaemon:
             "project: <spec> (approval required)",
             "approve <request_id> / deny <request_id>",
             "status",
+            "health (daemon stats)",
+            "history: [query] (message history)",
             "clear context (or: new chat / reset context)",
         ]
         intro = (
@@ -339,19 +581,25 @@ async def run() -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, handle_signal, sig)
 
+    channels = ["iMessages"]
+    if settings.enable_mail_polling:
+        channels.append("Apple Mail")
+    if settings.enable_reminders_polling:
+        channels.append("Apple Reminders")
+    if settings.enable_notes_polling:
+        channels.append("Apple Notes")
+    if settings.enable_calendar_polling:
+        channels.append("Apple Calendar")
+
     logger.info(
-        "Codex Relay running (foreground). Allowed senders=%s, strict_sender_poll=%s, messages_db=%s, mail_enabled=%s",
+        "Codex Relay running (foreground). Allowed senders=%s, strict_sender_poll=%s, channels=%s",
         len(settings.allowed_senders),
         settings.only_poll_allowed_senders,
-        settings.messages_db_path,
-        settings.enable_mail_polling,
+        " + ".join(channels),
     )
     if settings.send_startup_intro:
         daemon.send_startup_intro()
-    channels = "iMessages"
-    if settings.enable_mail_polling:
-        channels += " + Apple Mail"
-    logger.info("Ready. Waiting for inbound %s. Press Ctrl+C to stop.", channels)
+    logger.info("Ready. Waiting for inbound %s. Press Ctrl+C to stop.", " + ".join(channels))
 
     try:
         await daemon.run_forever()
