@@ -29,7 +29,10 @@ class RelayDaemon:
         self.egress = IMessageEgress(
             suppress_duplicate_outbound_seconds=settings.suppress_duplicate_outbound_seconds
         )
-        self.connector = CodexAppServerConnector(settings.codex_app_server_cmd)
+        self.connector = CodexAppServerConnector(
+            settings.codex_app_server_cmd,
+            turn_timeout_seconds=settings.codex_turn_timeout_seconds
+        )
         self.orchestrator = RelayOrchestrator(
             connector=self.connector,
             egress=self.egress,
