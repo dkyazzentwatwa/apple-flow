@@ -74,9 +74,11 @@ class RelayDaemon:
             self.mail_ingress = AppleMailIngress(
                 account=settings.mail_poll_account,
                 mailbox=settings.mail_poll_mailbox,
+                max_age_days=settings.mail_max_age_days,
             )
             self.mail_egress = AppleMailEgress(
                 from_address=settings.mail_from_address,
+                signature=settings.mail_signature,
             )
             # Mail gets its own orchestrator so replies route through email egress
             self.mail_orchestrator = RelayOrchestrator(

@@ -27,12 +27,14 @@ class AppleMailEgress:
         retries: int = 3,
         echo_window_seconds: float = 300.0,
         suppress_duplicate_outbound_seconds: float = 120.0,
+        signature: str = "\n\n—\nCodex 🤖, Your 24/7 Assistant",
     ):
         self.from_address = from_address
         self.max_chunk_chars = max_chunk_chars
         self.retries = retries
         self.echo_window_seconds = echo_window_seconds
         self.suppress_duplicate_outbound_seconds = suppress_duplicate_outbound_seconds
+        self.signature = signature
         self._recent_fingerprints: dict[str, float] = {}
 
     def send(self, recipient: str, text: str) -> None:
@@ -51,8 +53,11 @@ class AppleMailEgress:
             )
             return
 
-        logger.info("Sending email to %s (%s chars)", recipient, len(text))
-        chunks = self._chunk(text)
+        # Add signature to the text
+        text_with_signature = text + self.signature
+
+        logger.info("Sending email to %s (%s chars)", recipient, len(text_with_signature))
+        chunks = self._chunk(text_with_signature)
         for i, chunk in enumerate(chunks):
             subject = "Codex Relay Response"
             if len(chunks) > 1:
@@ -74,7 +79,11 @@ class AppleMailEgress:
                 raise RuntimeError(f"Failed to send email after retries: {last_error}") from last_error
 
     def _osascript_send(self, recipient: str, subject: str, body: str) -> None:
-        """Send an email using Apple Mail via osascript."""
+        """Send an email reply using Apple Mail via osascript.
+
+        Attempts to reply to the most recent message from the recipient to maintain
+        thread continuity. Falls back to creating a new message if no recent message found.
+        """
         escaped_body = body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         escaped_subject = subject.replace("\\", "\\\\").replace('"', '\\"')
         escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
@@ -85,13 +94,31 @@ class AppleMailEgress:
         else:
             sender_prop = ""
 
+        # Try to find and reply to the most recent message from this sender
         script = f'''
         tell application "Mail"
-            set newMessage to make new outgoing message with properties {{subject:"{escaped_subject}", content:"{escaped_body}", visible:false{sender_prop}}}
-            tell newMessage
-                make new to recipient at end of to recipients with properties {{address:"{escaped_recipient}"}}
-            end tell
-            send newMessage
+            -- Try to find the most recent message from this sender
+            set recentMessages to (every message of inbox whose sender contains "{escaped_recipient}")
+
+            if (count of recentMessages) > 0 then
+                -- Reply to the most recent message
+                set originalMessage to item 1 of recentMessages
+                set replyMessage to reply originalMessage with opening window without reply to all
+
+                tell replyMessage
+                    set content to "{escaped_body}"
+                    set visible to false
+                end tell
+
+                send replyMessage
+            else
+                -- Fallback: create a new message if no recent message found
+                set newMessage to make new outgoing message with properties {{subject:"{escaped_subject}", content:"{escaped_body}", visible:false{sender_prop}}}
+                tell newMessage
+                    make new to recipient at end of to recipients with properties {{address:"{escaped_recipient}"}}
+                end tell
+                send newMessage
+            end if
         end tell
         '''
 
