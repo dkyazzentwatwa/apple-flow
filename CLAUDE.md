@@ -107,6 +107,8 @@ All settings use `codex_relay_` env prefix. Key settings in `.env`:
 - `codex_relay_mail_poll_mailbox` - mailbox to poll (default: INBOX)
 - `codex_relay_mail_from_address` - sender address for outbound replies (empty = default)
 - `codex_relay_mail_allowed_senders` - comma-separated email addresses to accept
+- `codex_relay_mail_max_age_days` - only process emails from last N days (default: 2)
+- `codex_relay_mail_signature` - signature appended to all email replies (default: "Codex 🤖, Your 24/7 Assistant")
 
 See `.env.example` for full list. Changes to config fields require updates to both `config.py` and `.env.example`.
 

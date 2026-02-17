@@ -53,6 +53,8 @@ class RelaySettings(BaseSettings):
     mail_poll_mailbox: str = "INBOX"  # Mailbox to poll within the account
     mail_from_address: str = ""  # Sender address for outbound replies (empty = default)
     mail_allowed_senders: list[str] = Field(default_factory=list)  # Email addresses to accept from
+    mail_max_age_days: int = 2  # Only process emails from the last N days (default: 2)
+    mail_signature: str = "\n\n—\nCodex 🤖, Your 24/7 Assistant"  # Email signature appended to all replies
 
     @field_validator("allowed_senders", "allowed_workspaces", "mail_allowed_senders", mode="before")
     @classmethod

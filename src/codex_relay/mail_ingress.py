@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 from datetime import datetime, timezone
 
@@ -21,9 +22,10 @@ logger = logging.getLogger("codex_relay.mail_ingress")
 class AppleMailIngress:
     """Reads inbound emails from the macOS Mail.app via AppleScript."""
 
-    def __init__(self, account: str = "", mailbox: str = "INBOX"):
+    def __init__(self, account: str = "", mailbox: str = "INBOX", max_age_days: int = 2):
         self.account = account
         self.mailbox = mailbox
+        self.max_age_days = max_age_days
         self._last_seen_ids: set[str] = set()
 
     def fetch_new(
@@ -102,7 +104,16 @@ class AppleMailIngress:
         else:
             mailbox_ref = "inbox"
 
+        # Calculate cutoff date for max_age_days
+        from datetime import timedelta
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
+        # AppleScript date format: "Monday, January 1, 2024 at 12:00:00 AM"
+        # We'll use a simpler approach: calculate seconds since epoch
+        cutoff_timestamp = int(cutoff_date.timestamp())
+
         # Build sender filter clause for AppleScript
+        conditions = ["read status is false"]
+
         if sender_filter:
             # Build: (sender contains "email1" or sender contains "email2")
             sender_conditions = []
@@ -110,38 +121,47 @@ class AppleMailIngress:
                 # Escape quotes in email addresses
                 escaped_email = email.replace('"', '\\"')
                 sender_conditions.append(f'sender contains "{escaped_email}"')
-            sender_clause = " or ".join(sender_conditions)
-            where_clause = f"whose read status is false and ({sender_clause})"
-        else:
-            where_clause = "whose read status is false"
+            sender_clause = "(" + " or ".join(sender_conditions) + ")"
+            conditions.append(sender_clause)
+
+        where_clause = f"whose {' and '.join(conditions)}"
 
         script = f'''
         tell application "Mail"
             set maxCount to {int(limit)}
             set resultList to {{}}
+            set maxAgeDays to {int(self.max_age_days)}
+            set cutoffDate to (current date) - (maxAgeDays * days)
+
             set unreadMessages to (every message of {mailbox_ref} {where_clause})
-            set msgCount to count of unreadMessages
-            if msgCount > maxCount then set msgCount to maxCount
 
-            repeat with i from 1 to msgCount
-                set msg to item i of unreadMessages
-                set msgId to id of msg as text
-                set msgSender to sender of msg as text
-                set msgSubject to subject of msg as text
-                try
-                    set msgBody to content of msg as text
-                on error
-                    set msgBody to ""
-                end try
-                try
-                    set msgDate to date received of msg as text
-                on error
-                    set msgDate to ""
-                end try
+            repeat with msg in unreadMessages
+                -- Stop if we have enough messages
+                if (count of resultList) >= maxCount then exit repeat
 
-                -- Build a JSON-ish delimited record
-                set rec to "{{\\"id\\": \\"" & my escapeJSON(msgId) & "\\", \\"sender\\": \\"" & my escapeJSON(msgSender) & "\\", \\"subject\\": \\"" & my escapeJSON(msgSubject) & "\\", \\"body\\": \\"" & my escapeJSON(msgBody) & "\\", \\"date\\": \\"" & my escapeJSON(msgDate) & "\\"}}"
-                set end of resultList to rec
+                -- Check if message is recent enough
+                set msgDateReceived to date received of msg
+                if msgDateReceived < cutoffDate then
+                    -- Skip old messages
+                else
+                    set msgId to id of msg as text
+                    set msgSender to sender of msg as text
+                    set msgSubject to subject of msg as text
+                    try
+                        set msgBody to content of msg as text
+                    on error
+                        set msgBody to ""
+                    end try
+                    try
+                        set msgDate to date received of msg as text
+                    on error
+                        set msgDate to ""
+                    end try
+
+                    -- Build a JSON-ish delimited record
+                    set rec to "{{\\"id\\": \\"" & my escapeJSON(msgId) & "\\", \\"sender\\": \\"" & my escapeJSON(msgSender) & "\\", \\"subject\\": \\"" & my escapeJSON(msgSubject) & "\\", \\"body\\": \\"" & my escapeJSON(msgBody) & "\\", \\"date\\": \\"" & my escapeJSON(msgDate) & "\\"}}"
+                    set end of resultList to rec
+                end if
             end repeat
 
             set AppleScript's text item delimiters to ","
@@ -151,6 +171,7 @@ class AppleMailIngress:
         on escapeJSON(txt)
             set output to ""
             repeat with ch in (characters of txt)
+                set charCode to (ASCII number of ch)
                 if ch is "\\"" then
                     set output to output & "\\\\\\""
                 else if ch is "\\\\" then
@@ -161,6 +182,9 @@ class AppleMailIngress:
                     set output to output & "\\\\n"
                 else if ch is (ASCII character 9) then
                     set output to output & "\\\\t"
+                else if charCode < 32 and charCode is not 10 and charCode is not 13 and charCode is not 9 then
+                    -- Skip other control characters (ASCII 0-31) by replacing with space
+                    set output to output & " "
                 else
                     set output to output & ch
                 end if
@@ -182,9 +206,20 @@ class AppleMailIngress:
             output = result.stdout.strip()
             if not output or output == "[]":
                 return []
-            return json.loads(output)
+
+            # Clean control characters from output before parsing JSON
+            # Replace ALL control characters and non-printable characters
+            # Note: JSON doesn't allow literal newlines in strings, only printable ASCII
+            cleaned_output = ''.join(char if (32 <= ord(char) < 127) else ' ' for char in output)
+
+            return json.loads(cleaned_output)
         except json.JSONDecodeError as exc:
+            # If parsing still fails, log the problematic output for debugging
             logger.warning("Failed to parse Mail AppleScript output: %s", exc)
+            if output and len(output) >= 169:
+                char_at_168 = output[168]
+                logger.warning("Character at position 168: %r (ord=%d)", char_at_168, ord(char_at_168))
+                logger.debug("Context around error: %r", output[160:180])
             return []
         except subprocess.TimeoutExpired:
             logger.warning("AppleScript fetch timed out")
