@@ -556,7 +556,7 @@ class RelayOrchestrator:
             if reminder_id and list_name:
                 self.reminders_egress.move_to_archive(
                     reminder_id=reminder_id,
-                    result_text=f"[Codex Result]\n\n{result}",
+                    result_text=f"[Apple Flow Result]\n\n{result}",
                     source_list_name=list_name,
                     archive_list_name=self.reminders_archive_list_name,
                 )
@@ -567,7 +567,7 @@ class RelayOrchestrator:
             if note_id and folder_name and hasattr(self.notes_egress, "move_to_archive"):
                 self.notes_egress.move_to_archive(
                     note_id=note_id,
-                    result_text=f"[Codex Result]\n\n{result}",
+                    result_text=f"[Apple Flow Result]\n\n{result}",
                     source_folder_name=folder_name,
                     archive_subfolder_name=self.notes_archive_folder_name,
                 )
@@ -575,7 +575,7 @@ class RelayOrchestrator:
         elif channel == "calendar" and self.calendar_egress:
             event_id = source_context.get("event_id")
             if event_id and hasattr(self.calendar_egress, "annotate_event"):
-                self.calendar_egress.annotate_event(event_id, f"\n\n[Codex Result]\n{result}")
+                self.calendar_egress.annotate_event(event_id, f"\n\n[Apple Flow Result]\n{result}")
 
     def _log_to_notes(self, kind: str, sender: str, request: str, response: str) -> None:
         """Create a rich-HTML log note for a completed AI turn (fire-and-forget)."""

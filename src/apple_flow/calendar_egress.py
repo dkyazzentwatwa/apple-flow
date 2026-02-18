@@ -35,9 +35,9 @@ class AppleCalendarEgress:
                 set matchedEvent to (first event of targetCal whose uid is "{escaped_id}")
                 set existingDesc to description of matchedEvent
                 if existingDesc is missing value then
-                    set description of matchedEvent to "[Codex Result]\\n" & "{escaped_text}"
+                    set description of matchedEvent to "[Apple Flow Result]\\n" & "{escaped_text}"
                 else
-                    set description of matchedEvent to existingDesc & "\\n\\n[Codex Result]\\n" & "{escaped_text}"
+                    set description of matchedEvent to existingDesc & "\\n\\n[Apple Flow Result]\\n" & "{escaped_text}"
                 end if
                 return "ok"
             on error errMsg

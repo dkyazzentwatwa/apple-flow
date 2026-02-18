@@ -103,7 +103,7 @@ class AppleNotesEgress:
                 set archiveFolder to folder "{escaped_archive_folder}" of folder "{escaped_source_folder}"
                 set matchedNote to (first note of sourceFolder whose id is "{escaped_id}")
                 set existingBody to plaintext of matchedNote
-                set body of matchedNote to existingBody & "\\n\\n--- Codex Result ---\\n" & "{escaped_text}"
+                set body of matchedNote to existingBody & "\\n\\n--- Apple Flow Result ---\\n" & "{escaped_text}"
                 move matchedNote to archiveFolder
                 return "ok"
             on error errMsg

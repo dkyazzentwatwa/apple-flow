@@ -136,7 +136,7 @@ The script will automatically:
 2. ✅ Install all dependencies (including optimizations)
 3. ✅ Create `.env` from `.env.example` if missing
 4. ✅ Validate your configuration
-5. ✅ Run 47 tests to ensure everything works
+5. ✅ Run 380+ tests to ensure everything works
 6. 🚀 Start the Apple Flow daemon
 
 **What you'll see:**
@@ -145,7 +145,7 @@ The script will automatically:
 Creating virtual environment...
 Installing dependencies...
 Running tests...
-===== 47 passed in 0.36s =====
+===== 382 passed in 0.36s =====
 
 Starting Apple Flow daemon...
 2026-02-16 14:00:00,000 INFO Apple Flow running (foreground)
@@ -336,7 +336,7 @@ apple_flow_mail_max_age_days=2
 
 Then restart the daemon. Emails will:
 - Reply in the same thread
-- Include signature: "Codex 🤖, Your 24/7 Assistant"
+- Include signature: "Apple Flow 🤖, Your 24/7 Assistant"
 - Only process last 2 days of emails
 - Work seamlessly alongside iMessage
 
@@ -370,14 +370,16 @@ Email → MailIngress ──────────────┘             
 - **Egress**: Sends iMessage replies via AppleScript
 - **MailEgress**: Sends threaded email replies (optional)
 
-### Recent Features (v0.2.0)
+### What's New in v1.0.0
 
-- 📧 Apple Mail integration with threaded replies and custom signatures
-- ⚡ Stateless CLI connector - eliminates freezing from state corruption
+- 📱 Five Apple app integrations: iMessage, Mail, Reminders, Notes, Calendar
+- 🤖 Two AI connectors: Claude Code CLI (`claude -p`) and Codex CLI (`codex exec`)
 - 🔒 Approval sender verification (only you can approve your tasks)
-- 💾 Database connection caching + indexes for 10x faster queries
+- 💾 Database connection caching + indexes for fast queries
 - 🛡️ Graceful shutdown with signal handling
-- 🧪 80+ comprehensive tests with shared fixtures
+- 🧪 380+ comprehensive tests with shared fixtures
+- 📝 Notes logging: per-turn AI response logging to a Notes folder
+- 🏥 Health dashboard, conversation history, progress streaming
 
 For developers, see [CLAUDE.md](../CLAUDE.md) for architecture details.
 

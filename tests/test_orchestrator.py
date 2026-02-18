@@ -191,7 +191,7 @@ def test_reminder_task_moves_to_archive_after_approval():
     assert moved["reminder_id"] == "x-apple-reminder://ABC123"
     assert moved["source_list_name"] == "Codex Tasks"
     assert moved["archive_list_name"] == "Archive"
-    assert "[Codex Result]" in moved["result_text"]
+    assert "[Apple Flow Result]" in moved["result_text"]
 
 
 def test_note_task_moves_to_archive_after_approval():
@@ -263,7 +263,7 @@ def test_note_task_moves_to_archive_after_approval():
     assert moved["note_id"] == "x-coredata://NOTE123"
     assert moved["source_folder_name"] == "codex-task"
     assert moved["archive_subfolder_name"] == "codex-archive"
-    assert "[Codex Result]" in moved["result_text"]
+    assert "[Apple Flow Result]" in moved["result_text"]
 
 
 def test_calendar_post_approval_annotates_event():
@@ -318,7 +318,7 @@ def test_calendar_post_approval_annotates_event():
 
     assert len(cal_egress.annotated) == 1
     assert cal_egress.annotated[0]["event_id"] == "EVT-ABC-123"
-    assert "[Codex Result]" in cal_egress.annotated[0]["result_text"]
+    assert "[Apple Flow Result]" in cal_egress.annotated[0]["result_text"]
 
 
 def test_note_context_key_note_title_is_used():

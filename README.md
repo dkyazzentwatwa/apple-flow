@@ -57,8 +57,8 @@ launchctl stop local.apple-flow && launchctl start local.apple-flow
 
 - **iMessage** — poll local Messages database for inbound commands
 - **Apple Mail** — text OR email Claude with threaded replies and custom signatures
-- **Apple Reminders** — incomplete reminders in a designated list become Codex tasks
-- **Apple Notes** — notes tagged with `!!codex` (configurable) trigger Codex tasks; optional per-turn logging of AI responses to a "codex-logs" folder
+- **Apple Reminders** — incomplete reminders in a designated list become Apple Flow tasks
+- **Apple Notes** — notes tagged with `!!agent` (configurable) trigger tasks; optional per-turn logging of AI responses to an "agent-logs" folder
 - **Notes timeout hardening** — configurable Notes fetch timeout/retry controls to reduce AppleScript stall impact
 - **Apple Calendar** — events in a designated calendar become scheduled tasks when due
 - **Stateless CLI connector** (default) — `codex exec` per turn, eliminates state corruption freezes
@@ -146,7 +146,7 @@ apple_flow_mail_max_age_days=2
 
 Features:
 - Replies stay in the same email thread
-- Custom signature: "Codex 🤖, Your 24/7 Assistant"
+- Custom signature: "Apple Flow 🤖, Your 24/7 Assistant"
 - Only processes recent emails (2 days by default)
 - Works alongside iMessage seamlessly
 
@@ -158,7 +158,7 @@ Log every AI response as a new Apple Note for easy review outside iMessage:
 
 ```bash
 apple_flow_enable_notes_logging=true
-apple_flow_notes_log_folder_name=codex-logs  # default
+apple_flow_notes_log_folder_name=agent-logs  # default
 ```
 
 Each completed AI turn (chat, idea, plan, task) creates a note in the configured folder. Notes are titled `[<command>] <request preview> — <timestamp>` and contain the full request and response. The folder is created automatically if it does not exist.
