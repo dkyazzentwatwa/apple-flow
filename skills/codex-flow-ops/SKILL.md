@@ -6,10 +6,9 @@ description: Use when working on Apple Flow in the apple-flow repository. Enforc
 # Codex Flow Ops
 
 ## Overview
-Use this skill for changes, debugging, and operations in:
-- `/Users/cypher/Public/code/apple-flow`
+Use this skill for changes, debugging, and operations in the apple-flow repository.
 
-Apple Flow is a local-first iMessage bridge to Codex App Server. This skill keeps workflow safe-by-default and beginner-friendly while giving concrete operator steps.
+Apple Flow is a local-first macOS daemon bridging iMessage, Mail, Reminders, Notes, and Calendar to Claude/Codex CLI. This skill keeps workflow safe-by-default and beginner-friendly while giving concrete operator steps.
 
 ## When to Use
 Use this skill when the task involves any of:
@@ -38,7 +37,7 @@ Do not remove duplicate/echo suppression without explicit request:
 ### 1) Reproduce First
 Use beginner path before changing code:
 ```bash
-cd /Users/cypher/Public/code/apple-flow
+cd <path-to-apple-flow>
 ./scripts/start_beginner.sh
 ```
 

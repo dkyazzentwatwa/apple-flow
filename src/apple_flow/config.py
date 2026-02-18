@@ -19,7 +19,7 @@ class RelaySettings(BaseSettings):
     allowed_senders: list[str] = Field(default_factory=list)
     allowed_workspaces: list[str] = Field(default_factory=list)
 
-    default_workspace: str = "/Users/cypher/Public/code/codex-flow"
+    default_workspace: str = str(Path.home())
     db_path: Path = Path.home() / ".codex" / "relay.db"
     poll_interval_seconds: float = 2.0
     approval_ttl_minutes: int = 20
@@ -86,11 +86,11 @@ class RelaySettings(BaseSettings):
     mail_from_address: str = ""
     mail_allowed_senders: list[str] = Field(default_factory=list)
     mail_max_age_days: int = 2
-    mail_signature: str = "\n\n—\nCodex 🤖, Your 24/7 Assistant"
+    mail_signature: str = "\n\n—\nApple Flow 🤖, Your 24/7 Assistant"
 
     # Apple Reminders integration settings
     enable_reminders_polling: bool = False
-    reminders_list_name: str = "Codex Tasks"
+    reminders_list_name: str = "agent-task"
     reminders_archive_list_name: str = "Archive"
     reminders_owner: str = ""
     reminders_auto_approve: bool = False
@@ -102,8 +102,8 @@ class RelaySettings(BaseSettings):
 
     # Apple Notes integration settings
     enable_notes_polling: bool = False
-    notes_folder_name: str = "Codex Inbox"
-    notes_archive_folder_name: str = "codex-archive"
+    notes_folder_name: str = "agent-task"
+    notes_archive_folder_name: str = "agent-archive"
     notes_owner: str = ""
     notes_auto_approve: bool = False
     notes_poll_interval_seconds: float = 10.0
@@ -113,11 +113,11 @@ class RelaySettings(BaseSettings):
 
     # Notes logging (write-only, independent of notes polling)
     enable_notes_logging: bool = False
-    notes_log_folder_name: str = "codex-logs"
+    notes_log_folder_name: str = "agent-logs"
 
     # Apple Calendar integration settings
     enable_calendar_polling: bool = False
-    calendar_name: str = "Codex Schedule"
+    calendar_name: str = "agent-schedule"
     calendar_owner: str = ""
     calendar_auto_approve: bool = False
     calendar_poll_interval_seconds: float = 30.0

@@ -55,7 +55,7 @@ This only configures and installs the auto-start service.
 
 ```bash
 # Check service status (should show a PID number, not -)
-launchctl list | grep codex.relay
+launchctl list | grep apple-flow
 
 # Watch logs in real-time
 tail -f logs/apple-flow.log
@@ -74,7 +74,7 @@ launchctl start local.apple-flow
 launchctl stop local.apple-flow
 
 # Check status
-launchctl list | grep codex.relay
+launchctl list | grep apple-flow
 
 # Uninstall auto-start
 ./scripts/uninstall_autostart.sh
@@ -98,7 +98,7 @@ This means the setup is **portable** - it works regardless of:
 ### Service shows exit code (not running)
 
 ```bash
-launchctl list | grep codex.relay
+launchctl list | grep apple-flow
 # Output: -    1    local.apple-flow (- means not running, 1 is exit code)
 ```
 

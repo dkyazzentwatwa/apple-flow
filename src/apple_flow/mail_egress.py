@@ -27,7 +27,7 @@ class AppleMailEgress:
         retries: int = 3,
         echo_window_seconds: float = 300.0,
         suppress_duplicate_outbound_seconds: float = 120.0,
-        signature: str = "\n\n—\nCodex 🤖, Your 24/7 Assistant",
+        signature: str = "\n\n—\nApple Flow 🤖, Your 24/7 Assistant",
     ):
         self.from_address = from_address
         self.max_chunk_chars = max_chunk_chars

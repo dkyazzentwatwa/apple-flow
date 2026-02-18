@@ -395,8 +395,8 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 
 | Metric | Value |
 |--------|-------|
-| Source modules | 23 |
-| Test files | 30 |
+| Source modules | 26 |
+| Test files | 34 |
 | Config options | 40+ |
 | Python requirement | ≥3.11 |
 | Core dependencies | fastapi, uvicorn, pydantic, pydantic-settings, httpx |

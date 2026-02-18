@@ -15,7 +15,7 @@ This guide gets `apple-flow` running fast on macOS with the safest default path.
 ## 1) Go to the project (30 sec)
 
 ```bash
-cd /Users/cypher/Public/code/apple-flow
+cd <path-to-apple-flow>
 ```
 
 ## 2) Create your local env file (30 sec)
@@ -29,8 +29,8 @@ cp .env.example .env
 Open `.env` and confirm these at minimum:
 
 - `apple_flow_allowed_senders=+1YOURNUMBER`
-- `apple_flow_allowed_workspaces=/Users/cypher/Public/code/apple-flow`
-- `apple_flow_default_workspace=/Users/cypher/Public/code/apple-flow`
+- `apple_flow_allowed_workspaces=/Users/yourname/code`
+- `apple_flow_default_workspace=/Users/yourname/code/my-project`
 - `apple_flow_connector=codex-cli` (default) **or** `apple_flow_connector=claude-cli`
 
 Important: your own phone number must be in `apple_flow_allowed_senders` or relay messages will be blocked.

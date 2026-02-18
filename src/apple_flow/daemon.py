@@ -499,14 +499,14 @@ class RelayDaemon:
                         if result.kind.value in ("task", "project"):
                             self.reminders_egress.annotate_reminder(
                                 reminder_id,
-                                f"[Codex] Awaiting approval — check iMessage.\n\n{result.response[:500]}",
+                                f"[Apple Flow] Awaiting approval — check iMessage.\n\n{result.response[:500]}",
                             )
                         else:
                             # Move completed reminders to archive list
                             list_name = msg.context.get("list_name", self.settings.reminders_list_name)
                             self.reminders_egress.move_to_archive(
                                 reminder_id=reminder_id,
-                                result_text=f"[Codex Result]\n\n{result.response}",
+                                result_text=f"[Apple Flow Result]\n\n{result.response}",
                                 source_list_name=list_name,
                                 archive_list_name=self.settings.reminders_archive_list_name,
                             )
@@ -546,7 +546,7 @@ class RelayDaemon:
                         folder_name = msg.context.get("folder_name", self.settings.notes_folder_name)
                         self.notes_egress.move_to_archive(
                             note_id=note_id,
-                            result_text=f"\n\n[Codex Result]\n{result.response}",
+                            result_text=f"\n\n[Apple Flow Result]\n{result.response}",
                             source_folder_name=folder_name,
                             archive_subfolder_name=self.settings.notes_archive_folder_name,
                         )
