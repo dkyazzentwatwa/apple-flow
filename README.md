@@ -1,220 +1,255 @@
 # Apple Flow
 
-Apple Flow is a local-first daemon that bridges iMessage and Apple Mail on macOS to Codex CLI/App Server, with policy gating, approval workflows, and an admin API. By default, it uses the stateless CLI connector to avoid state corruption issues.
+A local-first daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar on macOS to Claude (or Codex). Text yourself to chat with an AI, brainstorm ideas, and execute tasks in your workspace — no apps, no subscriptions beyond the AI backend.
 
-**Text or email yourself to chat with Claude, brainstorm ideas, and execute tasks in your workspace!**
+---
 
-## 🚀 Quick Start
+## Complete Beginner Setup
 
-**New to Apple Flow?** See **[QUICKSTART.md](docs/QUICKSTART.md)** for complete setup instructions.
+### What you need before starting
 
-**TL;DR** for experienced users:
+- A Mac with iMessage signed in and working
+- About 10 minutes
 
-```bash
-# 1. Authenticate — pick your AI backend (only one needed):
-codex login   # if using Codex (default)
-claude auth login  # if using Claude Code CLI
+---
 
-# 2. One-command setup with auto-start at boot
-./scripts/setup_autostart.sh
-# Edit .env when prompted, then grant Full Disk Access to Python binary
+### Step 1 — Install Homebrew
 
-# OR manual foreground run
-cp .env.example .env
-nano .env  # Set your phone number, workspace, and connector
-./scripts/start_beginner.sh
-```
-
-## Logs and Monitoring
-
-When running as a service (via `setup_autostart.sh`), logs are stored in:
+Homebrew is the package manager for macOS. Open **Terminal** and run:
 
 ```bash
-logs/apple-flow.log       # Standard output
-logs/apple-flow.err.log   # Errors and diagnostics
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-**View logs in real-time:**
-```bash
-tail -f logs/apple-flow.err.log  # All daemon output (Python logging goes to stderr)
-```
+Follow the prompts. When it finishes, close and reopen Terminal.
 
-**Check service status:**
-```bash
-launchctl list local.apple-flow  # Should show PID and exit status 0
-```
+---
 
-**Start / stop / restart the service:**
-```bash
-launchctl start local.apple-flow
-launchctl stop local.apple-flow
-
-# Restart (stop then start):
-launchctl stop local.apple-flow && launchctl start local.apple-flow
-```
-
-## Features
-
-- **iMessage** — poll local Messages database for inbound commands
-- **Apple Mail** — text OR email Claude with threaded replies and custom signatures
-- **Apple Reminders** — incomplete reminders in a designated list become Apple Flow tasks
-- **Apple Notes** — notes tagged with `!!agent` (configurable) trigger tasks; optional per-turn logging of AI responses to an "agent-logs" folder
-- **Notes timeout hardening** — configurable Notes fetch timeout/retry controls to reduce AppleScript stall impact
-- **Apple Calendar** — events in a designated calendar become scheduled tasks when due
-- **Stateless CLI connector** (default) — `codex exec` per turn, eliminates state corruption freezes
-- **Claude Code CLI connector** — swap to `claude -p` by setting `apple_flow_connector=claude-cli`
-- **Model selection** — `apple_flow_codex_cli_model=gpt-5.3-codex` for Codex, `apple_flow_claude_cli_model=claude-sonnet-4-6` for Claude
-- **Claude tool control** — optional `apple_flow_claude_cli_tools` / `apple_flow_claude_cli_allowed_tools` (for example: `WebSearch`)
-- **Multi-workspace routing** — `@alias` prefix routes to different workspace paths
-- **Human-in-the-loop approval** — mutating `task:` / `project:` commands require explicit approval
-- **Workspace allowlist** — Codex can only access configured paths
-- **Progress streaming** — periodic iMessage updates during long tasks
-- **File attachments** — read inbound attachments and include in prompts
-- **Conversation memory** — auto-inject recent history into prompts
-- **Health dashboard** — `health:` command shows uptime, sessions, pending approvals
-- **Admin API** — FastAPI endpoints for sessions, approvals, audit log, programmatic task submission
-- **Launchd service** — one-command setup for always-on auto-start at boot
-
-## Documentation
-
-- **[QUICKSTART.md](docs/QUICKSTART.md)** - Complete beginner's guide
-- **[BEGINNER_SETUP_10_MIN.md](docs/BEGINNER_SETUP_10_MIN.md)** - 10-minute setup guide
-- **[AUTO_START_SETUP.md](docs/AUTO_START_SETUP.md)** - Auto-start at boot setup
-- **[ENV_SETUP.md](docs/ENV_SETUP.md)** - Full `.env` configuration reference (all options, defaults, examples)
-- **[CLAUDE.md](CLAUDE.md)** - Architecture and development guide
-- **[.env.example](.env.example)** - Annotated configuration file
-
-Manual setup:
+### Step 2 — Install Python and Node
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
-pytest -q
+brew install python@3.11 node
 ```
 
-Run the relay API:
+---
+
+### Step 3 — Install the Claude CLI and authenticate
 
 ```bash
-uvicorn apple_flow.main:app --reload
-```
-
-Run the relay daemon:
-
-```bash
-python -m apple_flow daemon
-```
-
-Run admin API only:
-
-```bash
-python -m apple_flow admin
-```
-
-## Commands Over iMessage or Email
-
-Same commands work via iMessage or email (when mail integration is enabled):
-
-- `relay: <message>` — general chat mode (default safety trigger)
-- `idea: <prompt>` — brainstorming and options
-- `plan: <goal>` — implementation plan only (non-mutating)
-- `task: <instruction>` — creates an approval request before execution
-- `project: <spec>` — project concierge pipeline with approval gate
-- `approve <request_id>` — executes a queued request
-- `deny <request_id>` — cancels a queued request
-- `status` — pending approval count
-- `health:` — daemon uptime, session count, run states
-- `history: [query]` — recent messages or search by keyword
-- `clear context` / `new chat` — reset sender thread and start fresh context
-- `system: stop` — gracefully shut down the daemon
-- `system: restart` — shut down (launchd auto-restarts if configured)
-
-**Multi-workspace routing:** prefix any command with `@alias` to target a specific workspace:
-```
-task: @web-app deploy to staging
-relay: @api show recent errors
-```
-
-### Email Integration (Optional)
-
-Enable Apple Mail polling in `.env`:
-```bash
-apple_flow_enable_mail_polling=true
-apple_flow_mail_allowed_senders=your.email@example.com
-apple_flow_mail_from_address=your.email@example.com
-apple_flow_mail_max_age_days=2
-```
-
-Features:
-- Replies stay in the same email thread
-- Custom signature: "Apple Flow 🤖, Your 24/7 Assistant"
-- Only processes recent emails (2 days by default)
-- Works alongside iMessage seamlessly
-
-If `apple_flow_send_startup_intro=true`, relay sends an intro iMessage on startup with current workspace + command list.
-
-### Notes Logging (Optional)
-
-Log every AI response as a new Apple Note for easy review outside iMessage:
-
-```bash
-apple_flow_enable_notes_logging=true
-apple_flow_notes_log_folder_name=agent-logs  # default
-```
-
-Each completed AI turn (chat, idea, plan, task) creates a note in the configured folder. Notes are titled `[<command>] <request preview> — <timestamp>` and contain the full request and response. The folder is created automatically if it does not exist.
-
-This is independent of the notes polling ingress (`enable_notes_polling`) — you can enable logging without enabling Notes as a task source.
-
-## Security Defaults
-
-- Allowlisted senders only
-- Workspace allowlist only
-- Human approval required for mutating requests (`task:` and `project:`)
-- Per-sender rate limiting
-
-## Authentication
-
-Apple Flow supports two AI backends. Authenticate once for whichever you're using:
-
-```bash
-# Option A — Codex (default)
-codex login
-
-# Option B — Claude Code CLI
+npm install -g @anthropic-ai/claude-code
 claude auth login
 ```
 
-### Choosing a connector
+This opens a browser window. Sign in with your Anthropic account.
+
+---
+
+### Step 4 — Clone the repo
+
+```bash
+git clone https://github.com/your-org/apple-flow.git
+cd apple-flow
+```
+
+---
+
+### Step 5 — Run the one-command setup
+
+```bash
+./scripts/setup_autostart.sh
+```
+
+The script will:
+1. Create a Python virtual environment and install dependencies
+2. Copy `.env.example` → `.env` and auto-detect your `claude` binary
+3. **Pause and ask you to edit `.env`** (do this now — see next step)
+4. Install a background service that auto-starts apple-flow on every boot
+
+---
+
+### Step 6 — Edit `.env`
+
+When the script pauses, open `.env` in any text editor. The only two fields you must set:
+
+```env
+apple_flow_allowed_senders=+15551234567       # your own phone number in +1... format
+apple_flow_allowed_workspaces=/Users/you/     # folder(s) the AI can read/write
+apple_flow_connector=claude-cli               # use Claude (not Codex)
+```
+
+Save and press Enter in the terminal to continue.
+
+---
+
+### Step 7 — Grant Full Disk Access
+
+Apple Flow needs permission to read your iMessage database. The script will print the exact Python binary path at the end. Use it here:
+
+1. Open **System Settings → Privacy & Security → Full Disk Access**
+2. Click **+**
+3. Press `Cmd+Shift+G`, paste the path the script printed, click **Open**
+4. Enable the toggle next to it
+
+Then restart the service:
+
+```bash
+launchctl stop local.apple-flow
+launchctl start local.apple-flow
+```
+
+---
+
+### Step 8 — Text yourself
+
+Open Messages on your Mac or iPhone and send yourself any message — no special prefix needed:
+
+```
+what files are in my home directory?
+```
+
+You should get a reply within a few seconds.
+
+---
+
+### Verify it's running
+
+```bash
+launchctl list | grep apple-flow      # should show a PID
+tail -f logs/apple-flow.err.log       # watch live activity
+```
+
+---
+
+## Commands
+
+Send any of these to yourself via iMessage (or email, if mail integration is enabled):
+
+| Command | What it does |
+|---------|-------------|
+| `<anything>` | Chat — just talk, no prefix needed |
+| `idea: <prompt>` | Brainstorming and options |
+| `plan: <goal>` | Implementation plan, no file changes |
+| `task: <instruction>` | Queues a task, asks for approval before executing |
+| `project: <spec>` | Full project pipeline with approval gate |
+| `approve <id>` | Execute a queued task |
+| `deny <id>` | Cancel a queued task |
+| `status` | Show pending approvals |
+| `health:` | Daemon uptime, session count, run states |
+| `history: [query]` | Recent messages or keyword search |
+| `clear context` | Reset conversation and start fresh |
+| `system: stop` | Gracefully shut down the daemon |
+| `system: restart` | Shut down (launchd auto-restarts) |
+
+**Multi-workspace routing** — prefix any command with `@alias` to target a specific workspace:
+```
+task: @web-app deploy to staging
+@api show recent errors
+```
+
+---
+
+## Service Management
+
+```bash
+# Start / stop / restart
+launchctl start local.apple-flow
+launchctl stop local.apple-flow
+launchctl stop local.apple-flow && launchctl start local.apple-flow
+
+# Check status
+launchctl list local.apple-flow
+
+# View logs
+tail -f logs/apple-flow.err.log    # all daemon output
+tail -f logs/apple-flow.log        # stdout
+
+# Uninstall auto-start
+./scripts/uninstall_autostart.sh
+```
+
+---
+
+## Optional Integrations
+
+### Apple Mail
+
+Reply to emails with Claude:
+
+```env
+apple_flow_enable_mail_polling=true
+apple_flow_mail_allowed_senders=you@example.com
+apple_flow_mail_from_address=you@example.com
+```
+
+### Apple Reminders
+
+Incomplete reminders in a list become tasks:
+
+```env
+apple_flow_enable_reminders_polling=true
+apple_flow_reminders_list_name=agent-task
+```
+
+### Apple Notes
+
+Notes tagged `!!agent` in a folder become tasks:
+
+```env
+apple_flow_enable_notes_polling=true
+apple_flow_notes_folder_name=Codex Inbox
+```
+
+### Apple Calendar
+
+Events in a calendar become scheduled tasks when due:
+
+```env
+apple_flow_enable_calendar_polling=true
+apple_flow_calendar_name=agent-schedule
+```
+
+### Notes response logging
+
+Log every AI response as a new Note for easy review:
+
+```env
+apple_flow_enable_notes_logging=true
+apple_flow_notes_log_folder_name=agent-logs
+```
+
+---
+
+## Choosing an AI backend
 
 Set `apple_flow_connector` in `.env`:
 
-```bash
-apple_flow_connector=codex-cli    # default — uses `codex exec`
-apple_flow_connector=claude-cli   # uses `claude -p`
+```env
+apple_flow_connector=claude-cli    # Claude Code CLI — uses `claude -p` (recommended)
+apple_flow_connector=codex-cli     # Codex — uses `codex exec` (requires `codex login`)
 ```
 
-Both are stateless (one process per turn). The `codex-app-server` value is still accepted for legacy setups but is deprecated.
+Both are stateless (one process per turn). Authenticate once:
 
-## Beginner Checklist
+```bash
+claude auth login   # for claude-cli
+codex login         # for codex-cli
+```
 
-1. Make sure iMessage is signed in on this Mac.
-2. Authenticate your AI backend — run `codex login` (Codex) **or** `claude auth login` (Claude).
-3. Put your own phone number in `.env` as `apple_flow_allowed_senders`.
-4. Put safe folders in `apple_flow_allowed_workspaces`.
-5. Set `apple_flow_connector=codex-cli` or `apple_flow_connector=claude-cli` in `.env`.
-6. Start the daemon and text commands like `idea:`, `plan:`, or `task:`.
+---
 
-## Important Safety Behavior
+## Security Defaults
 
-- On first start, Apple Flow now skips historical messages by default.
-- It does not auto-message blocked senders unless you explicitly enable it.
-- It can poll only allowlisted senders at SQL-query time.
-- It can require a chat prefix (default `relay:`) so echoed self-messages are ignored.
-- Keep these in `.env` for safest behavior:
-  - `apple_flow_process_historical_on_first_start=false`
-  - `apple_flow_notify_blocked_senders=false`
-  - `apple_flow_notify_rate_limited_senders=false`
-  - `apple_flow_only_poll_allowed_senders=true`
-  - `apple_flow_require_chat_prefix=true`
-  - `apple_flow_chat_prefix=relay:`
+- Only messages from `apple_flow_allowed_senders` are processed
+- AI can only access paths in `apple_flow_allowed_workspaces`
+- Mutating commands (`task:`, `project:`) require explicit approval before executing
+- iMessage database is opened read-only
+- Per-sender rate limiting
+
+---
+
+## Documentation
+
+- **[CLAUDE.md](CLAUDE.md)** — Architecture, module reference, development guide
+- **[.env.example](.env.example)** — Every config option with defaults and comments
+- **[docs/AUTO_START_SETUP.md](docs/AUTO_START_SETUP.md)** — Detailed launchd service setup
+- **[docs/ENV_SETUP.md](docs/ENV_SETUP.md)** — Full environment variable reference
