@@ -73,6 +73,8 @@ class RelayDaemon:
                 context_window=settings.claude_cli_context_window,
                 model=settings.claude_cli_model,
                 dangerously_skip_permissions=settings.claude_cli_dangerously_skip_permissions,
+                tools=settings.claude_cli_tools,
+                allowed_tools=settings.claude_cli_allowed_tools,
             )
         else:  # codex-cli (default)
             logger.info("Using CLI connector (codex exec) for stateless execution")
@@ -204,6 +206,9 @@ class RelayDaemon:
                 trigger_tag=settings.notes_trigger_tag,
                 owner_sender=notes_owner,
                 auto_approve=settings.notes_auto_approve,
+                fetch_timeout_seconds=settings.notes_fetch_timeout_seconds,
+                fetch_retries=settings.notes_fetch_retries,
+                fetch_retry_delay_seconds=settings.notes_fetch_retry_delay_seconds,
                 store=self.store,
             )
             self.notes_orchestrator = RelayOrchestrator(
@@ -510,7 +515,7 @@ class RelayDaemon:
         logger.info("Apple Notes polling loop started (folder=%r)", self.settings.notes_folder_name)
         while not self._shutdown_requested:
             try:
-                messages = self.notes_ingress.fetch_new()
+                messages = await asyncio.to_thread(self.notes_ingress.fetch_new)
                 for msg in messages:
                     if self._shutdown_requested:
                         break
@@ -520,8 +525,6 @@ class RelayDaemon:
                     note_id = msg.context.get("note_id", "")
                     note_title = msg.context.get("note_title", "")
                     logger.info("Inbound note id=%s title=%r chars=%s", msg.id, note_title, len(msg.text))
-
-                    self.notes_ingress.mark_processed(note_id)
 
                     started_at = time.monotonic()
                     result = self.notes_orchestrator.handle_message(msg)
@@ -538,6 +541,10 @@ class RelayDaemon:
                             source_folder_name=folder_name,
                             archive_subfolder_name=self.settings.notes_archive_folder_name,
                         )
+
+                    # Mark processed only after the run path completes so failed runs can be retried.
+                    if note_id:
+                        self.notes_ingress.mark_processed(note_id)
             except Exception as exc:
                 logger.exception("Notes polling loop error: %s", exc)
 
@@ -611,6 +618,25 @@ class RelayDaemon:
             "🔧 system: stop       shutdown daemon",
             "🔄 system: restart    restart daemon",
         ]
+        gateways = ["💬 iMessage   → always active"]
+        if self.settings.enable_mail_polling:
+            gateways.append("📧 Mail       → inbox polling active")
+        if self.settings.enable_reminders_polling:
+            gateways.append(f"🔔 Reminders  → list: {self.settings.reminders_list_name}")
+        if self.settings.enable_notes_polling:
+            gateways.append(f"📝 Notes      → folder: {self.settings.notes_folder_name}")
+        if self.settings.enable_calendar_polling:
+            gateways.append(f"📅 Calendar   → calendar: {self.settings.calendar_name}")
+
+        gateway_section = ""
+        if gateways:
+            gateway_section = (
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "🌐 GATEWAYS\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                + "\n".join(gateways) + "\n"
+            )
+
         intro = (
             "🤖✨ APPLE FLOW ONLINE ✨🤖\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -619,7 +645,8 @@ class RelayDaemon:
             f"📂 Workspace: {self.settings.default_workspace}\n"
             f"🔐 Auth: {'allowed senders only' if self.settings.only_poll_allowed_senders else 'open'}\n"
             f"⏱️  Timeout: {int(self.settings.codex_turn_timeout_seconds)}s\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            + gateway_section
+            + "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "⚡ COMMANDS\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             + "\n".join(commands)

@@ -59,10 +59,12 @@ launchctl stop local.apple-flow && launchctl start local.apple-flow
 - **Apple Mail** — text OR email Claude with threaded replies and custom signatures
 - **Apple Reminders** — incomplete reminders in a designated list become Codex tasks
 - **Apple Notes** — notes tagged with `!!codex` (configurable) trigger Codex tasks; optional per-turn logging of AI responses to a "codex-logs" folder
+- **Notes timeout hardening** — configurable Notes fetch timeout/retry controls to reduce AppleScript stall impact
 - **Apple Calendar** — events in a designated calendar become scheduled tasks when due
 - **Stateless CLI connector** (default) — `codex exec` per turn, eliminates state corruption freezes
 - **Claude Code CLI connector** — swap to `claude -p` by setting `apple_flow_connector=claude-cli`
 - **Model selection** — `apple_flow_codex_cli_model=gpt-5.3-codex` for Codex, `apple_flow_claude_cli_model=claude-sonnet-4-6` for Claude
+- **Claude tool control** — optional `apple_flow_claude_cli_tools` / `apple_flow_claude_cli_allowed_tools` (for example: `WebSearch`)
 - **Multi-workspace routing** — `@alias` prefix routes to different workspace paths
 - **Human-in-the-loop approval** — mutating `task:` / `project:` commands require explicit approval
 - **Workspace allowlist** — Codex can only access configured paths

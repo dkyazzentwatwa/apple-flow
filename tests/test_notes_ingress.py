@@ -46,6 +46,7 @@ def test_fetch_new_returns_messages(mock_run):
     assert "Fix login bug" in messages[0].text
     assert messages[0].context["channel"] == "notes"
     assert messages[0].context["note_id"] == "note1"
+    assert mock_run.call_args.kwargs["timeout"] == 20.0
 
 
 @patch("apple_flow.notes_ingress.subprocess.run")
@@ -170,6 +171,32 @@ def test_fetch_handles_timeout(mock_run):
     messages = ingress.fetch_new()
 
     assert messages == []
+
+
+@patch("apple_flow.notes_ingress.subprocess.run")
+def test_fetch_retries_on_timeout_then_succeeds(mock_run):
+    import subprocess
+
+    notes = [
+        {"id": "note1", "name": "relay: hello", "body": "!!codex", "modification_date": "2026-02-17T10:00:00Z"},
+    ]
+    mock_run.side_effect = [
+        subprocess.TimeoutExpired(cmd="osascript", timeout=20),
+        _mock_applescript_output(notes),
+    ]
+
+    ingress = AppleNotesIngress(
+        folder_name="Codex Inbox",
+        trigger_tag="!!codex",
+        owner_sender="+15551234567",
+        fetch_retries=1,
+        fetch_retry_delay_seconds=0,
+    )
+    messages = ingress.fetch_new()
+
+    assert len(messages) == 1
+    assert messages[0].context["note_id"] == "note1"
+    assert mock_run.call_count == 2
 
 
 @patch("apple_flow.notes_ingress.subprocess.run")

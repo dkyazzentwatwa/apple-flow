@@ -23,6 +23,8 @@ class ClaudeCliConnector:
         context_window: int = 3,
         model: str = "",
         dangerously_skip_permissions: bool = True,
+        tools: list[str] | None = None,
+        allowed_tools: list[str] | None = None,
     ):
         """Initialize the Claude CLI connector.
 
@@ -33,6 +35,8 @@ class ClaudeCliConnector:
             context_window: Number of recent message pairs to include as context (default: 3)
             model: Model to use (e.g., "claude-sonnet-4-6", "claude-opus-4-6"). Empty = claude default
             dangerously_skip_permissions: Pass --dangerously-skip-permissions flag (default: True)
+            tools: Optional tool set passed via --tools (e.g. ["default", "WebSearch"])
+            allowed_tools: Optional allowlist passed via --allowedTools (e.g. ["WebSearch"])
         """
         self.claude_command = claude_command
         self.workspace = workspace
@@ -40,6 +44,8 @@ class ClaudeCliConnector:
         self.context_window = context_window
         self.model = model.strip()
         self.dangerously_skip_permissions = dangerously_skip_permissions
+        self.tools = [t.strip() for t in (tools or []) if t and t.strip()]
+        self.allowed_tools = [t.strip() for t in (allowed_tools or []) if t and t.strip()]
 
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
@@ -52,6 +58,10 @@ class ClaudeCliConnector:
             cmd.append("--dangerously-skip-permissions")
         if self.model:
             cmd.extend(["--model", self.model])
+        if self.tools:
+            cmd.extend(["--tools", ",".join(self.tools)])
+        if self.allowed_tools:
+            cmd.extend(["--allowedTools", ",".join(self.allowed_tools)])
         cmd.extend(["-p", full_prompt])
         return cmd
 

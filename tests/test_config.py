@@ -29,3 +29,13 @@ def test_parse_json_lists_from_settings_init():
     assert settings.allowed_senders == ["+15551234567"]
     assert settings.allowed_workspaces == [str(Path("/Users/cypher/Public/code").resolve())]
     assert settings.codex_app_server_cmd == ["codex", "app-server"]
+
+
+def test_parse_claude_tool_lists_from_settings_init():
+    settings = RelaySettings(
+        claude_cli_tools="default,WebSearch",
+        claude_cli_allowed_tools='["WebSearch"]',
+    )
+
+    assert settings.claude_cli_tools == ["default", "WebSearch"]
+    assert settings.claude_cli_allowed_tools == ["WebSearch"]

@@ -194,6 +194,8 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 - `apple_flow_claude_cli_context_window` - recent exchanges to include as context (default: 3)
 - `apple_flow_claude_cli_model` - model flag (e.g. `claude-sonnet-4-6`, `claude-opus-4-6`; empty = claude default)
 - `apple_flow_claude_cli_dangerously_skip_permissions` - pass `--dangerously-skip-permissions` (default: true)
+- `apple_flow_claude_cli_tools` - comma-separated values passed to `--tools` (optional, e.g. `default,WebSearch`)
+- `apple_flow_claude_cli_allowed_tools` - comma-separated values passed to `--allowedTools` (optional, e.g. `WebSearch`)
 
 **Legacy app-server** (`connector=codex-app-server`, deprecated):
 - `apple_flow_codex_app_server_cmd` - app-server command
@@ -224,6 +226,9 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 - `apple_flow_notes_owner` - sender identity for note tasks (defaults to first allowed_sender)
 - `apple_flow_notes_auto_approve` - skip approval gate for note tasks (default: false)
 - `apple_flow_notes_poll_interval_seconds` - poll interval for Notes (default: 10s)
+- `apple_flow_notes_fetch_timeout_seconds` - AppleScript fetch timeout per Notes poll (default: 20s)
+- `apple_flow_notes_fetch_retries` - retry count after Notes fetch timeout (default: 1)
+- `apple_flow_notes_fetch_retry_delay_seconds` - delay between Notes fetch retries (default: 1.5s)
 
 ### Apple Calendar Integration
 
