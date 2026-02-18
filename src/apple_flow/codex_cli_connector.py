@@ -4,6 +4,8 @@ import logging
 import subprocess
 from typing import Any
 
+from .apple_tools import TOOLS_CONTEXT
+
 logger = logging.getLogger("apple_flow.cli_connector")
 
 
@@ -22,6 +24,7 @@ class CodexCliConnector:
         timeout: float = 300.0,
         context_window: int = 3,
         model: str = "",
+        inject_tools_context: bool = True,
     ):
         """Initialize the CLI connector.
 
@@ -31,12 +34,14 @@ class CodexCliConnector:
             timeout: Timeout in seconds for each exec (default: 300s/5min)
             context_window: Number of recent message pairs to include as context (default: 3)
             model: Model to use (e.g., "sonnet", "opus", "haiku"). Empty = use codex default
+            inject_tools_context: Prepend TOOLS_CONTEXT to prompts so AI knows apple-flow tools (default: True)
         """
         self.codex_command = codex_command
         self.workspace = workspace
         self.timeout = timeout
         self.context_window = context_window
         self.model = model.strip()
+        self.inject_tools_context = inject_tools_context
 
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
@@ -214,25 +219,23 @@ class CodexCliConnector:
             prompt: Current user prompt
 
         Returns:
-            Full prompt with context prepended
+            Full prompt with context prepended (and TOOLS_CONTEXT header if enabled)
         """
         history = self._sender_contexts.get(sender, [])
 
-        if not history:
-            # No context, use prompt as-is
-            return prompt
+        parts: list[str] = []
 
-        # Include last N exchanges for context
-        recent_context = history[-self.context_window:]
-        context_text = "\n\n".join(recent_context)
+        if self.inject_tools_context:
+            parts.append(TOOLS_CONTEXT)
 
-        # Build full prompt with context
-        full_prompt = (
-            f"Previous conversation context:\n{context_text}\n\n"
-            f"New message:\n{prompt}"
-        )
+        if history:
+            recent_context = history[-self.context_window:]
+            context_text = "\n\n".join(recent_context)
+            parts.append(f"Previous conversation context:\n{context_text}")
 
-        return full_prompt
+        parts.append(f"New message:\n{prompt}" if history or self.inject_tools_context else prompt)
+
+        return "\n\n".join(parts)
 
     def _store_exchange(self, sender: str, user_message: str, assistant_response: str) -> None:
         """Store a user-assistant exchange in the context history.

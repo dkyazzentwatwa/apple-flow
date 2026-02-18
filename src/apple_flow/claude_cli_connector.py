@@ -4,6 +4,8 @@ import logging
 import subprocess
 from typing import Any
 
+from .apple_tools import TOOLS_CONTEXT
+
 logger = logging.getLogger("apple_flow.claude_cli_connector")
 
 
@@ -25,6 +27,8 @@ class ClaudeCliConnector:
         dangerously_skip_permissions: bool = True,
         tools: list[str] | None = None,
         allowed_tools: list[str] | None = None,
+        inject_tools_context: bool = True,
+        system_prompt: str = "",
     ):
         """Initialize the Claude CLI connector.
 
@@ -37,6 +41,8 @@ class ClaudeCliConnector:
             dangerously_skip_permissions: Pass --dangerously-skip-permissions flag (default: True)
             tools: Optional tool set passed via --tools (e.g. ["default", "WebSearch"])
             allowed_tools: Optional allowlist passed via --allowedTools (e.g. ["WebSearch"])
+            inject_tools_context: Include TOOLS_CONTEXT in the --system prompt (default: True)
+            system_prompt: Personality/system instructions passed via --system (default: "")
         """
         self.claude_command = claude_command
         self.workspace = workspace
@@ -46,10 +52,21 @@ class ClaudeCliConnector:
         self.dangerously_skip_permissions = dangerously_skip_permissions
         self.tools = [t.strip() for t in (tools or []) if t and t.strip()]
         self.allowed_tools = [t.strip() for t in (allowed_tools or []) if t and t.strip()]
+        self.inject_tools_context = inject_tools_context
+        self.system_prompt = system_prompt.strip()
 
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
         self._sender_contexts: dict[str, list[str]] = {}
+
+    def _build_system_prompt(self) -> str:
+        """Build the --system argument from personality + TOOLS_CONTEXT."""
+        parts = []
+        if self.system_prompt:
+            parts.append(self.system_prompt)
+        if self.inject_tools_context:
+            parts.append(TOOLS_CONTEXT)
+        return "\n\n".join(parts)
 
     def _build_cmd(self, full_prompt: str) -> list[str]:
         """Assemble the claude CLI command."""
@@ -62,6 +79,9 @@ class ClaudeCliConnector:
             cmd.extend(["--tools", ",".join(self.tools)])
         if self.allowed_tools:
             cmd.extend(["--allowedTools", ",".join(self.allowed_tools)])
+        system = self._build_system_prompt()
+        if system:
+            cmd.extend(["--system", system])
         cmd.extend(["-p", full_prompt])
         return cmd
 
@@ -223,7 +243,7 @@ class ClaudeCliConnector:
             prompt: Current user prompt
 
         Returns:
-            Full prompt with context prepended
+            Full prompt with context prepended (and TOOLS_CONTEXT header if enabled)
         """
         history = self._sender_contexts.get(sender, [])
 
@@ -232,13 +252,7 @@ class ClaudeCliConnector:
 
         recent_context = history[-self.context_window:]
         context_text = "\n\n".join(recent_context)
-
-        full_prompt = (
-            f"Previous conversation context:\n{context_text}\n\n"
-            f"New message:\n{prompt}"
-        )
-
-        return full_prompt
+        return f"Previous conversation context:\n{context_text}\n\nNew message:\n{prompt}"
 
     def _store_exchange(self, sender: str, user_message: str, assistant_response: str) -> None:
         """Store a user-assistant exchange in the context history.

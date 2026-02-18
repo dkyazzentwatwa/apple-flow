@@ -65,6 +65,7 @@ def test_run_turn_success():
         claude_command="claude",
         workspace="/tmp",
         timeout=30.0,
+        inject_tools_context=False,
     )
 
     mock_result = Mock()
@@ -93,6 +94,7 @@ def test_run_turn_without_skip_permissions():
     connector = ClaudeCliConnector(
         claude_command="claude",
         dangerously_skip_permissions=False,
+        inject_tools_context=False,
     )
 
     mock_result = Mock()
@@ -110,7 +112,7 @@ def test_run_turn_without_skip_permissions():
 
 def test_run_turn_with_model_flag():
     """Test that --model flag is included when model is configured."""
-    connector = ClaudeCliConnector(claude_command="claude", model="claude-sonnet-4-6")
+    connector = ClaudeCliConnector(claude_command="claude", model="claude-sonnet-4-6", inject_tools_context=False)
 
     mock_result = Mock()
     mock_result.returncode = 0

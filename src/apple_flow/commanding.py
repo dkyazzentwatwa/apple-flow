@@ -30,6 +30,37 @@ class ParsedCommand:
 # Pattern: @alias at the start of the payload, e.g. "@web-app fix CSS"
 _WORKSPACE_ALIAS_RE = re.compile(r"^@([\w.-]+)\s*")
 
+_MUTATING_VERB_RE = re.compile(
+    r"\b(create|write|generate|scaffold|bootstrap|init(?:ialise|ialize)?|"
+    r"build|compile|deploy|release|publish|ship|"
+    r"delete|remove|drop|wipe|purge|"
+    r"edit|update|modify|patch|refactor|rename|move|"
+    r"install|uninstall|upgrade|downgrade|"
+    r"run|execute|exec|apply|migrate|seed|"
+    r"commit|push|merge|rebase|reset|checkout)\b",
+    re.IGNORECASE,
+)
+
+_OBJECT_RE = re.compile(
+    r"\b(file|files|directory|dir|folder|"
+    r"script|code|function|class|module|package|"
+    r"database|db|schema|migration|"
+    r"service|server|api|endpoint|"
+    r"test|tests|spec|specs|"
+    r"project|app|application|repo|repository)\b",
+    re.IGNORECASE,
+)
+
+
+def is_likely_mutating(text: str) -> bool:
+    """Return True when text contains a mutating verb AND a concrete object noun.
+
+    Requires both signals to reduce false positives — e.g. "write me a haiku"
+    has a verb but no object noun, so it returns False.
+    """
+    return bool(_MUTATING_VERB_RE.search(text) and _OBJECT_RE.search(text))
+
+
 _PREFIX_TO_KIND = {
     "idea": CommandKind.IDEA,
     "plan": CommandKind.PLAN,
