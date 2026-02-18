@@ -14,6 +14,8 @@ from .claude_cli_connector import ClaudeCliConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
 from .config import RelaySettings
+from .ollama_connector import OllamaConnector
+from .openai_connector import OpenAiConnector
 from .egress import IMessageEgress
 from .ingress import IMessageIngress
 from .mail_egress import AppleMailEgress
@@ -47,7 +49,7 @@ class RelayDaemon:
 
         # Choose connector based on configuration
         connector_type = settings.get_connector_type()
-        known_connectors = {"codex-cli", "claude-cli", "codex-app-server"}
+        known_connectors = {"codex-cli", "claude-cli", "codex-app-server", "ollama", "openai"}
         if connector_type not in known_connectors:
             raise ValueError(
                 f"Unknown connector type: {connector_type!r}. "
@@ -73,6 +75,27 @@ class RelayDaemon:
                 context_window=settings.claude_cli_context_window,
                 model=settings.claude_cli_model,
                 dangerously_skip_permissions=settings.claude_cli_dangerously_skip_permissions,
+            )
+        elif connector_type == "ollama":
+            logger.info("Using Ollama API connector (%s)", settings.ollama_base_url)
+            self.connector = OllamaConnector(
+                base_url=settings.ollama_base_url,
+                api_key=settings.ollama_api_key,
+                model=settings.ollama_model,
+                timeout=settings.codex_turn_timeout_seconds,
+                context_window=settings.ollama_context_window,
+                system_prompt=settings.ollama_system_prompt,
+            )
+        elif connector_type == "openai":
+            logger.info("Using OpenAI-compatible API connector (%s)", settings.openai_base_url)
+            self.connector = OpenAiConnector(
+                base_url=settings.openai_base_url,
+                api_key=settings.openai_api_key,
+                model=settings.openai_model,
+                timeout=settings.codex_turn_timeout_seconds,
+                context_window=settings.openai_context_window,
+                system_prompt=settings.openai_system_prompt,
+                max_tokens=settings.openai_max_tokens,
             )
         else:  # codex-cli (default)
             logger.info("Using CLI connector (codex exec) for stateless execution")
@@ -580,6 +603,12 @@ class RelayDaemon:
         if connector_type == "claude-cli":
             model_val = self.settings.claude_cli_model or "claude default"
             connector_line = "⚙️  Engine: claude -p (stateless)"
+        elif connector_type == "ollama":
+            model_val = self.settings.ollama_model or "ollama default"
+            connector_line = f"⚙️  Engine: Ollama API ({self.settings.ollama_base_url})"
+        elif connector_type == "openai":
+            model_val = self.settings.openai_model or "openai default"
+            connector_line = f"⚙️  Engine: OpenAI-compatible API ({self.settings.openai_base_url})"
         elif connector_type == "codex-app-server":
             model_val = self.settings.codex_cli_model or "codex default"
             connector_line = "⚙️  Engine: app-server (stateful, deprecated)"

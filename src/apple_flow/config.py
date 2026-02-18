@@ -42,6 +42,21 @@ class RelaySettings(BaseSettings):
     claude_cli_context_window: int = 3
     claude_cli_model: str = ""  # e.g. "claude-sonnet-4-6", "claude-opus-4-6"
 
+    # Ollama API connector settings (used when connector="ollama")
+    ollama_base_url: str = "http://localhost:11434"  # or https://ollama.com for cloud
+    ollama_api_key: str = ""  # required for Ollama Cloud, empty for local
+    ollama_model: str = "llama3.3"
+    ollama_context_window: int = 3
+    ollama_system_prompt: str = ""
+
+    # OpenAI-compatible API connector settings (used when connector="openai")
+    openai_base_url: str = "http://localhost:11434"  # or any OpenAI-compatible endpoint
+    openai_api_key: str = ""  # required for most cloud providers
+    openai_model: str = "llama3.3"
+    openai_context_window: int = 3
+    openai_system_prompt: str = ""
+    openai_max_tokens: int = 4096
+
     admin_host: str = "127.0.0.1"
     admin_port: int = 8787
 

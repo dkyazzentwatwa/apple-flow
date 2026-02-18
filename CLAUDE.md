@@ -86,6 +86,8 @@ POST /task → FastAPI → Orchestrator → Codex Connector → iMessage Egress
 | `config.py` | Pydantic settings with `apple_flow_` env prefix, path resolution |
 | `codex_cli_connector.py` | Stateless CLI connector using `codex exec` (default, avoids state corruption) |
 | `codex_connector.py` | Stateful app-server connector via JSON-RPC (fallback option) |
+| `ollama_connector.py` | Ollama native API connector via HTTP (`/api/chat`), supports local + cloud |
+| `openai_connector.py` | OpenAI-compatible API connector (`/v1/chat/completions`), works with Vercel AI Gateway, Groq, etc. |
 | `main.py` | FastAPI admin endpoints (/sessions, /approvals, /events, POST /task) |
 | `admin_client.py` | Admin API client library (programmatic access to admin endpoints) |
 | `protocols.py` | Protocol interfaces for type-safe component injection (StoreProtocol, ConnectorProtocol, EgressProtocol) |
@@ -181,7 +183,7 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 
 ### Connector Settings
 
-- `apple_flow_connector` - connector to use: `"codex-cli"` (default), `"claude-cli"`, `"codex-app-server"` (deprecated)
+- `apple_flow_connector` - connector to use: `"codex-cli"` (default), `"claude-cli"`, `"ollama"`, `"openai"`, `"codex-app-server"` (deprecated)
 - `apple_flow_codex_turn_timeout_seconds` - timeout for all connectors (default: 300s/5min)
 
 **Codex CLI** (`connector=codex-cli`, requires `codex login`):
@@ -194,6 +196,21 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 - `apple_flow_claude_cli_context_window` - recent exchanges to include as context (default: 3)
 - `apple_flow_claude_cli_model` - model flag (e.g. `claude-sonnet-4-6`, `claude-opus-4-6`; empty = claude default)
 - `apple_flow_claude_cli_dangerously_skip_permissions` - pass `--dangerously-skip-permissions` (default: true)
+
+**Ollama API** (`connector=ollama`, local or cloud):
+- `apple_flow_ollama_base_url` - API base URL (default: `http://localhost:11434`; use `https://ollama.com` for cloud)
+- `apple_flow_ollama_api_key` - Bearer token (required for Ollama Cloud, empty for local)
+- `apple_flow_ollama_model` - model name (default: `llama3.3`)
+- `apple_flow_ollama_context_window` - recent exchanges to include as context (default: 3)
+- `apple_flow_ollama_system_prompt` - optional system message prepended to conversations
+
+**OpenAI-compatible API** (`connector=openai`, works with any provider):
+- `apple_flow_openai_base_url` - API base URL (default: `http://localhost:11434`; e.g. `https://api.groq.com/openai`, `https://gateway.ai.vercel.app/v1`)
+- `apple_flow_openai_api_key` - Bearer token (required for most cloud providers)
+- `apple_flow_openai_model` - model name (default: `llama3.3`)
+- `apple_flow_openai_context_window` - recent exchanges to include as context (default: 3)
+- `apple_flow_openai_system_prompt` - optional system message prepended to conversations
+- `apple_flow_openai_max_tokens` - max tokens to generate (default: 4096)
 
 **Legacy app-server** (`connector=codex-app-server`, deprecated):
 - `apple_flow_codex_app_server_cmd` - app-server command
@@ -314,6 +331,8 @@ tests/test_siri_shortcuts.py      # POST /task admin API endpoint
 tests/test_progress_streaming.py  # Incremental progress updates
 tests/test_attachments.py         # File attachment support
 tests/test_cli_connector.py       # Stateless CLI connector (codex exec)
+tests/test_ollama_connector.py    # Ollama native API connector
+tests/test_openai_connector.py    # OpenAI-compatible API connector
 tests/test_admin_api.py           # FastAPI admin endpoints
 ```
 
@@ -376,6 +395,8 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 ### Connector selection
 - `"codex-cli"` (default): `codex_cli_connector.py` — stateless `codex exec`, requires `codex login`
 - `"claude-cli"`: `claude_cli_connector.py` — stateless `claude -p`, requires `claude auth login`
+- `"ollama"`: `ollama_connector.py` — Ollama native API (`/api/chat`), local or cloud, no binary dependency
+- `"openai"`: `openai_connector.py` — OpenAI-compatible API (`/v1/chat/completions`), works with Vercel AI Gateway, Groq, Together, LM Studio, vLLM, etc.
 - `"codex-app-server"` (deprecated): `codex_connector.py` — stateful JSON-RPC, prone to state corruption
 - Selection controlled by `apple_flow_connector` config field (falls back to `apple_flow_use_codex_cli` for backwards compat)
 
@@ -390,9 +411,9 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 
 | Metric | Value |
 |--------|-------|
-| Source modules | 23 |
-| Test files | 30 |
-| Config options | 40+ |
+| Source modules | 25 |
+| Test files | 32 |
+| Config options | 50+ |
 | Python requirement | ≥3.11 |
 | Core dependencies | fastapi, uvicorn, pydantic, pydantic-settings, httpx |
 | Dev dependencies | pytest, pytest-asyncio, httpx |
