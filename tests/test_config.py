@@ -58,3 +58,9 @@ def test_auto_context_messages_default_10(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = RelaySettings()
     assert settings.auto_context_messages == 10
+
+
+def test_trigger_tag_default(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.trigger_tag == "!!agent"

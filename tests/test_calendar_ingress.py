@@ -162,3 +162,60 @@ def test_compose_text_summary_only():
 
 def test_compose_text_both_empty():
     assert AppleCalendarIngress._compose_text("", "") == ""
+
+
+# --- Trigger Tag Tests ---
+
+
+@patch("apple_flow.calendar_ingress.subprocess.run")
+def test_trigger_tag_required_skips_without_tag(mock_run):
+    """Events without the trigger tag should be skipped."""
+    events = [
+        {"id": "evt1", "summary": "Team meeting", "description": "Discuss roadmap", "start_date": "2026-02-17T10:00:00Z"},
+    ]
+    mock_run.return_value = _mock_applescript_output(events)
+
+    ingress = AppleCalendarIngress(
+        calendar_name="Codex Schedule",
+        owner_sender="+15551234567",
+        trigger_tag="!!agent",
+    )
+    messages = ingress.fetch_new()
+    assert messages == []
+
+
+@patch("apple_flow.calendar_ingress.subprocess.run")
+def test_trigger_tag_in_description_passes_and_stripped(mock_run):
+    """Event with trigger tag in description should be returned with tag stripped."""
+    events = [
+        {"id": "evt1", "summary": "Deploy app", "description": "!!agent push to production", "start_date": "2026-02-17T10:00:00Z"},
+    ]
+    mock_run.return_value = _mock_applescript_output(events)
+
+    ingress = AppleCalendarIngress(
+        calendar_name="Codex Schedule",
+        owner_sender="+15551234567",
+        trigger_tag="!!agent",
+    )
+    messages = ingress.fetch_new()
+    assert len(messages) == 1
+    assert "!!agent" not in messages[0].text
+    assert "Deploy app" in messages[0].text
+
+
+@patch("apple_flow.calendar_ingress.subprocess.run")
+def test_trigger_tag_empty_processes_all(mock_run):
+    """When trigger_tag is empty, all events are processed (backward compat)."""
+    events = [
+        {"id": "evt1", "summary": "Meeting", "description": "No tag", "start_date": "2026-02-17T10:00:00Z"},
+        {"id": "evt2", "summary": "Deploy", "description": "Also no tag", "start_date": "2026-02-17T11:00:00Z"},
+    ]
+    mock_run.return_value = _mock_applescript_output(events)
+
+    ingress = AppleCalendarIngress(
+        calendar_name="Codex Schedule",
+        owner_sender="+15551234567",
+        trigger_tag="",
+    )
+    messages = ingress.fetch_new()
+    assert len(messages) == 2

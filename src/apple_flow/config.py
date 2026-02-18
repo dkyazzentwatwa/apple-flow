@@ -96,11 +96,14 @@ class RelaySettings(BaseSettings):
     reminders_auto_approve: bool = False
     reminders_poll_interval_seconds: float = 5.0
 
+    # Global trigger tag: items without this tag are skipped across all channels.
+    # Empty string = disabled (process everything — backward compatible).
+    trigger_tag: str = "!!agent"
+
     # Apple Notes integration settings
     enable_notes_polling: bool = False
     notes_folder_name: str = "Codex Inbox"
     notes_archive_folder_name: str = "codex-archive"
-    notes_trigger_tag: str = ">>codex"
     notes_owner: str = ""
     notes_auto_approve: bool = False
     notes_poll_interval_seconds: float = 10.0
