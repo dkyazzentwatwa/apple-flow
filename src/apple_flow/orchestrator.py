@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from .commanding import CommandKind, ParsedCommand, parse_command
@@ -41,6 +41,7 @@ class RelayOrchestrator:
         notes_egress: Any = None,
         notes_archive_folder_name: str = "codex-archive",
         calendar_egress: Any = None,
+        shutdown_callback: Callable[[], None] | None = None,
     ):
         self.connector = connector
         self.egress = egress
@@ -60,6 +61,7 @@ class RelayOrchestrator:
         self.notes_egress = notes_egress
         self.notes_archive_folder_name = notes_archive_folder_name
         self.calendar_egress = calendar_egress
+        self.shutdown_callback = shutdown_callback
 
     # --- Workspace Resolution (Feature 1) ---
 
@@ -132,6 +134,9 @@ class RelayOrchestrator:
 
         if command.kind in {CommandKind.APPROVE, CommandKind.DENY}:
             return self._resolve_approval(message.sender, command.kind, command.payload)
+
+        if command.kind is CommandKind.SYSTEM:
+            return self._handle_system(message.sender, command.payload)
 
         workspace = self._resolve_workspace(command.workspace)
 
@@ -214,6 +219,25 @@ class RelayOrchestrator:
 
         self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.HISTORY, response=response)
+
+    # --- System Command ---
+
+    def _handle_system(self, sender: str, subcommand: str) -> OrchestrationResult:
+        sub = subcommand.strip().lower()
+        if sub == "stop":
+            response = "Apple Flow shutting down..."
+            self.egress.send(sender, response)
+            if self.shutdown_callback is not None:
+                self.shutdown_callback()
+        elif sub == "restart":
+            response = "Apple Flow restarting... (text 'health' to confirm it's back)"
+            self.egress.send(sender, response)
+            if self.shutdown_callback is not None:
+                self.shutdown_callback()
+        else:
+            response = "Unknown system command. Use: system: stop  or  system: restart"
+            self.egress.send(sender, response)
+        return OrchestrationResult(kind=CommandKind.SYSTEM, response=sub)
 
     def _inject_auto_context(self, sender: str, prompt: str) -> str:
         if self.auto_context_messages <= 0:

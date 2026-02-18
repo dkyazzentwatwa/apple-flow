@@ -17,7 +17,7 @@ Works via **iMessage** (default) or **Apple Mail** (optional).
 - macOS with iMessage signed in
 - Python 3.11 or later
 - At least one AI CLI installed and authenticated:
-  - **Codex CLI** (default) — [claude.ai/code](https://claude.ai/code)
+  - **Codex CLI** (default) — [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli/)
   - **Claude Code CLI** — `claude` binary from [claude.ai/code](https://claude.ai/code)
 
 ---
@@ -259,7 +259,7 @@ nano .env
 **Cause**: The CLI for your chosen connector isn't installed or not on `$PATH`.
 
 **Fix**:
-- For Codex: install from [claude.ai/code](https://claude.ai/code), then run `codex login`
+- For Codex: install from [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli/), then run `codex login`
 - For Claude: install the `claude` CLI from [claude.ai/code](https://claude.ai/code), then run `claude auth login`
 - Make sure `apple_flow_connector` in `.env` matches what you installed
 
@@ -321,7 +321,7 @@ Visit `http://localhost:8787` for:
 
 ### Run as Background Service
 
-For always-on operation, see `CLAUDE.md` for launchd setup.
+For always-on operation, see [AUTO_START_SETUP.md](AUTO_START_SETUP.md) for launchd setup.
 
 ### Enable Apple Mail Integration (Optional)
 
@@ -379,7 +379,7 @@ Email → MailIngress ──────────────┘             
 - 🛡️ Graceful shutdown with signal handling
 - 🧪 80+ comprehensive tests with shared fixtures
 
-For developers, see `CLAUDE.md` for architecture details.
+For developers, see [CLAUDE.md](../CLAUDE.md) for architecture details.
 
 ---
 

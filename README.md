@@ -6,7 +6,7 @@ Apple Flow is a local-first daemon that bridges iMessage and Apple Mail on macOS
 
 ## 🚀 Quick Start
 
-**New to Apple Flow?** See **[QUICKSTART.md](QUICKSTART.md)** for complete setup instructions.
+**New to Apple Flow?** See **[QUICKSTART.md](docs/QUICKSTART.md)** for complete setup instructions.
 
 **TL;DR** for experienced users:
 
@@ -44,6 +44,15 @@ tail -f logs/apple-flow.err.log  # All daemon output (Python logging goes to std
 launchctl list local.apple-flow  # Should show PID and exit status 0
 ```
 
+**Start / stop / restart the service:**
+```bash
+launchctl start local.apple-flow
+launchctl stop local.apple-flow
+
+# Restart (stop then start):
+launchctl stop local.apple-flow && launchctl start local.apple-flow
+```
+
 ## Features
 
 - **iMessage** — poll local Messages database for inbound commands
@@ -66,7 +75,9 @@ launchctl list local.apple-flow  # Should show PID and exit status 0
 
 ## Documentation
 
-- **[QUICKSTART.md](QUICKSTART.md)** - Complete beginner's guide
+- **[QUICKSTART.md](docs/QUICKSTART.md)** - Complete beginner's guide
+- **[BEGINNER_SETUP_10_MIN.md](docs/BEGINNER_SETUP_10_MIN.md)** - 10-minute setup guide
+- **[AUTO_START_SETUP.md](docs/AUTO_START_SETUP.md)** - Auto-start at boot setup
 - **[CLAUDE.md](CLAUDE.md)** - Architecture and development guide
 - **[.env.example](.env.example)** - All configuration options
 
@@ -112,6 +123,8 @@ Same commands work via iMessage or email (when mail integration is enabled):
 - `health:` — daemon uptime, session count, run states
 - `history: [query]` — recent messages or search by keyword
 - `clear context` / `new chat` — reset sender thread and start fresh context
+- `system: stop` — gracefully shut down the daemon
+- `system: restart` — shut down (launchd auto-restarts if configured)
 
 **Multi-workspace routing:** prefix any command with `@alias` to target a specific workspace:
 ```
