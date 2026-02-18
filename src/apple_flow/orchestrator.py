@@ -526,6 +526,7 @@ class RelayOrchestrator:
             f"Reply `approve {request_id}` to proceed, or `deny {request_id}` to cancel."
         )
         self.egress.send(message.sender, outbound)
+        self._log_to_notes(kind.value, message.sender, payload, outbound)
         return OrchestrationResult(kind=kind, run_id=run_id, approval_request_id=request_id, response=outbound)
 
     # --- Feature 7: Progress Streaming ---
