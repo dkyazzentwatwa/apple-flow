@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PLIST_DEST="$HOME/Library/LaunchAgents/com.apple-flow.plist"
+PLIST_DEST="$HOME/Library/LaunchAgents/local.apple-flow.plist"
 LOGS_DIR="$PROJECT_DIR/logs"
 VENV_DIR="$PROJECT_DIR/.venv"
 ENV_FILE="$PROJECT_DIR/.env"
@@ -82,7 +82,7 @@ mkdir -p "$LOGS_DIR"
 mkdir -p "$HOME/Library/LaunchAgents"
 
 # Stop existing service if running
-if launchctl list 2>/dev/null | grep -q "com.apple-flow"; then
+if launchctl list 2>/dev/null | grep -q "local.apple-flow"; then
     echo "Stopping existing service..."
     launchctl unload "$PLIST_DEST" 2>/dev/null || true
 fi
@@ -94,7 +94,7 @@ cat > "$PLIST_DEST" << EOF
 <plist version="1.0">
   <dict>
     <key>Label</key>
-    <string>com.apple-flow</string>
+    <string>local.apple-flow</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -162,8 +162,8 @@ echo ""
 echo "4. Click 'Open' and enable the toggle"
 echo ""
 echo "5. Restart the service:"
-echo "   launchctl stop com.apple-flow"
-echo "   launchctl start com.apple-flow"
+echo "   launchctl stop local.apple-flow"
+echo "   launchctl start local.apple-flow"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -171,8 +171,8 @@ echo "Useful Commands:"
 echo "  Check status:  launchctl list | grep apple-flow"
 echo "  View logs:     tail -f $LOGS_DIR/apple-flow.log"
 echo "  View errors:   tail -f $LOGS_DIR/apple-flow.err.log"
-echo "  Stop service:  launchctl stop com.apple-flow"
-echo "  Start service: launchctl start com.apple-flow"
+echo "  Stop service:  launchctl stop local.apple-flow"
+echo "  Start service: launchctl start local.apple-flow"
 echo "  Uninstall:     ./scripts/uninstall_autostart.sh"
 echo ""
 echo "The daemon will now auto-start on every boot!"

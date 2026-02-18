@@ -97,12 +97,6 @@ class RelaySettings(BaseSettings):
     max_attachment_size_mb: int = 10
     attachment_temp_dir: str = "/tmp/apple_flow_attachments"
 
-    # Voice memo settings (convert responses to audio via macOS TTS)
-    enable_voice_memos: bool = False
-    voice_memo_voice: str = "Samantha"
-    voice_memo_max_chars: int = 2000
-    voice_memo_send_text_too: bool = True
-
     @field_validator("allowed_senders", "allowed_workspaces", "mail_allowed_senders", mode="before")
     @classmethod
     def _parse_csv_or_json_list(cls, value: Any) -> Any:

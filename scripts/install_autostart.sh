@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PLIST_DEST="$HOME/Library/LaunchAgents/com.apple-flow.plist"
+PLIST_DEST="$HOME/Library/LaunchAgents/local.apple-flow.plist"
 LOGS_DIR="$PROJECT_DIR/logs"
 
 echo "=== Apple Flow Auto-Start Installation ==="
@@ -51,7 +51,7 @@ mkdir -p "$LOGS_DIR"
 mkdir -p "$HOME/Library/LaunchAgents"
 
 # Stop existing service if running
-if launchctl list | grep -q "com.apple-flow"; then
+if launchctl list | grep -q "local.apple-flow"; then
     echo "Stopping existing service..."
     launchctl unload "$PLIST_DEST" 2>/dev/null || true
 fi
@@ -64,7 +64,7 @@ cat > "$PLIST_DEST" << EOF
 <plist version="1.0">
   <dict>
     <key>Label</key>
-    <string>com.apple-flow</string>
+    <string>local.apple-flow</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -121,14 +121,14 @@ echo "4. Click 'Open' to add it to Full Disk Access"
 echo "5. Enable the toggle for python3.14"
 echo ""
 echo "6. After granting access, restart the service:"
-echo "   launchctl stop com.apple-flow"
-echo "   launchctl start com.apple-flow"
+echo "   launchctl stop local.apple-flow"
+echo "   launchctl start local.apple-flow"
 echo ""
 echo "The apple-flow daemon will start automatically at login."
 echo ""
 echo "Useful commands:"
-echo "  Start:   launchctl start com.apple-flow"
-echo "  Stop:    launchctl stop com.apple-flow"
+echo "  Start:   launchctl start local.apple-flow"
+echo "  Stop:    launchctl stop local.apple-flow"
 echo "  Status:  launchctl list | grep apple-flow"
 echo "  Logs:    tail -f $LOGS_DIR/apple-flow.log"
 echo "  Errors:  tail -f $LOGS_DIR/apple-flow.err.log"

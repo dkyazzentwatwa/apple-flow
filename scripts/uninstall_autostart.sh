@@ -3,7 +3,7 @@ set -e
 
 # Apple Flow Auto-Start Uninstallation Script
 
-PLIST_DEST="$HOME/Library/LaunchAgents/com.apple-flow.plist"
+PLIST_DEST="$HOME/Library/LaunchAgents/local.apple-flow.plist"
 
 echo "=== Apple Flow Auto-Start Uninstallation ==="
 echo ""

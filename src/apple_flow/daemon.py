@@ -75,11 +75,6 @@ class RelayDaemon:
             enable_progress_streaming=settings.enable_progress_streaming,
             progress_update_interval_seconds=settings.progress_update_interval_seconds,
             enable_attachments=settings.enable_attachments,
-            enable_voice_memos=settings.enable_voice_memos,
-            voice_memo_voice=settings.voice_memo_voice,
-            voice_memo_max_chars=settings.voice_memo_max_chars,
-            voice_memo_send_text_too=settings.voice_memo_send_text_too,
-            voice_memo_output_dir=settings.attachment_temp_dir,
         )
 
         # Create channel-specific egress objects first so they can be passed to main orchestrator

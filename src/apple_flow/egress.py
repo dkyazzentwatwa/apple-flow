@@ -78,29 +78,6 @@ class IMessageEgress:
         self._gc_recent()
         self._recent_fingerprints[self._fingerprint(recipient, text)] = time.time()
 
-    @staticmethod
-    def _osascript_send_attachment(recipient: str, file_path: str) -> None:
-        """Send a file attachment via iMessage."""
-        escaped_path = file_path.replace('"', '\\"')
-        script = f'''
-        tell application "Messages"
-            set targetService to 1st service whose service type = iMessage
-            set targetBuddy to buddy "{recipient}" of targetService
-            send POSIX file "{escaped_path}" to targetBuddy
-        end tell
-        '''
-        subprocess.run(["osascript", "-e", script], check=True, capture_output=True, text=True)
-
-    def send_attachment(self, recipient: str, file_path: str) -> None:
-        """Send a file as an iMessage attachment."""
-        if not file_path:
-            return
-        try:
-            self._osascript_send_attachment(recipient, file_path)
-            logger.info("Sent attachment to %s: %s", recipient, file_path)
-        except Exception as exc:
-            logger.warning("Failed to send attachment to %s: %s", recipient, exc)
-
     def send(self, recipient: str, text: str) -> None:
         outbound_fingerprint = self._fingerprint(recipient, text)
         last_ts = self._recent_fingerprints.get(outbound_fingerprint)

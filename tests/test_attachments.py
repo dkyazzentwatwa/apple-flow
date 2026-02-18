@@ -108,12 +108,3 @@ def test_multiple_attachments_all_listed():
     _, prompt = orch.connector.turns[0]
     assert "file1.txt" in prompt
     assert "image.png" in prompt
-
-
-def test_egress_send_attachment():
-    """Test egress send_attachment method exists and handles empty path."""
-    from apple_flow.egress import IMessageEgress
-
-    egress = IMessageEgress()
-    # Empty path should return without error
-    egress.send_attachment("+15551234567", "")
