@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .calendar_egress import AppleCalendarEgress
 from .calendar_ingress import AppleCalendarIngress
+from .claude_cli_connector import ClaudeCliConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
 from .config import RelaySettings
@@ -45,20 +46,42 @@ class RelayDaemon:
         )
 
         # Choose connector based on configuration
-        if settings.use_codex_cli:
+        connector_type = settings.get_connector_type()
+        known_connectors = {"codex-cli", "claude-cli", "codex-app-server"}
+        if connector_type not in known_connectors:
+            raise ValueError(
+                f"Unknown connector type: {connector_type!r}. "
+                f"Valid options: {', '.join(sorted(known_connectors))}"
+            )
+
+        if connector_type == "codex-app-server":
+            logger.warning(
+                "app-server connector is deprecated and may cause state corruption. "
+                "Set apple_flow_connector=codex-cli or apple_flow_connector=claude-cli instead."
+            )
+            logger.info("Using app-server connector (JSON-RPC with persistent threads)")
+            self.connector: ConnectorProtocol = CodexAppServerConnector(
+                settings.codex_app_server_cmd,
+                turn_timeout_seconds=settings.codex_turn_timeout_seconds,
+            )
+        elif connector_type == "claude-cli":
+            logger.info("Using Claude CLI connector (claude -p) for stateless execution")
+            self.connector = ClaudeCliConnector(
+                claude_command=settings.claude_cli_command,
+                workspace=settings.default_workspace,
+                timeout=settings.codex_turn_timeout_seconds,
+                context_window=settings.claude_cli_context_window,
+                model=settings.claude_cli_model,
+                dangerously_skip_permissions=settings.claude_cli_dangerously_skip_permissions,
+            )
+        else:  # codex-cli (default)
             logger.info("Using CLI connector (codex exec) for stateless execution")
-            self.connector: ConnectorProtocol = CodexCliConnector(
+            self.connector = CodexCliConnector(
                 codex_command=settings.codex_cli_command,
                 workspace=settings.default_workspace,
                 timeout=settings.codex_turn_timeout_seconds,
                 context_window=settings.codex_cli_context_window,
                 model=settings.codex_cli_model,
-            )
-        else:
-            logger.info("Using app-server connector (JSON-RPC with persistent threads)")
-            self.connector = CodexAppServerConnector(
-                settings.codex_app_server_cmd,
-                turn_timeout_seconds=settings.codex_turn_timeout_seconds,
             )
 
         # Shared orchestrator params
@@ -552,8 +575,17 @@ class RelayDaemon:
             return
         recipient = self.settings.allowed_senders[0]
 
-        model_line = f"🧠 Model: {self.settings.codex_cli_model}" if self.settings.codex_cli_model else "🧠 Model: codex default"
-        connector_line = "⚙️  Engine: codex exec (stateless)" if self.settings.use_codex_cli else "⚙️  Engine: app-server (stateful)"
+        connector_type = self.settings.get_connector_type()
+        if connector_type == "claude-cli":
+            model_val = self.settings.claude_cli_model or "claude default"
+            connector_line = "⚙️  Engine: claude -p (stateless)"
+        elif connector_type == "codex-app-server":
+            model_val = self.settings.codex_cli_model or "codex default"
+            connector_line = "⚙️  Engine: app-server (stateful, deprecated)"
+        else:
+            model_val = self.settings.codex_cli_model or "codex default"
+            connector_line = "⚙️  Engine: codex exec (stateless)"
+        model_line = f"🧠 Model: {model_val}"
 
         commands = [
             f"💬 {self.settings.chat_prefix} <msg>      chat",

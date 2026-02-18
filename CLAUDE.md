@@ -181,12 +181,23 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 
 ### Connector Settings
 
-- `apple_flow_use_codex_cli` - use CLI connector instead of app-server (default: true, recommended)
+- `apple_flow_connector` - connector to use: `"codex-cli"` (default), `"claude-cli"`, `"codex-app-server"` (deprecated)
+- `apple_flow_codex_turn_timeout_seconds` - timeout for all connectors (default: 300s/5min)
+
+**Codex CLI** (`connector=codex-cli`, requires `codex login`):
 - `apple_flow_codex_cli_command` - path to codex binary (default: "codex")
-- `apple_flow_codex_cli_context_window` - number of recent exchanges to include as context (default: 3)
-- `apple_flow_codex_cli_model` - model to pass via `-m` flag (e.g. `gpt-5.3-codex`; empty = codex default)
-- `apple_flow_codex_app_server_cmd` - app-server command (only used if use_codex_cli=false)
-- `apple_flow_codex_turn_timeout_seconds` - how long to wait for Codex responses (default: 300s/5min)
+- `apple_flow_codex_cli_context_window` - recent exchanges to include as context (default: 3)
+- `apple_flow_codex_cli_model` - model flag (e.g. `gpt-5.3-codex`; empty = codex default)
+
+**Claude Code CLI** (`connector=claude-cli`, requires `claude auth login`):
+- `apple_flow_claude_cli_command` - path to claude binary (default: "claude")
+- `apple_flow_claude_cli_context_window` - recent exchanges to include as context (default: 3)
+- `apple_flow_claude_cli_model` - model flag (e.g. `claude-sonnet-4-6`, `claude-opus-4-6`; empty = claude default)
+- `apple_flow_claude_cli_dangerously_skip_permissions` - pass `--dangerously-skip-permissions` (default: true)
+
+**Legacy app-server** (`connector=codex-app-server`, deprecated):
+- `apple_flow_codex_app_server_cmd` - app-server command
+- `apple_flow_use_codex_cli` - legacy boolean (still respected if `connector` is unset)
 
 ### Apple Mail Integration
 
@@ -320,7 +331,9 @@ tests/test_admin_api.py           # FastAPI admin endpoints
 
 - macOS with iMessage signed in
 - Full Disk Access granted to terminal app (for reading chat.db)
-- `codex login` run once for Codex authentication
+- Authentication for your chosen connector (run once):
+  - `codex login` — if using `apple_flow_connector=codex-cli` (default)
+  - `claude auth login` — if using `apple_flow_connector=claude-cli`
 - For Apple Mail integration: Apple Mail configured and running on this Mac
 - For Apple Reminders integration: Reminders.app on this Mac, a list named per config (default: "Codex Tasks")
 - For Apple Notes integration: Notes.app on this Mac, a folder named per config (default: "Codex Inbox")
@@ -361,9 +374,10 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 4. Add tests to `tests/test_command_parser.py` and `tests/test_orchestrator.py`
 
 ### Connector selection
-- Default: `codex_cli_connector.py` (stateless, `codex exec`, recommended)
-- Fallback: `codex_connector.py` (stateful JSON-RPC app-server)
-- Selection controlled by `apple_flow_use_codex_cli` config flag
+- `"codex-cli"` (default): `codex_cli_connector.py` — stateless `codex exec`, requires `codex login`
+- `"claude-cli"`: `claude_cli_connector.py` — stateless `claude -p`, requires `claude auth login`
+- `"codex-app-server"` (deprecated): `codex_connector.py` — stateful JSON-RPC, prone to state corruption
+- Selection controlled by `apple_flow_connector` config field (falls back to `apple_flow_use_codex_cli` for backwards compat)
 
 ### Key patterns
 - All async I/O uses `asyncio`; test with `pytest-asyncio` (`asyncio_mode = "auto"`)

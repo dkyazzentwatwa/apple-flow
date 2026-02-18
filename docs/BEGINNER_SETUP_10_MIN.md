@@ -6,7 +6,9 @@ This guide gets `apple-flow` running fast on macOS with the safest default path.
 
 - macOS with iMessage signed in
 - Python `3.11+` (`python3 --version`)
-- Codex CLI installed and available as `codex`
+- At least one AI CLI installed:
+  - **Codex** (default): `codex` binary — [claude.ai/code](https://claude.ai/code)
+  - **Claude Code CLI**: `claude` binary — [claude.ai/code](https://claude.ai/code)
 
 ## 10-minute quick path
 
@@ -29,13 +31,20 @@ Open `.env` and confirm these at minimum:
 - `apple_flow_allowed_senders=+1YOURNUMBER`
 - `apple_flow_allowed_workspaces=/Users/cypher/Public/code/apple-flow`
 - `apple_flow_default_workspace=/Users/cypher/Public/code/apple-flow`
+- `apple_flow_connector=codex-cli` (default) **or** `apple_flow_connector=claude-cli`
 
 Important: your own phone number must be in `apple_flow_allowed_senders` or relay messages will be blocked.
 
-## 4) Authenticate Codex once (1 min)
+## 4) Authenticate your AI backend once (1 min)
+
+Run the command for whichever backend you set in `.env`:
 
 ```bash
+# If using apple_flow_connector=codex-cli (default)
 codex login
+
+# If using apple_flow_connector=claude-cli
+claude auth login
 ```
 
 ## 5) Run beginner setup + tests + daemon (3-4 min)
