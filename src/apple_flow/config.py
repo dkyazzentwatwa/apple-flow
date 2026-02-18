@@ -30,7 +30,7 @@ class RelaySettings(BaseSettings):
     # CLI connector settings (preferred over app-server)
     use_codex_cli: bool = True
     codex_cli_command: str = "codex"
-    codex_cli_context_window: int = 3
+    codex_cli_context_window: int = 10
     codex_cli_model: str = ""  # e.g., "gpt-5.3-codex" (empty = use codex default)
 
     # Connector selection (overrides use_codex_cli when set)
@@ -39,7 +39,7 @@ class RelaySettings(BaseSettings):
     # Claude CLI connector settings (used when connector="claude-cli")
     claude_cli_command: str = "claude"
     claude_cli_dangerously_skip_permissions: bool = True
-    claude_cli_context_window: int = 3
+    claude_cli_context_window: int = 10
     claude_cli_model: str = ""  # e.g. "claude-sonnet-4-6", "claude-opus-4-6"
     claude_cli_tools: list[str] = Field(default_factory=list)  # e.g. ["default", "WebSearch"]
     claude_cli_allowed_tools: list[str] = Field(default_factory=list)  # e.g. ["WebSearch"]
@@ -53,7 +53,7 @@ class RelaySettings(BaseSettings):
     notify_blocked_senders: bool = False
     notify_rate_limited_senders: bool = False
     only_poll_allowed_senders: bool = True
-    require_chat_prefix: bool = True
+    require_chat_prefix: bool = False
     chat_prefix: str = "relay:"
     suppress_duplicate_outbound_seconds: float = 90.0
     send_startup_intro: bool = True
@@ -62,8 +62,22 @@ class RelaySettings(BaseSettings):
     # Workspace aliases for multi-workspace routing
     workspace_aliases: str = ""  # JSON dict: '{"web-app":"/path/to/web-app"}'
 
+    # AI personality prompt (injected as system context for all chat turns)
+    personality_prompt: str = (
+        "You are an AI assistant embedded in Apple Flow, accessible via iMessage on macOS. "
+        "You have access to the user's coding workspace at {workspace}. "
+        "Respond naturally to any request — creative writing, coding, analysis, questions, or anything else. "
+        "For simple requests, reply directly and concisely. For complex or multi-step work, describe your plan clearly. "
+        "If you need to create, edit, or delete files, first describe your plan and ask the user to approve before acting. "
+        "Keep responses concise for iMessage — avoid walls of text. Use plain text over heavy markdown. "
+        "Do not announce yourself as an AI or include unnecessary preamble."
+    )
+
     # Conversation memory: auto-inject recent messages into prompts
-    auto_context_messages: int = 0  # 0 = disabled
+    auto_context_messages: int = 10  # 0 = disabled
+
+    # Apple Tools context: inject TOOLS_CONTEXT into AI prompts so the AI knows apple-flow tools exist
+    inject_tools_context: bool = True
 
     # Apple Mail integration settings
     enable_mail_polling: bool = False

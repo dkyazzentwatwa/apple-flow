@@ -13,7 +13,7 @@ from uuid import uuid4
 
 logger = logging.getLogger("apple_flow.orchestrator")
 
-from .commanding import CommandKind, ParsedCommand, parse_command
+from .commanding import CommandKind, ParsedCommand, is_likely_mutating, parse_command
 from .models import InboundMessage, RunState
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
 
@@ -97,6 +97,7 @@ class RelayOrchestrator:
         enable_progress_streaming: bool = False,
         progress_update_interval_seconds: float = 30.0,
         enable_attachments: bool = False,
+        personality_prompt: str = "",
         reminders_egress: Any = None,
         reminders_archive_list_name: str = "Archive",
         notes_egress: Any = None,
@@ -119,6 +120,7 @@ class RelayOrchestrator:
         self.enable_progress_streaming = enable_progress_streaming
         self.progress_update_interval_seconds = progress_update_interval_seconds
         self.enable_attachments = enable_attachments
+        self.personality_prompt = personality_prompt
         self.reminders_egress = reminders_egress
         self.reminders_archive_list_name = reminders_archive_list_name
         self.notes_egress = notes_egress
@@ -174,6 +176,11 @@ class RelayOrchestrator:
                 )
                 self.egress.send(message.sender, hint)
                 return OrchestrationResult(kind=CommandKind.CHAT, response=hint)
+        elif command.kind is CommandKind.CHAT and not self.require_chat_prefix:
+            # Natural language mode: strip relay: prefix if present (optional graceful compat)
+            if raw_text.lower().startswith(self.chat_prefix.lower()):
+                stripped = raw_text[len(self.chat_prefix) :].strip()
+                command = ParsedCommand(kind=CommandKind.CHAT, payload=stripped, workspace=command.workspace)
 
         if command.kind is CommandKind.HEALTH:
             return self._handle_health(message.sender)
@@ -202,6 +209,14 @@ class RelayOrchestrator:
 
         if command.kind is CommandKind.SYSTEM:
             return self._handle_system(message.sender, command.payload)
+
+        # Natural language mode: auto-promote bare CHAT messages with mutating intent to TASK
+        if (
+            command.kind is CommandKind.CHAT
+            and not self.require_chat_prefix
+            and is_likely_mutating(command.payload)
+        ):
+            command = ParsedCommand(kind=CommandKind.TASK, payload=command.payload, workspace=command.workspace)
 
         workspace = self._resolve_workspace(command.workspace)
 
@@ -507,9 +522,8 @@ class RelayOrchestrator:
         )
 
         outbound = (
-            f"Plan for {kind.value}:\n{plan_output}\n\n"
-            f"Approve with: approve {request_id}\n"
-            f"Deny with: deny {request_id}"
+            f"Here's my plan:\n{plan_output}\n\n"
+            f"Reply `approve {request_id}` to proceed, or `deny {request_id}` to cancel."
         )
         self.egress.send(message.sender, outbound)
         return OrchestrationResult(kind=kind, run_id=run_id, approval_request_id=request_id, response=outbound)
@@ -598,23 +612,16 @@ class RelayOrchestrator:
 
     # --- Prompt Building ---
 
+    def _build_unified_prompt(self, payload: str, workspace: str | None = None) -> str:
+        """Return the user payload. Personality/system context is handled by the connector via --system."""
+        return payload
+
     def _build_non_mutating_prompt(self, kind: CommandKind, payload: str, workspace: str | None = None) -> str:
-        ws = workspace or self.default_workspace
-        if kind is CommandKind.CHAT:
-            return (
-                "You are Apple Flow over iMessage for a coding workspace. "
-                f"Workspace path: {ws}. "
-                "Answer the user's exact request directly. "
-                "If they ask about files/directories, inspect the workspace and return concrete results. "
-                "Do not send generic readiness lines like 'I'm here and ready'. "
-                "Do not mention internal policies, skills, hidden instructions, or bootstrap steps unless asked.\n\n"
-                f"User message: {payload}"
-            )
         if kind is CommandKind.IDEA:
             return f"brainstorm mode: generate options, trade-offs, and recommendation. request={payload}"
         if kind is CommandKind.PLAN:
             return f"planning mode: create a stepwise implementation plan with acceptance criteria. goal={payload}"
-        return payload
+        return self._build_unified_prompt(payload, workspace)
 
     def _is_workspace_allowed(self, candidate: str) -> bool:
         target = str(Path(candidate).resolve())

@@ -65,6 +65,7 @@ def test_run_turn_success():
         codex_command="codex",
         workspace="/tmp",
         timeout=30.0,
+        inject_tools_context=False,
     )
 
     mock_result = Mock()
@@ -90,7 +91,7 @@ def test_run_turn_success():
 
 def test_run_turn_with_model_flag():
     """Test that -m flag is included when model is configured."""
-    connector = CodexCliConnector(codex_command="codex", model="gpt-5.3-codex")
+    connector = CodexCliConnector(codex_command="codex", model="gpt-5.3-codex", inject_tools_context=False)
 
     mock_result = Mock()
     mock_result.returncode = 0

@@ -75,6 +75,10 @@ class RelayDaemon:
                 dangerously_skip_permissions=settings.claude_cli_dangerously_skip_permissions,
                 tools=settings.claude_cli_tools,
                 allowed_tools=settings.claude_cli_allowed_tools,
+                inject_tools_context=settings.inject_tools_context,
+                system_prompt=settings.personality_prompt.replace(
+                    "{workspace}", settings.default_workspace
+                ),
             )
         else:  # codex-cli (default)
             logger.info("Using CLI connector (codex exec) for stateless execution")
@@ -84,6 +88,7 @@ class RelayDaemon:
                 timeout=settings.codex_turn_timeout_seconds,
                 context_window=settings.codex_cli_context_window,
                 model=settings.codex_cli_model,
+                inject_tools_context=settings.inject_tools_context,
             )
 
         # Create channel-specific egress objects first so they can be passed to main orchestrator
@@ -119,6 +124,7 @@ class RelayDaemon:
             enable_progress_streaming=settings.enable_progress_streaming,
             progress_update_interval_seconds=settings.progress_update_interval_seconds,
             enable_attachments=settings.enable_attachments,
+            personality_prompt=settings.personality_prompt,
             shutdown_callback=self.request_shutdown,
             log_notes_egress=notes_log_egress_obj,
             notes_log_folder_name=settings.notes_log_folder_name,
@@ -603,20 +609,25 @@ class RelayDaemon:
             connector_line = "⚙️  Engine: codex exec (stateless)"
         model_line = f"🧠 Model: {model_val}"
 
+        if self.settings.require_chat_prefix:
+            chat_line = f"💬 {self.settings.chat_prefix} <msg>      chat"
+            mode_hint = f"Prefix mode: start messages with {self.settings.chat_prefix}"
+        else:
+            chat_line = "💬 Just type naturally — ask anything!"
+            mode_hint = "Natural mode: no prefix needed"
+
         commands = [
-            f"💬 {self.settings.chat_prefix} <msg>      chat",
-            "💡 idea: <prompt>     brainstorm",
-            "📋 plan: <goal>       create plan",
+            chat_line,
+            "",
+            f"ℹ️  {mode_hint}",
+            "✅ approve <id>  |  ❌ deny <id>  |  📊 status",
+            "🏥 health  |  🔍 history: [query]  |  🔄 clear context",
+            "🔧 system: stop  |  system: restart",
+            "",
+            "Power users:",
             "⚡ task: <cmd>        execute  (needs ✅)",
             "🚀 project: <spec>    multi-step (needs ✅)",
-            "✅ approve <id>       approve task",
-            "❌ deny <id>          deny task",
-            "📊 status             pending approvals",
-            "🏥 health             daemon stats",
-            "🔍 history: [query]   search messages",
-            "🔄 clear context      fresh start",
-            "🔧 system: stop       shutdown daemon",
-            "🔄 system: restart    restart daemon",
+            f"💬 {self.settings.chat_prefix} <msg>  |  💡 idea:  |  📋 plan:",
         ]
         gateways = ["💬 iMessage   → always active"]
         if self.settings.enable_mail_polling:

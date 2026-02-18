@@ -31,7 +31,7 @@ def test_task_command_creates_approval_request():
     result = orchestrator.handle_message(msg)
     assert result.kind is CommandKind.TASK
     assert result.approval_request_id is not None
-    assert any("Approve with" in text for _, text in egress.messages)
+    assert any("approve" in text.lower() for _, text in egress.messages)
 
 
 def test_chat_requires_prefix_when_enabled():
@@ -390,3 +390,130 @@ def test_calendar_context_key_event_summary_is_used():
     src = store.get_run_source_context(result.run_id)
     assert src is not None
     assert src["event_name"] == "Run backups"   # orchestrator stores it as event_name
+
+
+# --- Natural Language UX tests ---
+
+
+def _make_orchestrator(**kwargs):
+    connector = FakeConnector()
+    egress = FakeEgress()
+    store = FakeStore()
+    defaults = dict(
+        connector=connector,
+        egress=egress,
+        store=store,
+        allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
+        default_workspace="/Users/cypher/Public/code/codex-flow",
+    )
+    defaults.update(kwargs)
+    orch = RelayOrchestrator(**defaults)
+    return orch, connector, egress, store
+
+
+def test_natural_language_chat_without_prefix():
+    """Bare message processed when require_chat_prefix=False."""
+    orch, connector, egress, _ = _make_orchestrator(require_chat_prefix=False)
+
+    msg = InboundMessage(
+        id="nl_1",
+        sender="+15551234567",
+        text="what's in this repo?",
+        received_at="2026-02-18T10:00:00Z",
+        is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+    assert result.kind is CommandKind.CHAT
+    assert result.response == "assistant-response"
+    assert connector.turns
+    assert egress.messages
+
+
+def test_natural_language_mutating_auto_promotes():
+    """A bare mutating message enters the approval workflow without task: prefix."""
+    orch, connector, egress, store = _make_orchestrator(require_chat_prefix=False)
+
+    msg = InboundMessage(
+        id="nl_2",
+        sender="+15551234567",
+        text="create a Python script to parse CSV files",
+        received_at="2026-02-18T10:00:00Z",
+        is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+    assert result.kind is CommandKind.TASK
+    assert result.approval_request_id is not None
+    assert any("Here's my plan" in text for _, text in egress.messages)
+
+
+def test_personality_prompt_injected():
+    """Custom personality_prompt is stored on the orchestrator (connector uses --system in production)."""
+    custom_prompt = "You are a pirate. Arr."
+    orch, connector, egress, _ = _make_orchestrator(
+        require_chat_prefix=False,
+        personality_prompt=custom_prompt,
+    )
+    assert orch.personality_prompt == custom_prompt
+
+    msg = InboundMessage(
+        id="nl_3",
+        sender="+15551234567",
+        text="tell me about tides",
+        received_at="2026-02-18T10:00:00Z",
+        is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+    assert result.kind is CommandKind.CHAT
+    assert connector.turns
+    # The -p prompt is just the user message; personality is in --system (ClaudeCliConnector)
+    assert connector.turns[0][1] == "tell me about tides"
+
+
+def test_relay_prefix_stripped_in_natural_mode():
+    """relay: prefix still works in natural mode; prefix is stripped before routing."""
+    orch, connector, egress, _ = _make_orchestrator(
+        require_chat_prefix=False,
+        chat_prefix="relay:",
+    )
+
+    msg = InboundMessage(
+        id="nl_4",
+        sender="+15551234567",
+        text="relay: tell me a joke",
+        received_at="2026-02-18T10:00:00Z",
+        is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+    assert result.kind is CommandKind.CHAT
+    # Payload should have relay: stripped; connector should have received the bare message
+    assert connector.turns
+    sent_prompt = connector.turns[0][1]
+    assert "relay:" not in sent_prompt.lower()
+
+
+def test_approve_bare_word_still_works():
+    """approve <id> works without any prefix in natural mode."""
+    orch, connector, egress, store = _make_orchestrator(require_chat_prefix=False)
+
+    # First create an approval via task:
+    task_msg = InboundMessage(
+        id="nl_5a",
+        sender="+15551234567",
+        text="task: write a hello world script",
+        received_at="2026-02-18T10:00:00Z",
+        is_from_me=False,
+    )
+    result = orch.handle_message(task_msg)
+    request_id = result.approval_request_id
+    assert request_id is not None
+
+    # Now approve it bare-word (no prefix)
+    approve_msg = InboundMessage(
+        id="nl_5b",
+        sender="+15551234567",
+        text=f"approve {request_id}",
+        received_at="2026-02-18T10:05:00Z",
+        is_from_me=False,
+    )
+    approval_result = orch.handle_message(approve_msg)
+    assert approval_result.kind is CommandKind.APPROVE
