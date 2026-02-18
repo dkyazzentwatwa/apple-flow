@@ -156,6 +156,7 @@ class RelayDaemon:
                 account=settings.mail_poll_account,
                 mailbox=settings.mail_poll_mailbox,
                 max_age_days=settings.mail_max_age_days,
+                trigger_tag=settings.trigger_tag,
             )
             self.mail_egress = AppleMailEgress(
                 from_address=settings.mail_from_address,
@@ -185,6 +186,7 @@ class RelayDaemon:
                 list_name=settings.reminders_list_name,
                 owner_sender=owner,
                 auto_approve=settings.reminders_auto_approve,
+                trigger_tag=settings.trigger_tag,
                 store=self.store,
             )
             self.reminders_orchestrator = RelayOrchestrator(
@@ -204,12 +206,12 @@ class RelayDaemon:
             logger.info(
                 "Apple Notes polling enabled (folder=%r, trigger_tag=%r, owner=%s)",
                 settings.notes_folder_name,
-                settings.notes_trigger_tag,
+                settings.trigger_tag,
                 notes_owner or "(unset)",
             )
             self.notes_ingress = AppleNotesIngress(
                 folder_name=settings.notes_folder_name,
-                trigger_tag=settings.notes_trigger_tag,
+                trigger_tag=settings.trigger_tag,
                 owner_sender=notes_owner,
                 auto_approve=settings.notes_auto_approve,
                 fetch_timeout_seconds=settings.notes_fetch_timeout_seconds,
@@ -242,6 +244,7 @@ class RelayDaemon:
                 owner_sender=cal_owner,
                 auto_approve=settings.calendar_auto_approve,
                 lookahead_minutes=settings.calendar_lookahead_minutes,
+                trigger_tag=settings.trigger_tag,
                 store=self.store,
             )
             self.calendar_orchestrator = RelayOrchestrator(

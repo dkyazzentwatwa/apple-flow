@@ -30,11 +30,13 @@ class AppleRemindersIngress:
         list_name: str = "Codex Tasks",
         owner_sender: str = "",
         auto_approve: bool = False,
+        trigger_tag: str = "",
         store: StoreProtocol | None = None,
     ):
         self.list_name = list_name
         self.owner_sender = owner_sender
         self.auto_approve = auto_approve
+        self.trigger_tag = trigger_tag.strip()
         self._store = store
         self._processed_ids: set[str] = set()
         # Hydrate processed IDs from persistent store on startup.
@@ -74,6 +76,13 @@ class AppleRemindersIngress:
             body = (raw.get("body", "") or "").strip()
             creation_date = raw.get("creation_date", "")
             due_date = raw.get("due_date", "")
+
+            # Skip reminders that don't contain the trigger tag (if configured).
+            if self.trigger_tag:
+                if self.trigger_tag not in name and self.trigger_tag not in body:
+                    continue
+                name = name.replace(self.trigger_tag, "").strip()
+                body = body.replace(self.trigger_tag, "").strip()
 
             # Build the task text from reminder name + notes.
             text = self._compose_text(name, body, due_date)

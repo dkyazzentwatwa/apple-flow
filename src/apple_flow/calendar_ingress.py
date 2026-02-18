@@ -29,12 +29,14 @@ class AppleCalendarIngress:
         owner_sender: str = "",
         auto_approve: bool = False,
         lookahead_minutes: int = 5,
+        trigger_tag: str = "",
         store: StoreProtocol | None = None,
     ):
         self.calendar_name = calendar_name
         self.owner_sender = owner_sender
         self.auto_approve = auto_approve
         self.lookahead_minutes = lookahead_minutes
+        self.trigger_tag = trigger_tag.strip()
         self._store = store
         self._processed_ids: set[str] = set()
         if store is not None:
@@ -63,6 +65,13 @@ class AppleCalendarIngress:
             summary = (raw.get("summary", "") or "").strip()
             description = (raw.get("description", "") or "").strip()
             start_date = raw.get("start_date", "")
+
+            # Skip events that don't contain the trigger tag (if configured).
+            if self.trigger_tag:
+                if self.trigger_tag not in summary and self.trigger_tag not in description:
+                    continue
+                summary = summary.replace(self.trigger_tag, "").strip()
+                description = description.replace(self.trigger_tag, "").strip()
 
             text = self._compose_text(summary, description)
             if not text:

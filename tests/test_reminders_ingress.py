@@ -207,3 +207,58 @@ def test_context_carries_list_name(monkeypatch):
 
     messages = ingress.fetch_new()
     assert messages[0].context["list_name"] == "My Custom List"
+
+
+# --- Trigger Tag Tests ---
+
+
+def test_trigger_tag_required_skips_without_tag(monkeypatch):
+    """Reminders without the trigger tag should be skipped."""
+    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent")
+    raw = [
+        {"id": "rem_1", "name": "Buy milk", "body": "Don't forget", "creation_date": "", "due_date": ""},
+    ]
+    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
+
+    messages = ingress.fetch_new()
+    assert messages == []
+
+
+def test_trigger_tag_in_name_passes_and_stripped(monkeypatch):
+    """Reminder with tag in name should be returned with tag stripped."""
+    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent")
+    raw = [
+        {"id": "rem_1", "name": "Buy milk !!agent", "body": "", "creation_date": "", "due_date": ""},
+    ]
+    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
+
+    messages = ingress.fetch_new()
+    assert len(messages) == 1
+    assert "!!agent" not in messages[0].text
+    assert "Buy milk" in messages[0].text
+
+
+def test_trigger_tag_in_body_passes(monkeypatch):
+    """Reminder with tag in body should be returned."""
+    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent")
+    raw = [
+        {"id": "rem_1", "name": "Deploy app", "body": "!!agent push to staging", "creation_date": "", "due_date": ""},
+    ]
+    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
+
+    messages = ingress.fetch_new()
+    assert len(messages) == 1
+    assert "Deploy app" in messages[0].text
+
+
+def test_trigger_tag_empty_processes_all(monkeypatch):
+    """When trigger_tag is empty, all reminders are processed (backward compat)."""
+    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="")
+    raw = [
+        {"id": "rem_1", "name": "Buy milk", "body": "", "creation_date": "", "due_date": ""},
+        {"id": "rem_2", "name": "Walk dog", "body": "", "creation_date": "", "due_date": ""},
+    ]
+    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
+
+    messages = ingress.fetch_new()
+    assert len(messages) == 2

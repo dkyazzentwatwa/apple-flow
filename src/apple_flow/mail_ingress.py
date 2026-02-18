@@ -22,10 +22,11 @@ logger = logging.getLogger("apple_flow.mail_ingress")
 class AppleMailIngress:
     """Reads inbound emails from the macOS Mail.app via AppleScript."""
 
-    def __init__(self, account: str = "", mailbox: str = "INBOX", max_age_days: int = 2):
+    def __init__(self, account: str = "", mailbox: str = "INBOX", max_age_days: int = 2, trigger_tag: str = ""):
         self.account = account
         self.mailbox = mailbox
         self.max_age_days = max_age_days
+        self.trigger_tag = trigger_tag.strip()
         self._last_seen_ids: set[str] = set()
 
     def fetch_new(
@@ -55,12 +56,21 @@ class AppleMailIngress:
 
         raw_messages = self._fetch_unread_via_applescript(limit, sender_filter=email_filters)
         messages: list[InboundMessage] = []
+        processed_ids: list[str] = []
         for raw in raw_messages:
             msg_id = raw.get("id", "")
             sender_raw = raw.get("sender", "")
-            subject = raw.get("subject", "")
-            body = raw.get("body", "")
+            subject = (raw.get("subject", "") or "").strip()
+            body = (raw.get("body", "") or "").strip()
             date_str = raw.get("date", "")
+
+            # Skip emails that don't contain the trigger tag (if configured).
+            # Do NOT mark as read — leave them unread so they can be picked up later.
+            if self.trigger_tag:
+                if self.trigger_tag not in subject and self.trigger_tag not in body:
+                    continue
+                subject = subject.replace(self.trigger_tag, "").strip()
+                body = body.replace(self.trigger_tag, "").strip()
 
             sender = self._extract_email_address(sender_raw)
 
@@ -80,11 +90,11 @@ class AppleMailIngress:
                     is_from_me=False,
                 )
             )
+            processed_ids.append(msg_id)
 
-        # Mark fetched messages as read so they are not re-processed
-        if messages:
-            fetched_ids = [raw.get("id", "") for raw in raw_messages]
-            self._mark_as_read(fetched_ids)
+        # Mark only processed messages as read so they are not re-polled.
+        if processed_ids:
+            self._mark_as_read(processed_ids)
 
         return messages[:limit]
 
