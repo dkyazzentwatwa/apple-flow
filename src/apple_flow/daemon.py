@@ -98,6 +98,7 @@ class RelayDaemon:
             enable_progress_streaming=settings.enable_progress_streaming,
             progress_update_interval_seconds=settings.progress_update_interval_seconds,
             enable_attachments=settings.enable_attachments,
+            shutdown_callback=self.request_shutdown,
         )
 
         # Create channel-specific egress objects first so they can be passed to main orchestrator
@@ -599,6 +600,8 @@ class RelayDaemon:
             "🏥 health             daemon stats",
             "🔍 history: [query]   search messages",
             "🔄 clear context      fresh start",
+            "🔧 system: stop       shutdown daemon",
+            "🔄 system: restart    restart daemon",
         ]
         intro = (
             "🤖✨ APPLE FLOW ONLINE ✨🤖\n"

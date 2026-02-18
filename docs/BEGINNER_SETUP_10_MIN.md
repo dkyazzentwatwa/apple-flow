@@ -7,7 +7,7 @@ This guide gets `apple-flow` running fast on macOS with the safest default path.
 - macOS with iMessage signed in
 - Python `3.11+` (`python3 --version`)
 - At least one AI CLI installed:
-  - **Codex** (default): `codex` binary — [claude.ai/code](https://claude.ai/code)
+  - **Codex** (default): `codex` binary — [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli/)
   - **Claude Code CLI**: `claude` binary — [claude.ai/code](https://claude.ai/code)
 
 ## 10-minute quick path

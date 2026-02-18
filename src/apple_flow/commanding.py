@@ -17,6 +17,7 @@ class CommandKind(str, Enum):
     STATUS = "status"
     HEALTH = "health"
     HISTORY = "history"
+    SYSTEM = "system"
 
 
 @dataclass(slots=True)
@@ -36,6 +37,7 @@ _PREFIX_TO_KIND = {
     "project": CommandKind.PROJECT,
     "health": CommandKind.HEALTH,
     "history": CommandKind.HISTORY,
+    "system": CommandKind.SYSTEM,
 }
 
 
