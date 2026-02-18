@@ -6,6 +6,17 @@ cd "$ROOT_DIR"
 
 echo "== Apple Flow Beginner Setup =="
 
+# Helper: find a binary by name, checking common macOS install locations
+find_binary() {
+    local name="$1"
+    local found
+    found=$(command -v "$name" 2>/dev/null) && echo "$found" && return
+    for dir in "$HOME/.local/bin" "/opt/homebrew/bin" "/usr/local/bin"; do
+        [ -x "$dir/$name" ] && echo "$dir/$name" && return
+    done
+    echo "$name"  # fallback: bare name
+}
+
 if [[ ! -f ".venv/bin/activate" ]]; then
   echo "Creating virtual environment..."
   python3 -m venv .venv
@@ -32,6 +43,14 @@ pip install -e '.[dev]' >/dev/null
 if [[ ! -f ".env" ]]; then
   cp .env.example .env
   echo "Created .env from .env.example"
+
+  # Auto-detect CLI binary paths and patch .env
+  CLAUDE_BIN=$(find_binary claude)
+  CODEX_BIN=$(find_binary codex)
+  sed -i '' "s|apple_flow_claude_cli_command=claude$|apple_flow_claude_cli_command=$CLAUDE_BIN|" .env
+  sed -i '' "s|apple_flow_codex_cli_command=codex$|apple_flow_codex_cli_command=$CODEX_BIN|" .env
+  echo "Auto-detected: claude → $CLAUDE_BIN"
+  echo "Auto-detected: codex  → $CODEX_BIN"
 fi
 
 if grep -q "REPLACE_WITH_YOUR" .env; then
