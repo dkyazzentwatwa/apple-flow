@@ -80,8 +80,9 @@ launchctl stop local.apple-flow && launchctl start local.apple-flow
 - **[QUICKSTART.md](docs/QUICKSTART.md)** - Complete beginner's guide
 - **[BEGINNER_SETUP_10_MIN.md](docs/BEGINNER_SETUP_10_MIN.md)** - 10-minute setup guide
 - **[AUTO_START_SETUP.md](docs/AUTO_START_SETUP.md)** - Auto-start at boot setup
+- **[ENV_SETUP.md](docs/ENV_SETUP.md)** - Full `.env` configuration reference (all options, defaults, examples)
 - **[CLAUDE.md](CLAUDE.md)** - Architecture and development guide
-- **[.env.example](.env.example)** - All configuration options
+- **[.env.example](.env.example)** - Annotated configuration file
 
 Manual setup:
 
