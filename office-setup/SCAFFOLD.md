@@ -34,7 +34,7 @@ An AI reads this document and follows the numbered Recreation Steps at the end t
 | `50_archive/` | Completed/inactive | — | Anything moved out of active zones after summarizing | Live work; nothing deleted directly here |
 | `60_memory/` | Modular long-term memory | topic `.md` files | One file per memory topic, factual and compact | Session-specific or speculative notes |
 | `70_playbooks/` | SOPs and checklists | — | Repeatable operating procedures, checklists | One-off notes or daily logs |
-| `80_automation/` | Automation specs | `codex-app-routines.md` | Automation specs, routine definitions | Manual-only process notes (use playbooks) |
+| `80_automation/` | Automation specs | `apple-flow-routines.md` | Automation specs, routine definitions | Manual-only process notes (use playbooks) |
 | `90_logs/` | Automation audit trail | `automation-log.md` | Timestamped run results, actions, blockers | Planning notes or durable memory |
 | `templates/` | Note templates | 6 template files | Starter templates only | Filled-in notes or live content |
 
