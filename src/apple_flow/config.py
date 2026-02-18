@@ -31,7 +31,16 @@ class RelaySettings(BaseSettings):
     use_codex_cli: bool = True
     codex_cli_command: str = "codex"
     codex_cli_context_window: int = 3
-    codex_cli_model: str = ""  # e.g., "sonnet", "opus", "haiku" (empty = use codex default)
+    codex_cli_model: str = ""  # e.g., "gpt-5.3-codex" (empty = use codex default)
+
+    # Connector selection (overrides use_codex_cli when set)
+    connector: str = ""  # "codex-cli" | "claude-cli" | "codex-app-server"
+
+    # Claude CLI connector settings (used when connector="claude-cli")
+    claude_cli_command: str = "claude"
+    claude_cli_dangerously_skip_permissions: bool = True
+    claude_cli_context_window: int = 3
+    claude_cli_model: str = ""  # e.g. "claude-sonnet-4-6", "claude-opus-4-6"
 
     admin_host: str = "127.0.0.1"
     admin_port: int = 8787
@@ -140,6 +149,16 @@ class RelaySettings(BaseSettings):
     def _resolve_default_workspace(cls, value: str) -> str:
         """Resolve default workspace to absolute path."""
         return str(Path(value).resolve())
+
+    def get_connector_type(self) -> str:
+        """Return the active connector type string.
+
+        Honors the explicit `connector` field first; falls back to the legacy
+        `use_codex_cli` boolean for backwards compatibility.
+        """
+        if self.connector:
+            return self.connector
+        return "codex-cli" if self.use_codex_cli else "codex-app-server"
 
     def get_workspace_aliases(self) -> dict[str, str]:
         """Parse workspace_aliases JSON string into a dict."""

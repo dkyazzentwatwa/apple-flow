@@ -11,8 +11,9 @@ Apple Flow is a local-first daemon that bridges iMessage and Apple Mail on macOS
 **TL;DR** for experienced users:
 
 ```bash
-# 1. Authenticate with Codex
-codex login
+# 1. Authenticate — pick your AI backend (only one needed):
+codex login   # if using Codex (default)
+claude auth login  # if using Claude Code CLI
 
 # 2. One-command setup with auto-start at boot
 ./scripts/setup_autostart.sh
@@ -20,7 +21,7 @@ codex login
 
 # OR manual foreground run
 cp .env.example .env
-nano .env  # Set your phone number and workspace
+nano .env  # Set your phone number, workspace, and connector
 ./scripts/start_beginner.sh
 ```
 
@@ -51,7 +52,8 @@ launchctl list local.apple-flow  # Should show PID and exit status 0
 - **Apple Notes** — notes tagged with `!!codex` (configurable) trigger Codex tasks
 - **Apple Calendar** — events in a designated calendar become scheduled tasks when due
 - **Stateless CLI connector** (default) — `codex exec` per turn, eliminates state corruption freezes
-- **Model selection** — set `apple_flow_codex_cli_model` to target a specific model (e.g. `gpt-5.3-codex`)
+- **Claude Code CLI connector** — swap to `claude -p` by setting `apple_flow_connector=claude-cli`
+- **Model selection** — `apple_flow_codex_cli_model=gpt-5.3-codex` for Codex, `apple_flow_claude_cli_model=claude-sonnet-4-6` for Claude
 - **Multi-workspace routing** — `@alias` prefix routes to different workspace paths
 - **Human-in-the-loop approval** — mutating `task:` / `project:` commands require explicit approval
 - **Workspace allowlist** — Codex can only access configured paths
@@ -142,23 +144,37 @@ If `apple_flow_send_startup_intro=true`, relay sends an intro iMessage on startu
 - Human approval required for mutating requests (`task:` and `project:`)
 - Per-sender rate limiting
 
-## Codex Authentication
+## Authentication
 
-Authenticate locally once:
+Apple Flow supports two AI backends. Authenticate once for whichever you're using:
 
 ```bash
+# Option A — Codex (default)
 codex login
+
+# Option B — Claude Code CLI
+claude auth login
 ```
 
-Relay uses `codex exec` by default (stateless CLI connector) to avoid thread state corruption. You can switch to the app-server connector by setting `apple_flow_use_codex_cli=false` in `.env`.
+### Choosing a connector
+
+Set `apple_flow_connector` in `.env`:
+
+```bash
+apple_flow_connector=codex-cli    # default — uses `codex exec`
+apple_flow_connector=claude-cli   # uses `claude -p`
+```
+
+Both are stateless (one process per turn). The `codex-app-server` value is still accepted for legacy setups but is deprecated.
 
 ## Beginner Checklist
 
 1. Make sure iMessage is signed in on this Mac.
-2. Run `codex login` once.
+2. Authenticate your AI backend — run `codex login` (Codex) **or** `claude auth login` (Claude).
 3. Put your own phone number in `.env` as `apple_flow_allowed_senders`.
 4. Put safe folders in `apple_flow_allowed_workspaces`.
-5. Start the daemon and text commands like `idea:`, `plan:`, or `task:`.
+5. Set `apple_flow_connector=codex-cli` or `apple_flow_connector=claude-cli` in `.env`.
+6. Start the daemon and text commands like `idea:`, `plan:`, or `task:`.
 
 ## Important Safety Behavior
 

@@ -16,7 +16,9 @@ Works via **iMessage** (default) or **Apple Mail** (optional).
 
 - macOS with iMessage signed in
 - Python 3.11 or later
-- Codex CLI installed ([claude.ai/code](https://claude.ai/code))
+- At least one AI CLI installed and authenticated:
+  - **Codex CLI** (default) — [claude.ai/code](https://claude.ai/code)
+  - **Claude Code CLI** — `claude` binary from [claude.ai/code](https://claude.ai/code)
 
 ---
 
@@ -50,17 +52,26 @@ osascript -e 'quit app "Terminal"'
 # Then reopen Terminal
 ```
 
-## Step 3: Authenticate with Codex
+## Step 3: Authenticate with Your AI Backend
 
+Run the login command for whichever backend you plan to use. **You only need one.**
+
+**Option A — Codex** (default, uses `codex exec`):
 ```bash
 codex login
 ```
 
-Follow the prompts in your browser to authenticate. This only needs to be done once.
-
-**Don't have Codex CLI?** Install it first:
+**Option B — Claude Code CLI** (uses `claude -p`):
 ```bash
-# Visit https://claude.ai/code for installation instructions
+claude auth login
+```
+
+Follow the prompts in your browser. This only needs to be done once per machine.
+
+Then set your connector in `.env` (Step 4):
+```bash
+apple_flow_connector=codex-cli   # for Codex (default)
+apple_flow_connector=claude-cli  # for Claude
 ```
 
 ## Step 4: Configure Your Settings
@@ -74,15 +85,19 @@ nano .env
 
 ### Required Settings
 
-Find and update these two settings:
+Find and update these settings:
 
 ```bash
 # 1. Your phone number in E.164 format (include country code)
 apple_flow_allowed_senders=+15551234567
 
-# 2. Your workspace paths (where Codex can work)
+# 2. Your workspace paths (where the AI can work)
 apple_flow_allowed_workspaces=/Users/yourname/code
 apple_flow_default_workspace=/Users/yourname/code/my-project
+
+# 3. Your AI backend connector (pick one)
+apple_flow_connector=codex-cli   # default — requires: codex login
+apple_flow_connector=claude-cli  # alternative — requires: claude auth login
 ```
 
 **Phone Number Format:**
@@ -239,11 +254,14 @@ nano .env
 # Set: apple_flow_allowed_senders=+15551234567
 ```
 
-### "codex login not found"
+### "codex not found" / "claude not found"
 
-**Cause**: Codex CLI not installed.
+**Cause**: The CLI for your chosen connector isn't installed or not on `$PATH`.
 
-**Fix**: Install Codex CLI from [claude.ai/code](https://claude.ai/code)
+**Fix**:
+- For Codex: install from [claude.ai/code](https://claude.ai/code), then run `codex login`
+- For Claude: install the `claude` CLI from [claude.ai/code](https://claude.ai/code), then run `claude auth login`
+- Make sure `apple_flow_connector` in `.env` matches what you installed
 
 ### Tests Failing
 
@@ -347,7 +365,7 @@ Email → MailIngress ──────────────┘             
 - **MailIngress**: Reads from Apple Mail (optional)
 - **Policy**: Enforces sender allowlist and rate limits
 - **Orchestrator**: Routes commands and manages approvals
-- **Codex CLI Connector**: Stateless `codex exec` for reliable execution (default)
+- **Connector**: Stateless CLI per turn — `codex exec` (Codex) or `claude -p` (Claude)
 - **Store**: Persists sessions, runs, and approvals
 - **Egress**: Sends iMessage replies via AppleScript
 - **MailEgress**: Sends threaded email replies (optional)
