@@ -34,7 +34,13 @@ class RelaySettings(BaseSettings):
     codex_cli_model: str = ""  # e.g., "gpt-5.3-codex" (empty = use codex default)
 
     # Connector selection (overrides use_codex_cli when set)
-    connector: str = ""  # "codex-cli" | "claude-cli" | "codex-app-server"
+    connector: str = ""  # "codex-cli" | "claude-cli" | "cline" | "ollama" | "openai" | "codex-app-server"
+
+    # Cline CLI connector settings (used when connector="cline")
+    cline_command: str = "cline"
+    cline_context_window: int = 3
+    cline_model: str = ""  # e.g. "claude-sonnet-4-5-20250929", "gpt-4o" (empty = cline default)
+    cline_use_json: bool = True  # use --json for structured NDJSON output
 
     # Claude CLI connector settings (used when connector="claude-cli")
     claude_cli_command: str = "claude"
@@ -42,9 +48,9 @@ class RelaySettings(BaseSettings):
     claude_cli_context_window: int = 3
     claude_cli_model: str = ""  # e.g. "claude-sonnet-4-6", "claude-opus-4-6"
 
-    # Ollama API connector settings (used when connector="ollama")
-    ollama_base_url: str = "http://localhost:11434"  # or https://ollama.com for cloud
-    ollama_api_key: str = ""  # required for Ollama Cloud, empty for local
+    # Ollama API connector settings (used when connector="ollama", local only)
+    # For cloud/agentic models, use connector="cline" instead
+    ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.3"
     ollama_context_window: int = 3
     ollama_system_prompt: str = ""

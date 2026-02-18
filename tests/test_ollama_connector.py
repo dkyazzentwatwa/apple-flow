@@ -155,20 +155,6 @@ def test_run_turn_with_context():
         assert messages[2] == {"role": "user", "content": "Message 2"}
 
 
-def test_run_turn_with_api_key():
-    """Test that Authorization header is set when api_key is provided."""
-    connector = OllamaConnector(api_key="test-key-123")
-
-    assert connector._client.headers.get("authorization") == "Bearer test-key-123"
-
-
-def test_run_turn_no_auth_header_when_no_key():
-    """Test that no Authorization header when api_key is empty."""
-    connector = OllamaConnector(api_key="")
-
-    assert "authorization" not in connector._client.headers
-
-
 def test_run_turn_timeout():
     """Test timeout handling."""
     connector = OllamaConnector(timeout=10.0)
@@ -189,19 +175,6 @@ def test_run_turn_connection_error():
 
         assert "Cannot connect" in response
         assert "localhost:11434" in response
-
-
-def test_run_turn_http_401():
-    """Test authentication failure handling."""
-    connector = OllamaConnector()
-
-    mock_response = Mock()
-    mock_response.status_code = 401
-
-    with patch.object(connector._client, "post", return_value=mock_response):
-        response = connector.run_turn("+15551234567", "test")
-
-        assert "Authentication failed" in response
 
 
 def test_run_turn_http_404():
@@ -279,16 +252,3 @@ def test_base_url_trailing_slash_stripped():
     """Test that trailing slash is stripped from base_url."""
     connector = OllamaConnector(base_url="http://localhost:11434/")
     assert connector.base_url == "http://localhost:11434"
-
-
-def test_cloud_url_configuration():
-    """Test cloud URL and API key configuration."""
-    connector = OllamaConnector(
-        base_url="https://ollama.com",
-        api_key="ollama-cloud-key",
-        model="gpt-oss:120b-cloud",
-    )
-
-    assert connector.base_url == "https://ollama.com"
-    assert connector.model == "gpt-oss:120b-cloud"
-    assert connector._client.headers.get("authorization") == "Bearer ollama-cloud-key"

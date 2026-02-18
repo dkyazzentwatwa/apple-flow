@@ -86,7 +86,8 @@ POST /task → FastAPI → Orchestrator → Codex Connector → iMessage Egress
 | `config.py` | Pydantic settings with `apple_flow_` env prefix, path resolution |
 | `codex_cli_connector.py` | Stateless CLI connector using `codex exec` (default, avoids state corruption) |
 | `codex_connector.py` | Stateful app-server connector via JSON-RPC (fallback option) |
-| `ollama_connector.py` | Ollama native API connector via HTTP (`/api/chat`), supports local + cloud |
+| `cline_connector.py` | Cline CLI connector (`cline -y`), full agentic tool-use with any model provider |
+| `ollama_connector.py` | Ollama native API connector via HTTP (`/api/chat`), local Ollama only |
 | `openai_connector.py` | OpenAI-compatible API connector (`/v1/chat/completions`), works with Vercel AI Gateway, Groq, etc. |
 | `main.py` | FastAPI admin endpoints (/sessions, /approvals, /events, POST /task) |
 | `admin_client.py` | Admin API client library (programmatic access to admin endpoints) |
@@ -183,7 +184,7 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 
 ### Connector Settings
 
-- `apple_flow_connector` - connector to use: `"codex-cli"` (default), `"claude-cli"`, `"ollama"`, `"openai"`, `"codex-app-server"` (deprecated)
+- `apple_flow_connector` - connector to use: `"codex-cli"` (default), `"claude-cli"`, `"cline"`, `"ollama"`, `"openai"`, `"codex-app-server"` (deprecated)
 - `apple_flow_codex_turn_timeout_seconds` - timeout for all connectors (default: 300s/5min)
 
 **Codex CLI** (`connector=codex-cli`, requires `codex login`):
@@ -197,9 +198,14 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 - `apple_flow_claude_cli_model` - model flag (e.g. `claude-sonnet-4-6`, `claude-opus-4-6`; empty = claude default)
 - `apple_flow_claude_cli_dangerously_skip_permissions` - pass `--dangerously-skip-permissions` (default: true)
 
-**Ollama API** (`connector=ollama`, local or cloud):
-- `apple_flow_ollama_base_url` - API base URL (default: `http://localhost:11434`; use `https://ollama.com` for cloud)
-- `apple_flow_ollama_api_key` - Bearer token (required for Ollama Cloud, empty for local)
+**Cline CLI** (`connector=cline`, requires `npm install -g cline && cline auth`):
+- `apple_flow_cline_command` - path to cline binary (default: "cline")
+- `apple_flow_cline_context_window` - recent exchanges to include as context (default: 3)
+- `apple_flow_cline_model` - model flag (e.g. `claude-sonnet-4-5-20250929`, `gpt-4o`, `kimi-k2`; empty = cline default)
+- `apple_flow_cline_use_json` - use `--json` for structured NDJSON output (default: true)
+
+**Ollama API** (`connector=ollama`, local Ollama only):
+- `apple_flow_ollama_base_url` - API base URL (default: `http://localhost:11434`)
 - `apple_flow_ollama_model` - model name (default: `llama3.3`)
 - `apple_flow_ollama_context_window` - recent exchanges to include as context (default: 3)
 - `apple_flow_ollama_system_prompt` - optional system message prepended to conversations
@@ -331,7 +337,8 @@ tests/test_siri_shortcuts.py      # POST /task admin API endpoint
 tests/test_progress_streaming.py  # Incremental progress updates
 tests/test_attachments.py         # File attachment support
 tests/test_cli_connector.py       # Stateless CLI connector (codex exec)
-tests/test_ollama_connector.py    # Ollama native API connector
+tests/test_cline_connector.py     # Cline CLI connector (cline -y, agentic)
+tests/test_ollama_connector.py    # Ollama native API connector (local)
 tests/test_openai_connector.py    # OpenAI-compatible API connector
 tests/test_admin_api.py           # FastAPI admin endpoints
 ```
@@ -353,6 +360,7 @@ tests/test_admin_api.py           # FastAPI admin endpoints
 - Authentication for your chosen connector (run once):
   - `codex login` — if using `apple_flow_connector=codex-cli` (default)
   - `claude auth login` — if using `apple_flow_connector=claude-cli`
+  - `npm install -g cline && cline auth` — if using `apple_flow_connector=cline`
 - For Apple Mail integration: Apple Mail configured and running on this Mac
 - For Apple Reminders integration: Reminders.app on this Mac, a list named per config (default: "Codex Tasks")
 - For Apple Notes integration: Notes.app on this Mac, a folder named per config (default: "Codex Inbox")
@@ -395,6 +403,7 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 ### Connector selection
 - `"codex-cli"` (default): `codex_cli_connector.py` — stateless `codex exec`, requires `codex login`
 - `"claude-cli"`: `claude_cli_connector.py` — stateless `claude -p`, requires `claude auth login`
+- `"cline"`: `cline_connector.py` — agentic `cline -y`, full tool-use with any provider, requires `npm install -g cline && cline auth`
 - `"ollama"`: `ollama_connector.py` — Ollama native API (`/api/chat`), local or cloud, no binary dependency
 - `"openai"`: `openai_connector.py` — OpenAI-compatible API (`/v1/chat/completions`), works with Vercel AI Gateway, Groq, Together, LM Studio, vLLM, etc.
 - `"codex-app-server"` (deprecated): `codex_connector.py` — stateful JSON-RPC, prone to state corruption

@@ -12,22 +12,21 @@ logger = logging.getLogger("apple_flow.ollama_connector")
 class OllamaConnector:
     """Ollama native API connector using /api/chat.
 
-    Sends HTTP requests to the Ollama API (local or cloud) for each turn.
-    Supports both local Ollama (http://localhost:11434) and Ollama Cloud
-    (https://ollama.com) with Bearer token authentication.
+    Sends HTTP requests to a local Ollama instance for each turn.
+    For cloud models or agentic execution, use the Cline connector instead
+    (connector="cline"), which supports Ollama and many other providers
+    with full tool-use capabilities.
     """
 
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        api_key: str = "",
         model: str = "llama3.3",
         timeout: float = 300.0,
         context_window: int = 3,
         system_prompt: str = "",
     ):
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key.strip()
         self.model = model.strip()
         self.timeout = timeout
         self.context_window = context_window
@@ -37,14 +36,8 @@ class OllamaConnector:
         # Format: {"sender": [{"role": "user", "content": "..."}, ...]}
         self._sender_messages: dict[str, list[dict[str, str]]] = {}
 
-        # Build default headers
-        headers: dict[str, str] = {}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-
         self._client = httpx.Client(
             timeout=httpx.Timeout(self.timeout),
-            headers=headers,
         )
 
     def ensure_started(self) -> None:
@@ -98,10 +91,6 @@ class OllamaConnector:
                 f"{self.base_url}/api/chat",
                 json=payload,
             )
-
-            if resp.status_code == 401:
-                logger.error("Ollama API authentication failed (401)")
-                return "Error: Authentication failed. Check apple_flow_ollama_api_key setting."
 
             if resp.status_code == 404:
                 logger.error("Ollama model not found: %s", self.model)

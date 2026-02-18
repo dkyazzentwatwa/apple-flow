@@ -11,6 +11,7 @@ from pathlib import Path
 from .calendar_egress import AppleCalendarEgress
 from .calendar_ingress import AppleCalendarIngress
 from .claude_cli_connector import ClaudeCliConnector
+from .cline_connector import ClineConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
 from .config import RelaySettings
@@ -49,7 +50,7 @@ class RelayDaemon:
 
         # Choose connector based on configuration
         connector_type = settings.get_connector_type()
-        known_connectors = {"codex-cli", "claude-cli", "codex-app-server", "ollama", "openai"}
+        known_connectors = {"codex-cli", "claude-cli", "cline", "codex-app-server", "ollama", "openai"}
         if connector_type not in known_connectors:
             raise ValueError(
                 f"Unknown connector type: {connector_type!r}. "
@@ -76,11 +77,20 @@ class RelayDaemon:
                 model=settings.claude_cli_model,
                 dangerously_skip_permissions=settings.claude_cli_dangerously_skip_permissions,
             )
+        elif connector_type == "cline":
+            logger.info("Using Cline CLI connector (cline -y) for agentic execution")
+            self.connector = ClineConnector(
+                cline_command=settings.cline_command,
+                workspace=settings.default_workspace,
+                timeout=settings.codex_turn_timeout_seconds,
+                context_window=settings.cline_context_window,
+                model=settings.cline_model,
+                use_json=settings.cline_use_json,
+            )
         elif connector_type == "ollama":
             logger.info("Using Ollama API connector (%s)", settings.ollama_base_url)
             self.connector = OllamaConnector(
                 base_url=settings.ollama_base_url,
-                api_key=settings.ollama_api_key,
                 model=settings.ollama_model,
                 timeout=settings.codex_turn_timeout_seconds,
                 context_window=settings.ollama_context_window,
@@ -603,6 +613,9 @@ class RelayDaemon:
         if connector_type == "claude-cli":
             model_val = self.settings.claude_cli_model or "claude default"
             connector_line = "⚙️  Engine: claude -p (stateless)"
+        elif connector_type == "cline":
+            model_val = self.settings.cline_model or "cline default"
+            connector_line = "⚙️  Engine: cline -y (agentic)"
         elif connector_type == "ollama":
             model_val = self.settings.ollama_model or "ollama default"
             connector_line = f"⚙️  Engine: Ollama API ({self.settings.ollama_base_url})"
