@@ -59,7 +59,7 @@ def test_no_log_note_when_log_egress_is_none():
 
 
 def test_task_completion_calls_create_log_note():
-    """Task approval+execution creates one log note with the final output."""
+    """Task queuing logs the plan, and execution logs the final output."""
     mock_log = MagicMock()
     mock_log.create_log_note.return_value = True
 
@@ -71,11 +71,13 @@ def test_task_completion_calls_create_log_note():
     request_id = result.approval_request_id
     assert request_id
 
-    # Not yet logged — only plan sent
-    mock_log.create_log_note.assert_not_called()
-
-    # Approve → executes → logs
-    orc.handle_message(_make_msg(f"approve {request_id}", id="a1"))
+    # Logged once when plan is created and approval iMessage is sent
     mock_log.create_log_note.assert_called_once()
-    body = mock_log.create_log_note.call_args[1]["body"]
-    assert "Execution" in body or "Response" in body
+    plan_body = mock_log.create_log_note.call_args[1]["body"]
+    assert "approve" in plan_body.lower() or "plan" in plan_body.lower()
+
+    # Approve → executes → logs a second time with the final output
+    orc.handle_message(_make_msg(f"approve {request_id}", id="a1"))
+    assert mock_log.create_log_note.call_count == 2
+    exec_body = mock_log.create_log_note.call_args[1]["body"]
+    assert "Execution" in exec_body or "Response" in exec_body

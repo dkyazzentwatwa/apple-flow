@@ -542,14 +542,22 @@ class RelayDaemon:
                     logger.info("Handled note id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
 
                     if result.response and note_id:
-                        # Move completed notes to archive subfolder
                         folder_name = msg.context.get("folder_name", self.settings.notes_folder_name)
-                        self.notes_egress.move_to_archive(
-                            note_id=note_id,
-                            result_text=f"\n\n[Apple Flow Result]\n{result.response}",
-                            source_folder_name=folder_name,
-                            archive_subfolder_name=self.settings.notes_archive_folder_name,
-                        )
+                        if result.kind.value in ("task", "project"):
+                            # Task is awaiting approval — annotate note but don't archive yet.
+                            # Archiving happens in _handle_post_execution_cleanup after the task executes.
+                            self.notes_egress.append_result(
+                                note_id,
+                                f"[Apple Flow] Awaiting approval — check iMessage to approve/deny.",
+                            )
+                        else:
+                            # Non-mutating result — move to archive immediately.
+                            self.notes_egress.move_to_archive(
+                                note_id=note_id,
+                                result_text=f"\n\n[Apple Flow Result]\n{result.response}",
+                                source_folder_name=folder_name,
+                                archive_subfolder_name=self.settings.notes_archive_folder_name,
+                            )
 
                     # Mark processed only after the run path completes so failed runs can be retried.
                     if note_id:
@@ -588,7 +596,16 @@ class RelayDaemon:
                     logger.info("Handled calendar event id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
 
                     if result.response and event_id:
-                        self.calendar_egress.annotate_event(event_id, result.response)
+                        if result.kind.value in ("task", "project"):
+                            # Task is awaiting approval — send a short status annotation.
+                            # The full plan was already sent via iMessage.
+                            # Final result is written by _handle_post_execution_cleanup after execution.
+                            self.calendar_egress.annotate_event(
+                                event_id,
+                                f"[Apple Flow] Awaiting approval — check iMessage to approve/deny.",
+                            )
+                        else:
+                            self.calendar_egress.annotate_event(event_id, result.response)
             except Exception as exc:
                 logger.exception("Calendar polling loop error: %s", exc)
 
