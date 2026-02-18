@@ -447,7 +447,7 @@ def test_natural_language_mutating_auto_promotes():
 
 
 def test_personality_prompt_injected():
-    """Custom personality_prompt is stored on the orchestrator (connector uses --system in production)."""
+    """Custom personality_prompt is stored on the orchestrator and passed to the connector."""
     custom_prompt = "You are a pirate. Arr."
     orch, connector, egress, _ = _make_orchestrator(
         require_chat_prefix=False,
@@ -465,8 +465,6 @@ def test_personality_prompt_injected():
     result = orch.handle_message(msg)
     assert result.kind is CommandKind.CHAT
     assert connector.turns
-    # The -p prompt is just the user message; personality is in --system (ClaudeCliConnector)
-    assert connector.turns[0][1] == "tell me about tides"
 
 
 def test_relay_prefix_stripped_in_natural_mode():

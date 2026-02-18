@@ -804,16 +804,15 @@ class TestConnectorToolsContextInjection:
         from apple_flow.claude_cli_connector import ClaudeCliConnector
 
         conn = ClaudeCliConnector(inject_tools_context=True)
-        # TOOLS_CONTEXT is now in --system, not in the -p prompt
-        system = conn._build_system_prompt()
-        assert "apple-flow tools" in system
+        prompt = conn._build_prompt_with_context("sender", "do something")
+        assert "apple-flow tools" in prompt
 
     def test_claude_connector_no_injection_when_disabled(self):
         from apple_flow.claude_cli_connector import ClaudeCliConnector
 
         conn = ClaudeCliConnector(inject_tools_context=False)
-        system = conn._build_system_prompt()
-        assert "apple-flow tools" not in system
+        prompt = conn._build_prompt_with_context("sender", "do something")
+        assert "apple-flow tools" not in prompt
 
     def test_codex_connector_injects_tools_context(self):
         from apple_flow.codex_cli_connector import CodexCliConnector
@@ -833,11 +832,9 @@ class TestConnectorToolsContextInjection:
         from apple_flow.claude_cli_connector import ClaudeCliConnector
 
         conn = ClaudeCliConnector(inject_tools_context=True, context_window=3)
-        # TOOLS_CONTEXT is now in --system; verify it's there
-        assert "apple-flow tools" in conn._build_system_prompt()
-        # Conversation history is still in the -p prompt
         conn._sender_contexts["sender"] = ["User: hi\nAssistant: hello"]
         prompt = conn._build_prompt_with_context("sender", "next message")
+        assert "apple-flow tools" in prompt
         assert "Previous conversation context" in prompt
         assert "next message" in prompt
 

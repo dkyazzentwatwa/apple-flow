@@ -60,7 +60,7 @@ class ClaudeCliConnector:
         self._sender_contexts: dict[str, list[str]] = {}
 
     def _build_system_prompt(self) -> str:
-        """Build the --system argument from personality + TOOLS_CONTEXT."""
+        """Build the system context block from personality + TOOLS_CONTEXT."""
         parts = []
         if self.system_prompt:
             parts.append(self.system_prompt)
@@ -79,9 +79,6 @@ class ClaudeCliConnector:
             cmd.extend(["--tools", ",".join(self.tools)])
         if self.allowed_tools:
             cmd.extend(["--allowedTools", ",".join(self.allowed_tools)])
-        system = self._build_system_prompt()
-        if system:
-            cmd.extend(["--system", system])
         cmd.extend(["-p", full_prompt])
         return cmd
 
@@ -247,12 +244,20 @@ class ClaudeCliConnector:
         """
         history = self._sender_contexts.get(sender, [])
 
-        if not history:
-            return prompt
+        parts: list[str] = []
 
-        recent_context = history[-self.context_window:]
-        context_text = "\n\n".join(recent_context)
-        return f"Previous conversation context:\n{context_text}\n\nNew message:\n{prompt}"
+        system = self._build_system_prompt()
+        if system:
+            parts.append(system)
+
+        if history:
+            recent_context = history[-self.context_window:]
+            context_text = "\n\n".join(recent_context)
+            parts.append(f"Previous conversation context:\n{context_text}")
+
+        parts.append(f"New message:\n{prompt}" if (history or system) else prompt)
+
+        return "\n\n".join(parts)
 
     def _store_exchange(self, sender: str, user_message: str, assistant_response: str) -> None:
         """Store a user-assistant exchange in the context history.
