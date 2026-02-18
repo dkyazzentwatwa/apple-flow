@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -8,9 +9,13 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
+logger = logging.getLogger("apple_flow.orchestrator")
+
 from .commanding import CommandKind, ParsedCommand, parse_command
 from .models import InboundMessage, RunState
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
+
+_SEP = "━" * 30
 
 @dataclass(slots=True)
 class OrchestrationResult:
@@ -42,6 +47,8 @@ class RelayOrchestrator:
         notes_archive_folder_name: str = "codex-archive",
         calendar_egress: Any = None,
         shutdown_callback: Callable[[], None] | None = None,
+        log_notes_egress: Any = None,
+        notes_log_folder_name: str = "codex-logs",
     ):
         self.connector = connector
         self.egress = egress
@@ -62,6 +69,8 @@ class RelayOrchestrator:
         self.notes_archive_folder_name = notes_archive_folder_name
         self.calendar_egress = calendar_egress
         self.shutdown_callback = shutdown_callback
+        self.log_notes_egress = log_notes_egress
+        self.notes_log_folder_name = notes_log_folder_name
 
     # --- Workspace Resolution (Feature 1) ---
 
@@ -152,6 +161,7 @@ class RelayOrchestrator:
 
         response = self.connector.run_turn(thread_id, prompt)
         self.egress.send(message.sender, response)
+        self._log_to_notes(command.kind.value, message.sender, command.payload, response)
         return OrchestrationResult(kind=command.kind, response=response)
 
     # --- Feature 2: Health Dashboard ---
@@ -351,6 +361,7 @@ class RelayOrchestrator:
         )
         final = f"Execution:\n{execution_output}\n\nVerification:\n{verification_output}"
         self.egress.send(sender, final)
+        self._log_to_notes(kind.value, sender, run.get("intent", ""), final)
 
         # Post-execution cleanup: move reminders to archive, update notes, etc.
         source_context = self.store.get_run_source_context(approval["run_id"])
@@ -495,6 +506,38 @@ class RelayOrchestrator:
             event_id = source_context.get("event_id")
             if event_id and hasattr(self.calendar_egress, "annotate_event"):
                 self.calendar_egress.annotate_event(event_id, f"\n\n[Codex Result]\n{result}")
+
+    def _log_to_notes(self, kind: str, sender: str, request: str, response: str) -> None:
+        """Create a plain-text log note for a completed AI turn (fire-and-forget)."""
+        if self.log_notes_egress is None:
+            return
+        try:
+            now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+            payload_preview = request[:50].replace("\n", " ")
+            title = f"[{kind}] {payload_preview} — {now_str}"
+
+            body = (
+                f"CODEX LOG\n"
+                f"{_SEP}\n"
+                f"Command: {kind}  |  Sender: {sender}\n"
+                f"Time: {now_str}\n"
+                f"{_SEP}\n"
+                f"REQUEST\n"
+                f"{_SEP}\n\n"
+                f"{request}\n\n"
+                f"{_SEP}\n"
+                f"RESPONSE\n"
+                f"{_SEP}\n\n"
+                f"{response}\n"
+            )
+
+            self.log_notes_egress.create_log_note(
+                folder_name=self.notes_log_folder_name,
+                title=title,
+                body=body,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Failed to log to Notes: %s", exc)
 
     # --- Prompt Building ---
 

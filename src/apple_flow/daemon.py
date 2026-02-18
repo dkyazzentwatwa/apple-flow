@@ -84,6 +84,25 @@ class RelayDaemon:
                 model=settings.codex_cli_model,
             )
 
+        # Create channel-specific egress objects first so they can be passed to main orchestrator
+        # (for post-execution cleanup after approval)
+        reminders_egress_obj = None
+        notes_egress_obj = None
+        calendar_egress_obj = None
+
+        if settings.enable_reminders_polling:
+            reminders_egress_obj = AppleRemindersEgress(list_name=settings.reminders_list_name)
+        if settings.enable_notes_polling:
+            notes_egress_obj = AppleNotesEgress(folder_name=settings.notes_folder_name)
+        if settings.enable_calendar_polling:
+            calendar_egress_obj = AppleCalendarEgress(calendar_name=settings.calendar_name)
+
+        # Notes logging egress (write-only, independent of notes polling)
+        notes_log_egress_obj = None
+        if settings.enable_notes_logging:
+            notes_log_egress_obj = AppleNotesEgress(folder_name=settings.notes_log_folder_name)
+            logger.info("Notes logging enabled (folder=%r)", settings.notes_log_folder_name)
+
         # Shared orchestrator params
         workspace_aliases = settings.get_workspace_aliases()
         orchestrator_kwargs = dict(
@@ -99,20 +118,9 @@ class RelayDaemon:
             progress_update_interval_seconds=settings.progress_update_interval_seconds,
             enable_attachments=settings.enable_attachments,
             shutdown_callback=self.request_shutdown,
+            log_notes_egress=notes_log_egress_obj,
+            notes_log_folder_name=settings.notes_log_folder_name,
         )
-
-        # Create channel-specific egress objects first so they can be passed to main orchestrator
-        # (for post-execution cleanup after approval)
-        reminders_egress_obj = None
-        notes_egress_obj = None
-        calendar_egress_obj = None
-
-        if settings.enable_reminders_polling:
-            reminders_egress_obj = AppleRemindersEgress(list_name=settings.reminders_list_name)
-        if settings.enable_notes_polling:
-            notes_egress_obj = AppleNotesEgress(folder_name=settings.notes_folder_name)
-        if settings.enable_calendar_polling:
-            calendar_egress_obj = AppleCalendarEgress(calendar_name=settings.calendar_name)
 
         self.orchestrator = RelayOrchestrator(
             egress=self.egress,

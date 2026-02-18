@@ -89,6 +89,10 @@ class RelaySettings(BaseSettings):
     notes_auto_approve: bool = False
     notes_poll_interval_seconds: float = 10.0
 
+    # Notes logging (write-only, independent of notes polling)
+    enable_notes_logging: bool = False
+    notes_log_folder_name: str = "codex-logs"
+
     # Apple Calendar integration settings
     enable_calendar_polling: bool = False
     calendar_name: str = "Codex Schedule"
