@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import time
 from datetime import datetime, timezone
 
 from .models import InboundMessage
@@ -29,12 +30,18 @@ class AppleNotesIngress:
         trigger_tag: str = "#codex",
         owner_sender: str = "",
         auto_approve: bool = False,
+        fetch_timeout_seconds: float = 20.0,
+        fetch_retries: int = 1,
+        fetch_retry_delay_seconds: float = 1.5,
         store: StoreProtocol | None = None,
     ):
         self.folder_name = folder_name
         self.trigger_tag = trigger_tag.strip()
         self.owner_sender = owner_sender
         self.auto_approve = auto_approve
+        self.fetch_timeout_seconds = fetch_timeout_seconds
+        self.fetch_retries = max(0, int(fetch_retries))
+        self.fetch_retry_delay_seconds = max(0.0, float(fetch_retry_delay_seconds))
         self._store = store
         self._processed_ids: set[str] = set()
         if store is not None:
@@ -194,30 +201,43 @@ class AppleNotesIngress:
         end escapeJSON
         '''
 
-        try:
-            result = subprocess.run(
-                ["osascript", "-e", script],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            if result.returncode != 0:
-                logger.warning("Notes AppleScript failed (rc=%s): %s", result.returncode, result.stderr.strip())
+        max_attempts = self.fetch_retries + 1
+        for attempt in range(1, max_attempts + 1):
+            try:
+                result = subprocess.run(
+                    ["osascript", "-e", script],
+                    capture_output=True,
+                    text=True,
+                    timeout=self.fetch_timeout_seconds,
+                )
+                if result.returncode != 0:
+                    logger.warning("Notes AppleScript failed (rc=%s): %s", result.returncode, result.stderr.strip())
+                    return []
+                output = result.stdout.strip()
+                if not output or output == "[]":
+                    return []
+                cleaned = "".join(char if (32 <= ord(char) < 127) else " " for char in output)
+                return json.loads(cleaned)
+            except json.JSONDecodeError as exc:
+                logger.warning("Failed to parse Notes AppleScript output: %s", exc)
                 return []
-            output = result.stdout.strip()
-            if not output or output == "[]":
+            except subprocess.TimeoutExpired:
+                if attempt >= max_attempts:
+                    logger.warning(
+                        "Notes AppleScript fetch timed out after %d attempt(s)", max_attempts
+                    )
+                    return []
+                logger.warning(
+                    "Notes AppleScript fetch timed out (attempt %d/%d); retrying in %.1fs",
+                    attempt,
+                    max_attempts,
+                    self.fetch_retry_delay_seconds,
+                )
+                time.sleep(self.fetch_retry_delay_seconds)
+            except FileNotFoundError:
+                logger.warning("osascript not found — Apple Notes ingress requires macOS")
                 return []
-            cleaned = "".join(char if (32 <= ord(char) < 127) else " " for char in output)
-            return json.loads(cleaned)
-        except json.JSONDecodeError as exc:
-            logger.warning("Failed to parse Notes AppleScript output: %s", exc)
-            return []
-        except subprocess.TimeoutExpired:
-            logger.warning("Notes AppleScript fetch timed out")
-            return []
-        except FileNotFoundError:
-            logger.warning("osascript not found — Apple Notes ingress requires macOS")
-            return []
-        except Exception as exc:
-            logger.warning("Unexpected error fetching notes: %s", exc)
-            return []
+            except Exception as exc:
+                logger.warning("Unexpected error fetching notes: %s", exc)
+                return []
+        return []

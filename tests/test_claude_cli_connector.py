@@ -147,6 +147,29 @@ def test_run_turn_no_model_flag_when_empty():
         assert "--model" not in args[0]
 
 
+def test_run_turn_with_tools_flags():
+    """Test that --tools and --allowedTools are included when configured."""
+    connector = ClaudeCliConnector(
+        claude_command="claude",
+        tools=["default", "WebSearch"],
+        allowed_tools=["WebSearch"],
+    )
+
+    mock_result = Mock()
+    mock_result.returncode = 0
+    mock_result.stdout = "response"
+    mock_result.stderr = ""
+
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
+        connector.run_turn("+15551234567", "test prompt")
+
+        args, _ = mock_run.call_args
+        assert "--tools" in args[0]
+        assert "default,WebSearch" in args[0]
+        assert "--allowedTools" in args[0]
+        assert "WebSearch" in args[0]
+
+
 def test_run_turn_with_context():
     """Test that context is included in subsequent messages."""
     connector = ClaudeCliConnector(context_window=2)

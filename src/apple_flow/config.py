@@ -41,6 +41,8 @@ class RelaySettings(BaseSettings):
     claude_cli_dangerously_skip_permissions: bool = True
     claude_cli_context_window: int = 3
     claude_cli_model: str = ""  # e.g. "claude-sonnet-4-6", "claude-opus-4-6"
+    claude_cli_tools: list[str] = Field(default_factory=list)  # e.g. ["default", "WebSearch"]
+    claude_cli_allowed_tools: list[str] = Field(default_factory=list)  # e.g. ["WebSearch"]
 
     admin_host: str = "127.0.0.1"
     admin_port: int = 8787
@@ -88,6 +90,9 @@ class RelaySettings(BaseSettings):
     notes_owner: str = ""
     notes_auto_approve: bool = False
     notes_poll_interval_seconds: float = 10.0
+    notes_fetch_timeout_seconds: float = 20.0
+    notes_fetch_retries: int = 1
+    notes_fetch_retry_delay_seconds: float = 1.5
 
     # Notes logging (write-only, independent of notes polling)
     enable_notes_logging: bool = False
@@ -110,7 +115,14 @@ class RelaySettings(BaseSettings):
     max_attachment_size_mb: int = 10
     attachment_temp_dir: str = "/tmp/apple_flow_attachments"
 
-    @field_validator("allowed_senders", "allowed_workspaces", "mail_allowed_senders", mode="before")
+    @field_validator(
+        "allowed_senders",
+        "allowed_workspaces",
+        "mail_allowed_senders",
+        "claude_cli_tools",
+        "claude_cli_allowed_tools",
+        mode="before",
+    )
     @classmethod
     def _parse_csv_or_json_list(cls, value: Any) -> Any:
         if isinstance(value, list):

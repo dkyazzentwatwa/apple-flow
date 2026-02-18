@@ -187,16 +187,17 @@ class AppleNotesEgress:
                 ["osascript", "-e", script],
                 capture_output=True,
                 text=True,
-                timeout=15,
+                timeout=45,
             )
             output = result.stdout.strip()
             if result.returncode != 0 or output.startswith("error:"):
-                logger.warning("Failed to create log note in %r: %s", folder_name, output)
+                logger.warning("Failed to create log note in %r: rc=%s out=%s err=%s",
+                               folder_name, result.returncode, output, result.stderr.strip())
                 return False
             logger.info("Created log note %r in folder %r", title[:60], folder_name)
             return True
         except subprocess.TimeoutExpired:
-            logger.warning("Timed out creating log note in %r", folder_name)
+            logger.warning("Timed out (45s) creating log note in %r", folder_name)
             return False
         except FileNotFoundError:
             logger.warning("osascript not found — Apple Notes egress requires macOS")
