@@ -58,7 +58,7 @@ launchctl stop local.apple-flow && launchctl start local.apple-flow
 - **iMessage** — poll local Messages database for inbound commands
 - **Apple Mail** — text OR email Claude with threaded replies and custom signatures
 - **Apple Reminders** — incomplete reminders in a designated list become Codex tasks
-- **Apple Notes** — notes tagged with `!!codex` (configurable) trigger Codex tasks
+- **Apple Notes** — notes tagged with `!!codex` (configurable) trigger Codex tasks; optional per-turn logging of AI responses to a "codex-logs" folder
 - **Apple Calendar** — events in a designated calendar become scheduled tasks when due
 - **Stateless CLI connector** (default) — `codex exec` per turn, eliminates state corruption freezes
 - **Claude Code CLI connector** — swap to `claude -p` by setting `apple_flow_connector=claude-cli`
@@ -149,6 +149,19 @@ Features:
 - Works alongside iMessage seamlessly
 
 If `apple_flow_send_startup_intro=true`, relay sends an intro iMessage on startup with current workspace + command list.
+
+### Notes Logging (Optional)
+
+Log every AI response as a new Apple Note for easy review outside iMessage:
+
+```bash
+apple_flow_enable_notes_logging=true
+apple_flow_notes_log_folder_name=codex-logs  # default
+```
+
+Each completed AI turn (chat, idea, plan, task) creates a note in the configured folder. Notes are titled `[<command>] <request preview> — <timestamp>` and contain the full request and response. The folder is created automatically if it does not exist.
+
+This is independent of the notes polling ingress (`enable_notes_polling`) — you can enable logging without enabling Notes as a task source.
 
 ## Security Defaults
 
