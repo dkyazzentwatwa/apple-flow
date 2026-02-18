@@ -190,7 +190,28 @@ class RelayOrchestrator:
 
         if command.kind is CommandKind.STATUS:
             pending = self.store.list_pending_approvals()
-            response = f"Pending approvals: {len(pending)}"
+            if not pending:
+                response = "No pending approvals."
+            else:
+                lines = [f"Pending approvals ({len(pending)}):"]
+                for req in pending:
+                    req_id = req.get("request_id", "?")
+                    summary = req.get("summary", "")
+                    preview = req.get("command_preview", "")[:80].replace("\n", " ")
+                    lines.append(f"\n{req_id}")
+                    lines.append(f"  {preview}")
+                lines.append(f"\nReply `approve <id>` or `deny <id>` to act on one.")
+                lines.append("Reply `deny all` to cancel all.")
+                response = "\n".join(lines)
+            self.egress.send(message.sender, response)
+            return OrchestrationResult(kind=command.kind, response=response)
+
+        if command.kind is CommandKind.DENY_ALL:
+            if not hasattr(self.store, "deny_all_approvals"):
+                response = "deny all not supported by this store."
+            else:
+                count = self.store.deny_all_approvals()
+                response = f"Cancelled {count} pending approval{'s' if count != 1 else ''}." if count else "No pending approvals to cancel."
             self.egress.send(message.sender, response)
             return OrchestrationResult(kind=command.kind, response=response)
 

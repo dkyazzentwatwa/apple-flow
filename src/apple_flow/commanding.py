@@ -14,6 +14,7 @@ class CommandKind(str, Enum):
     CLEAR_CONTEXT = "clear_context"
     APPROVE = "approve"
     DENY = "deny"
+    DENY_ALL = "deny_all"
     STATUS = "status"
     HEALTH = "health"
     HISTORY = "history"
@@ -100,6 +101,9 @@ def parse_command(raw_text: str) -> ParsedCommand:
 
     if lowered.startswith("approve "):
         return ParsedCommand(kind=CommandKind.APPROVE, payload=text.split(" ", 1)[1].strip())
+
+    if lowered in {"deny all", "clear approvals", "cancel all"}:
+        return ParsedCommand(kind=CommandKind.DENY_ALL, payload="")
 
     if lowered.startswith("deny "):
         return ParsedCommand(kind=CommandKind.DENY, payload=text.split(" ", 1)[1].strip())
