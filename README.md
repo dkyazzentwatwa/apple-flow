@@ -2,6 +2,19 @@
 
 A local-first daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar on macOS to Claude (or Codex). Text yourself to chat with an AI, brainstorm ideas, and execute tasks in your workspace — no apps, no subscriptions beyond the AI backend.
 
+<table>
+  <tr>
+    <td><img src="docs/screenshots/dashboard.png" alt="Apple Flow Dashboard" width="200"/></td>
+    <td><img src="docs/screenshots/ai-policy-log.png" alt="Agent Log" width="200"/></td>
+    <td><img src="docs/screenshots/task-management.png" alt="Task Management" width="200"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/calendar-event.png" alt="Calendar Automation" width="200"/></td>
+    <td><img src="docs/screenshots/office-brainstorm.png" alt="Office Brainstorm" width="200"/></td>
+    <td></td>
+  </tr>
+</table>
+
 ---
 
 ## Complete Beginner Setup
