@@ -47,8 +47,8 @@ This only configures and installs the auto-start service.
 
 5. **Restart the service:**
    ```bash
-   launchctl stop com.apple-flow
-   launchctl start com.apple-flow
+   launchctl stop local.apple-flow
+   launchctl start local.apple-flow
    ```
 
 ## Verify It's Running
@@ -68,10 +68,10 @@ tail -f logs/apple-flow.err.log
 
 ```bash
 # Start manually
-launchctl start com.apple-flow
+launchctl start local.apple-flow
 
 # Stop manually
-launchctl stop com.apple-flow
+launchctl stop local.apple-flow
 
 # Check status
 launchctl list | grep codex.relay
@@ -99,7 +99,7 @@ This means the setup is **portable** - it works regardless of:
 
 ```bash
 launchctl list | grep codex.relay
-# Output: -    1    com.apple-flow (- means not running, 1 is exit code)
+# Output: -    1    local.apple-flow (- means not running, 1 is exit code)
 ```
 
 **Check the error log:**

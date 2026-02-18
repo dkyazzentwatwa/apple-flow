@@ -77,7 +77,7 @@ POST /task → FastAPI → Orchestrator → Codex Connector → iMessage Egress
 |--------|---------------|
 | `__main__.py` | CLI entry point (`python -m apple_flow`), daemon lock management |
 | `daemon.py` | Main polling loop, graceful shutdown, signal handling, connector selection |
-| `orchestrator.py` | Command routing, approval gates, prompt construction, attachment/voice memo handling |
+| `orchestrator.py` | Command routing, approval gates, prompt construction, attachment handling |
 | `commanding.py` | Parses command prefixes (idea:, plan:, task:, @alias extraction, CommandKind enum) |
 | `ingress.py` | Reads from macOS Messages chat.db (read-only SQLite, attachment extraction) |
 | `egress.py` | Sends iMessages via AppleScript, deduplicates outbound messages |
@@ -99,8 +99,6 @@ POST /task → FastAPI → Orchestrator → Codex Connector → iMessage Egress
 | `notes_egress.py` | Appends Codex results back to note body |
 | `calendar_ingress.py` | Polls Apple Calendar for due events via AppleScript |
 | `calendar_egress.py` | Writes Codex results into event description/notes |
-| `voice_memo.py` | Generates voice memos from text via macOS `say` + `afconvert`, handles cleanup |
-
 ### Command Types
 
 - **Non-mutating** (execute immediately): `relay:`, `idea:`, `plan:`
@@ -234,11 +232,6 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 - `apple_flow_enable_attachments` - enable reading inbound file attachments (default: false)
 - `apple_flow_max_attachment_size_mb` - max attachment size to process (default: 10)
 - `apple_flow_attachment_temp_dir` - temp directory for attachment processing (default: /tmp/apple_flow_attachments)
-- `apple_flow_enable_voice_memos` - convert responses to voice memos via macOS TTS (default: false)
-- `apple_flow_voice_memo_voice` - macOS TTS voice name (default: "Samantha")
-- `apple_flow_voice_memo_max_chars` - max characters to convert to speech (default: 2000)
-- `apple_flow_voice_memo_send_text_too` - also send text response alongside voice memo (default: true)
-
 See `.env.example` for full list. **When adding a new config field:** update both `config.py` and `.env.example`, add docs to `README.md`, and ensure a sensible default.
 
 ## Admin API
@@ -309,7 +302,6 @@ tests/test_conversation_memory.py # History command + auto-context injection
 tests/test_siri_shortcuts.py      # POST /task admin API endpoint
 tests/test_progress_streaming.py  # Incremental progress updates
 tests/test_attachments.py         # File attachment support
-tests/test_voice_memo.py          # Voice memo generation + orchestrator integration
 tests/test_cli_connector.py       # Stateless CLI connector (codex exec)
 tests/test_admin_api.py           # FastAPI admin endpoints
 ```
@@ -338,14 +330,13 @@ tests/test_admin_api.py           # FastAPI admin endpoints
 
 ```bash
 # Start/stop service
-launchctl start com.apple-flow
-launchctl stop com.apple-flow
+launchctl start local.apple-flow
+launchctl stop local.apple-flow
 
 # Check service status
-launchctl list | grep codex.relay
+launchctl list local.apple-flow
 
-# View logs
-tail -f logs/apple-flow.log
+# View logs (all Python logging goes to stderr)
 tail -f logs/apple-flow.err.log
 ```
 
@@ -385,8 +376,8 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 
 | Metric | Value |
 |--------|-------|
-| Source modules | 24 |
-| Test files | 31 |
+| Source modules | 23 |
+| Test files | 30 |
 | Config options | 40+ |
 | Python requirement | ≥3.11 |
 | Core dependencies | fastapi, uvicorn, pydantic, pydantic-settings, httpx |

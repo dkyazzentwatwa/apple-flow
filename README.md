@@ -35,13 +35,12 @@ logs/apple-flow.err.log   # Errors and diagnostics
 
 **View logs in real-time:**
 ```bash
-tail -f logs/apple-flow.log      # Watch daemon activity
-tail -f logs/apple-flow.err.log  # Watch for errors
+tail -f logs/apple-flow.err.log  # All daemon output (Python logging goes to stderr)
 ```
 
 **Check service status:**
 ```bash
-launchctl list | grep codex.relay  # Should show PID if running
+launchctl list local.apple-flow  # Should show PID and exit status 0
 ```
 
 ## Features
@@ -58,7 +57,6 @@ launchctl list | grep codex.relay  # Should show PID if running
 - **Workspace allowlist** — Codex can only access configured paths
 - **Progress streaming** — periodic iMessage updates during long tasks
 - **File attachments** — read inbound attachments and include in prompts
-- **Voice memos** — convert responses to audio via macOS TTS
 - **Conversation memory** — auto-inject recent history into prompts
 - **Health dashboard** — `health:` command shows uptime, sessions, pending approvals
 - **Admin API** — FastAPI endpoints for sessions, approvals, audit log, programmatic task submission
