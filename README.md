@@ -46,14 +46,23 @@ brew install python@3.11 node
 
 ---
 
-### Step 3 — Install the Claude CLI and authenticate
+### Step 3 — Install an AI CLI and authenticate
 
+Pick one (or both — you can switch later via `.env`):
+
+**Option A — Claude CLI (recommended)**
 ```bash
-npm install -g @anthropic-ai/claude-code
+curl -fsSL https://claude.ai/install.sh | bash
 claude auth login
 ```
 
-This opens a browser window. Sign in with your Anthropic account.
+**Option B — Codex CLI**
+```bash
+npm install -g @openai/codex
+codex login
+```
+
+Both open a browser window to authenticate. Claude uses your Anthropic account; Codex uses your OpenAI account.
 
 ---
 
