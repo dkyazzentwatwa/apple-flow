@@ -239,6 +239,35 @@ class SQLiteStore:
             ).fetchall()
             return [self._row_to_dict(row) for row in rows if row is not None]
 
+    def deny_all_approvals(self) -> int:
+        """Mark all pending approvals as denied and their runs as denied.
+
+        Returns the number of approvals cancelled.
+        """
+        conn = self._connect()
+        with self._lock:
+            rows = conn.execute(
+                "SELECT request_id, run_id FROM approvals WHERE status = ?",
+                (ApprovalStatus.PENDING.value,),
+            ).fetchall()
+            if not rows:
+                return 0
+            ids = [row["request_id"] for row in rows]
+            run_ids = [row["run_id"] for row in rows]
+            placeholders = ",".join("?" * len(ids))
+            conn.execute(
+                f"UPDATE approvals SET status = 'denied' WHERE request_id IN ({placeholders})",
+                ids,
+            )
+            run_placeholders = ",".join("?" * len(run_ids))
+            conn.execute(
+                f"UPDATE runs SET state = '{RunState.DENIED.value}', updated_at = CURRENT_TIMESTAMP "
+                f"WHERE run_id IN ({run_placeholders})",
+                run_ids,
+            )
+            conn.commit()
+            return len(ids)
+
     def resolve_approval(self, request_id: str, status: str) -> bool:
         conn = self._connect()
         with self._lock:
