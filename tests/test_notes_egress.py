@@ -218,3 +218,83 @@ def test_move_to_archive_handles_osascript_not_found(mock_run):
     )
 
     assert ok is False
+
+
+# --- create_log_note tests ---
+
+
+@patch("apple_flow.notes_egress.subprocess.run")
+def test_create_log_note_success(mock_run):
+    result = MagicMock()
+    result.returncode = 0
+    result.stdout = "ok\n"
+    result.stderr = ""
+    mock_run.return_value = result
+
+    egress = AppleNotesEgress(folder_name="Codex Inbox")
+    ok = egress.create_log_note(
+        folder_name="codex-logs",
+        title="[chat] hello — 2024-01-15 14:32:05 UTC",
+        body="CODEX LOG\n---\nCommand: chat\n---\nhello",
+    )
+
+    assert ok is True
+    mock_run.assert_called_once()
+    script = mock_run.call_args[0][0][2]
+    assert "codex-logs" in script
+    assert "make new note" in script
+
+
+@patch("apple_flow.notes_egress.subprocess.run")
+def test_create_log_note_failure_returncode(mock_run):
+    result = MagicMock()
+    result.returncode = 1
+    result.stdout = "error: folder not found\n"
+    result.stderr = ""
+    mock_run.return_value = result
+
+    egress = AppleNotesEgress(folder_name="Codex Inbox")
+    ok = egress.create_log_note(
+        folder_name="codex-logs",
+        title="[chat] test — 2024-01-15",
+        body="body text",
+    )
+    assert ok is False
+
+
+@patch("apple_flow.notes_egress.subprocess.run")
+def test_create_log_note_timeout(mock_run):
+    mock_run.side_effect = subprocess.TimeoutExpired(cmd="osascript", timeout=15)
+
+    egress = AppleNotesEgress(folder_name="Codex Inbox")
+    ok = egress.create_log_note("codex-logs", "[idea] test", "body text")
+    assert ok is False
+
+
+@patch("apple_flow.notes_egress.subprocess.run")
+def test_create_log_note_osascript_not_found(mock_run):
+    mock_run.side_effect = FileNotFoundError("osascript not found")
+
+    egress = AppleNotesEgress(folder_name="Codex Inbox")
+    ok = egress.create_log_note("codex-logs", "[plan] test", "body text")
+    assert ok is False
+
+
+@patch("apple_flow.notes_egress.subprocess.run")
+def test_create_log_note_escapes_double_quotes(mock_run):
+    result = MagicMock()
+    result.returncode = 0
+    result.stdout = "ok\n"
+    result.stderr = ""
+    mock_run.return_value = result
+
+    egress = AppleNotesEgress(folder_name="Codex Inbox")
+    ok = egress.create_log_note(
+        folder_name="codex-logs",
+        title='[chat] He said "hello"',
+        body='He said "hello" and goodbye',
+    )
+    assert ok is True
+    script = mock_run.call_args[0][0][2]
+    # Double quotes in title/body must be backslash-escaped for AppleScript
+    assert '\\"hello\\"' in script

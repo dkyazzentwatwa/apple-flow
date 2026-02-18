@@ -146,3 +146,61 @@ class AppleNotesEgress:
         except Exception as exc:
             logger.warning("Unexpected error moving note %s to archive: %s", note_id, exc)
             return False
+
+    def create_log_note(self, folder_name: str, title: str, body: str) -> bool:
+        """Create a new plain-text note in folder_name.
+
+        The folder is created automatically if it does not exist.
+        Returns True on success, False on any failure (never raises).
+        """
+        def _esc(text: str) -> str:
+            return (
+                text
+                .replace("\\", "\\\\")
+                .replace('"', '\\"')
+                .replace("\n", "\\n")
+                .replace("\r", "")
+            )
+
+        ef = _esc(folder_name)
+        et = _esc(title)
+        eb = _esc(body)
+
+        script = f'''
+        tell application "Notes"
+            try
+                if not (exists folder "{ef}") then
+                    set targetFolder to make new folder with properties {{name:"{ef}"}}
+                else
+                    set targetFolder to folder "{ef}"
+                end if
+                make new note at targetFolder with properties {{name:"{et}", body:"{eb}"}}
+                return "ok"
+            on error errMsg
+                return "error: " & errMsg
+            end try
+        end tell
+        '''
+
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            output = result.stdout.strip()
+            if result.returncode != 0 or output.startswith("error:"):
+                logger.warning("Failed to create log note in %r: %s", folder_name, output)
+                return False
+            logger.info("Created log note %r in folder %r", title[:60], folder_name)
+            return True
+        except subprocess.TimeoutExpired:
+            logger.warning("Timed out creating log note in %r", folder_name)
+            return False
+        except FileNotFoundError:
+            logger.warning("osascript not found — Apple Notes egress requires macOS")
+            return False
+        except Exception as exc:
+            logger.warning("Unexpected error creating log note in %r: %s", folder_name, exc)
+            return False
