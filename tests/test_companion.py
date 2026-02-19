@@ -36,6 +36,7 @@ def _make_config(**overrides):
         companion_weekly_review_time="20:00",
         enable_memory=False,
         enable_follow_ups=False,
+        reminders_list_name="agent-task",
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -237,17 +238,19 @@ class TestObservations:
 
     def test_gather_calendar_events(self):
         comp = _make_companion()
+        soon = (datetime.now() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M")
         with patch("apple_flow.apple_tools.calendar_list_events", return_value=[
-            {"start_date": "2026-02-18 09:00", "summary": "Standup"}
+            {"start_date": soon, "summary": "Standup"}
         ]), patch("apple_flow.apple_tools.reminders_list", return_value=[]):
             obs = comp._gather_observations()
         assert any("Standup" in o for o in obs)
 
     def test_gather_reminders(self):
         comp = _make_companion()
+        overdue = (datetime.now() - timedelta(hours=2)).isoformat()
         with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
              patch("apple_flow.apple_tools.reminders_list", return_value=[
-                 {"name": "Buy milk", "due_date": "2026-02-18"}
+                 {"name": "Buy milk", "due_date": overdue, "list": "agent-task"}
              ]):
             obs = comp._gather_observations()
         assert any("Buy milk" in o for o in obs)
@@ -262,6 +265,39 @@ class TestObservations:
             obs = comp._gather_observations()
         assert any("2 untriaged" in o for o in obs)
 
+    def test_gather_office_inbox_ignores_entry_format_template(self, tmp_path):
+        inbox_dir = tmp_path / "00_inbox"
+        inbox_dir.mkdir()
+        (inbox_dir / "inbox.md").write_text(
+            "# Inbox\n\n"
+            "## Entry Format\n"
+            "- [ ] YYYY-MM-DD HH:MM | source | note\n\n"
+            "## Entries\n"
+        )
+        comp = _make_companion(office_path=tmp_path)
+        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
+             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+            obs = comp._gather_observations()
+        assert not any("untriaged item(s) in agent-office inbox" in o for o in obs)
+
+    def test_gather_office_inbox_counts_entries_section_only(self, tmp_path):
+        inbox_dir = tmp_path / "00_inbox"
+        inbox_dir.mkdir()
+        (inbox_dir / "inbox.md").write_text(
+            "# Inbox\n\n"
+            "## Entry Format\n"
+            "- [ ] YYYY-MM-DD HH:MM | source | note\n\n"
+            "## Entries\n"
+            "- [ ] Real item one\n"
+            "- [x] Done item\n"
+            "- [ ] Real item two\n"
+        )
+        comp = _make_companion(office_path=tmp_path)
+        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
+             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+            obs = comp._gather_observations()
+        assert any("2 untriaged" in o for o in obs)
+
     def test_gather_empty_when_nothing_notable(self):
         comp = _make_companion()
         with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
@@ -269,15 +305,31 @@ class TestObservations:
             obs = comp._gather_observations()
         assert isinstance(obs, list)
 
-    def test_gather_completed_tasks(self):
+    def test_calendar_cooldown_suppresses_repeat(self):
+        """Same event should not fire twice in the same cooldown window."""
         store = FakeStore()
-        store.runs["r1"] = {"state": "completed"}
-        store.runs["r2"] = {"state": "completed"}
         comp = _make_companion(store=store)
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
+        soon = (datetime.now() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M")
+        event = [{"start_date": soon, "summary": "Standup"}]
+        with patch("apple_flow.apple_tools.calendar_list_events", return_value=event), \
              patch("apple_flow.apple_tools.reminders_list", return_value=[]):
-            obs = comp._gather_observations()
-        assert any("2 completed" in o for o in obs)
+            obs1 = comp._gather_observations()
+            obs2 = comp._gather_observations()
+        assert any("Standup" in o for o in obs1)
+        assert not any("Standup" in o for o in obs2)
+
+    def test_reminder_cooldown_suppresses_repeat(self):
+        """Same overdue reminder should not fire twice."""
+        store = FakeStore()
+        comp = _make_companion(store=store)
+        overdue = (datetime.now() - timedelta(hours=1)).isoformat()
+        reminder = [{"name": "Fix bug", "due_date": overdue, "list": "agent-task"}]
+        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
+             patch("apple_flow.apple_tools.reminders_list", return_value=reminder):
+            obs1 = comp._gather_observations()
+            obs2 = comp._gather_observations()
+        assert any("Fix bug" in o for o in obs1)
+        assert not any("Fix bug" in o for o in obs2)
 
 
 # ------------------------------------------------------------------

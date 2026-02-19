@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -132,44 +133,62 @@ class CompanionLoop:
         except Exception as exc:
             logger.debug("Failed to check approvals: %s", exc)
 
-        # 2. Upcoming calendar events
+        # 2. Upcoming calendar events — only within lookahead window, cooldown per event
         try:
             from . import apple_tools
             lookahead = self.config.companion_calendar_lookahead_minutes
-            events = apple_tools.calendar_list_events(days_ahead=1, limit=10)
+            events = apple_tools.calendar_list_events(days_ahead=1, limit=20)
             if isinstance(events, list):
                 now = datetime.now()
+                cutoff = now + timedelta(minutes=lookahead)
                 for evt in events:
                     start_str = evt.get("start_date", "")
                     summary = evt.get("summary", "")
-                    if start_str and summary:
-                        observations.append(f"Upcoming event: {summary} at {start_str}")
+                    if not (start_str and summary):
+                        continue
+                    try:
+                        start_dt = datetime.fromisoformat(start_str)
+                        if not (now <= start_dt <= cutoff):
+                            continue
+                    except (ValueError, TypeError):
+                        continue
+                    cooldown_key = f"companion_evt_{summary[:40]}_{start_str[:16]}"
+                    if self.store.get_state(cooldown_key):
+                        continue
+                    self.store.set_state(cooldown_key, "1")
+                    minutes_away = int((start_dt - now).total_seconds() / 60)
+                    observations.append(f"Upcoming event in {minutes_away}m: {summary}")
         except Exception as exc:
             logger.debug("Failed to check calendar: %s", exc)
 
-        # 3. Overdue reminders
+        # 3. Overdue reminders — due < now, scoped to reminders_list_name, cooldown per item
         try:
             from . import apple_tools
             reminders = apple_tools.reminders_list(filter="incomplete", limit=20)
             if isinstance(reminders, list):
+                now = datetime.now()
                 for rem in reminders:
                     due = rem.get("due_date", "")
                     name = rem.get("name", "")
-                    if due and name:
-                        observations.append(f"Reminder: {name} (due: {due})")
+                    list_name = rem.get("list", "")
+                    if not (due and name):
+                        continue
+                    # Scope to the configured reminders list
+                    if list_name and list_name != self.config.reminders_list_name:
+                        continue
+                    try:
+                        due_dt = datetime.fromisoformat(due)
+                        if due_dt >= now:
+                            continue
+                    except (ValueError, TypeError):
+                        continue
+                    cooldown_key = f"companion_rem_{name[:40]}_{due[:10]}"
+                    if self.store.get_state(cooldown_key):
+                        continue
+                    self.store.set_state(cooldown_key, "1")
+                    observations.append(f"Overdue reminder: {name} (was due: {due[:10]})")
         except Exception as exc:
             logger.debug("Failed to check reminders: %s", exc)
-
-        # 4. Recent task completions
-        try:
-            if hasattr(self.store, "get_stats"):
-                stats = self.store.get_stats()
-                runs = stats.get("runs_by_state", {})
-                completed = runs.get("completed", 0)
-                if completed:
-                    observations.append(f"{completed} completed task(s) in history")
-        except Exception as exc:
-            logger.debug("Failed to check task completions: %s", exc)
 
         # 5. Office inbox check
         if self.office_path:
@@ -177,8 +196,7 @@ class CompanionLoop:
             if inbox_path.exists():
                 try:
                     content = inbox_path.read_text(encoding="utf-8")
-                    # Count unchecked items
-                    unchecked = content.count("- [ ]")
+                    unchecked = self._count_untriaged_inbox_items(content)
                     if unchecked > 0:
                         observations.append(f"{unchecked} untriaged item(s) in agent-office inbox")
                 except Exception as exc:
@@ -188,6 +206,38 @@ class CompanionLoop:
         observations = self._cross_channel_correlate(observations)
 
         return observations
+
+    @staticmethod
+    def _count_untriaged_inbox_items(content: str) -> int:
+        """Count unchecked markdown tasks in real inbox entries.
+
+        If an ``## Entries`` section exists, only count task lines in that section
+        so template examples (for example in ``## Entry Format``) are ignored.
+        Otherwise, fall back to counting unchecked task lines across the file.
+        """
+        unchecked_pattern = re.compile(r"^\s*-\s\[\s\]\s+")
+        lines = content.splitlines()
+
+        # Prefer scoped counting within the Entries section when present.
+        in_entries = False
+        saw_entries_header = False
+        scoped_count = 0
+        for raw_line in lines:
+            line = raw_line.strip()
+            if line.lower() == "## entries":
+                saw_entries_header = True
+                in_entries = True
+                continue
+            if in_entries and line.startswith("## "):
+                in_entries = False
+            if in_entries and unchecked_pattern.match(raw_line):
+                scoped_count += 1
+
+        if saw_entries_header:
+            return scoped_count
+
+        # Backward-compatible fallback for older inbox formats.
+        return sum(1 for line in lines if unchecked_pattern.match(line))
 
     def _cross_channel_correlate(self, observations: list[str]) -> list[str]:
         """Detect related items across channels and annotate them."""
