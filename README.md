@@ -2,6 +2,8 @@
 
 A local-first daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar on macOS to Claude (or Codex). Text yourself to chat with an AI, brainstorm ideas, and execute tasks in your workspace — no apps, no subscriptions beyond the AI backend.
 
+The optional **Autonomous Companion Layer** goes further: it proactively watches your approvals, calendar, reminders, and office inbox, synthesizes observations with AI, and sends you proactive iMessage updates — like a persistent personal assistant that checks in on you, not just one that waits to be asked.
+
 <table>
   <tr>
     <td><img src="docs/screenshots/dashboard.png" alt="Apple Flow Dashboard" width="200"/></td>
@@ -72,6 +74,18 @@ Both open a browser window to authenticate. Claude uses your Anthropic account; 
 git clone https://github.com/your-org/apple-flow.git
 cd apple-flow
 ```
+
+---
+
+### Step 4b — Bootstrap the agent-office workspace (optional, for Companion)
+
+If you plan to use the Autonomous Companion Layer, run this once after cloning:
+
+```bash
+cd agent-office && bash setup.sh && cd ..
+```
+
+This creates the folder structure for memory, daily notes, project briefs, and automation playbooks. Personal content is gitignored — only the scaffold and `SOUL.md` are tracked.
 
 ---
 
@@ -155,10 +169,13 @@ Send any of these to yourself via iMessage (or email, if mail integration is ena
 | `project: <spec>` | Full project pipeline with approval gate |
 | `approve <id>` | Execute a queued task |
 | `deny <id>` | Cancel a queued task |
+| `deny all` | Cancel all pending approvals at once |
 | `status` | Show pending approvals |
 | `health:` | Daemon uptime, session count, run states |
 | `history: [query]` | Recent messages or keyword search |
 | `clear context` | Reset conversation and start fresh |
+| `system: mute` | Silence companion proactive messages |
+| `system: unmute` | Re-enable companion proactive messages |
 | `system: stop` | Gracefully shut down the daemon |
 | `system: restart` | Shut down (launchd auto-restarts) |
 
@@ -237,6 +254,52 @@ Log every AI response as a new Note for easy review:
 ```env
 apple_flow_enable_notes_logging=true
 apple_flow_notes_log_folder_name=agent-logs
+```
+
+### Autonomous Companion
+
+A proactive companion that checks in on you: stale approvals, upcoming calendar events, overdue reminders, and office inbox items. Synthesizes observations with AI and sends you iMessages. Respects quiet hours (22:00–07:00) and a configurable rate limit (default: 4 per hour).
+
+First, bootstrap the workspace (one-time):
+
+```bash
+cd agent-office && bash setup.sh && cd ..
+```
+
+Then enable in `.env`:
+
+```env
+apple_flow_enable_companion=true
+apple_flow_companion_poll_interval_seconds=300
+apple_flow_companion_quiet_hours_start=22:00
+apple_flow_companion_quiet_hours_end=07:00
+apple_flow_companion_max_proactive_per_hour=4
+
+# Optional: daily digest note written to agent-office/10_daily/
+apple_flow_companion_enable_daily_digest=true
+apple_flow_companion_digest_time=08:00
+```
+
+**Memory** — inject durable memory into every AI prompt:
+
+```env
+apple_flow_enable_memory=true
+apple_flow_memory_max_context_chars=2000
+```
+
+**Follow-up scheduler** — automatically nudge you after task completions:
+
+```env
+apple_flow_enable_follow_ups=true
+apple_flow_default_follow_up_hours=2.0
+apple_flow_max_follow_up_nudges=3
+```
+
+**Ambient scanner** — passively reads Notes/Calendar/Mail every 15 min and enriches memory topics (never sends messages):
+
+```env
+apple_flow_enable_ambient_scanning=true
+apple_flow_ambient_scan_interval_seconds=900
 ```
 
 ---
