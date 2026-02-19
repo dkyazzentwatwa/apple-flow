@@ -225,6 +225,81 @@ Allow the AI to read files sent as iMessage attachments.
 
 ---
 
+## Agent Office
+
+Path to the companion's personality file. Injected as the system prompt for claude-cli turns when `enable_companion=true`.
+
+| Variable | Default | Description |
+|---|---|---|
+| `apple_flow_soul_file` | `agent-office/SOUL.md` | Path to `SOUL.md` injected into claude-cli as `--append-system-prompt`. Relative paths are resolved from the repo root. |
+
+Run `cd agent-office && bash setup.sh` once after cloning to scaffold the workspace directory.
+
+---
+
+## Companion Layer
+
+A proactive companion loop that observes stale approvals, upcoming calendar events, overdue reminders, and office inbox items, synthesizes them with AI, and sends proactive iMessages. All companion features are disabled by default.
+
+| Variable | Default | Description |
+|---|---|---|
+| `apple_flow_enable_companion` | `false` | Enable the CompanionLoop proactive observation loop. |
+| `apple_flow_companion_poll_interval_seconds` | `300` | How often the companion checks for new observations (seconds). |
+| `apple_flow_companion_max_proactive_per_hour` | `4` | Maximum proactive iMessages sent per hour (rate limit). |
+| `apple_flow_companion_quiet_hours_start` | `22:00` | Start of quiet hours — no proactive messages sent during this window. |
+| `apple_flow_companion_quiet_hours_end` | `07:00` | End of quiet hours. |
+| `apple_flow_companion_stale_approval_minutes` | `30` | Minutes before a pending approval is flagged as stale. |
+| `apple_flow_companion_calendar_lookahead_minutes` | `60` | How far ahead to look for upcoming calendar events. |
+| `apple_flow_companion_enable_daily_digest` | `false` | Write a daily digest note to `agent-office/10_daily/YYYY-MM-DD.md`. |
+| `apple_flow_companion_digest_time` | `08:00` | Time of day to generate the daily digest (24-hour format). |
+| `apple_flow_companion_weekly_review_day` | `sunday` | Day of week for the weekly review. |
+| `apple_flow_companion_weekly_review_time` | `20:00` | Time of day for the weekly review (24-hour format). |
+
+Control the companion from iMessage:
+- `system: mute` — silence all proactive messages
+- `system: unmute` — re-enable proactive messages
+
+**Minimal config to enable:**
+```bash
+apple_flow_enable_companion=true
+```
+
+---
+
+## Memory
+
+Inject durable memory from `agent-office/MEMORY.md` and topic files in `agent-office/60_memory/` into every AI prompt.
+
+| Variable | Default | Description |
+|---|---|---|
+| `apple_flow_enable_memory` | `false` | Inject FileMemory into AI prompts before each turn. |
+| `apple_flow_memory_max_context_chars` | `2000` | Maximum characters of memory content to inject per turn. Oldest entries are trimmed first. |
+
+---
+
+## Follow-Up Scheduler
+
+Automatically schedule follow-up nudges after task completions, stored in the `scheduled_actions` SQLite table.
+
+| Variable | Default | Description |
+|---|---|---|
+| `apple_flow_enable_follow_ups` | `false` | Enable time-triggered follow-up messages after task completions. |
+| `apple_flow_default_follow_up_hours` | `2.0` | Default delay (hours) before the first follow-up is sent. |
+| `apple_flow_max_follow_up_nudges` | `3` | Maximum number of follow-up messages per task before giving up. |
+
+---
+
+## Ambient Scanner
+
+Passively reads Notes, Calendar, and Mail every N minutes and writes enriched summaries to memory topic files. Never sends messages.
+
+| Variable | Default | Description |
+|---|---|---|
+| `apple_flow_enable_ambient_scanning` | `false` | Enable the AmbientScanner background context enrichment loop. |
+| `apple_flow_ambient_scan_interval_seconds` | `900` | How often to scan for new context (seconds). Default is 15 minutes. |
+
+---
+
 ## Recommended Safe Defaults
 
 For production use, keep these values:

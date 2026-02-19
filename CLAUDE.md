@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Apple Flow is a local-first daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar on macOS to Codex CLI/App Server. It polls the local Messages database and (optionally) Apple Mail, Reminders, Notes, and Calendar for inbound messages/tasks, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. Users can iMessage, email, add Reminders, write Notes, or schedule Calendar events for Codex. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
 
+The project also ships an optional **Autonomous Companion Layer**: a proactive loop (`companion.py`) that watches for stale approvals, upcoming calendar events, overdue reminders, and office inbox items, synthesizes observations via AI, and sends proactive iMessages. Companion state is anchored in `agent-office/` — a structured workspace directory that holds the companion's identity (`SOUL.md`), durable memory (`MEMORY.md`), topic memory files, daily notes, project briefs, and automation playbooks.
+
 **Version:** 0.2.0 | **Python:** ≥3.11 | **Package name:** `apple-flow`
 
 ## Development Commands
@@ -69,7 +71,35 @@ Calendar.app → CalendarIngress → Orchestrator → Codex Connector → iMessa
 
 POST /task → FastAPI → Orchestrator → Codex Connector → iMessage Egress
   (Siri Shortcuts / curl bridge)
+
+CompanionLoop → (stale approvals, calendar, reminders, office inbox) → AI synthesis → iMessage Egress
+  (optional, proactive; respects quiet hours + rate limit)      ↓
+                                                       FollowUpScheduler (scheduled_actions table)
+
+AmbientScanner → Notes/Calendar/Mail → FileMemory (agent-office/60_memory/)
+  (optional, passive context enrichment every 15 min; never sends messages)
 ```
+
+### Agent Office Directory (agent-office/)
+
+The companion's workspace, checked into the repo as a scaffold. Personal content is gitignored.
+
+```
+agent-office/
+  SOUL.md              # companion identity/personality — injected into claude-cli system prompt
+  MEMORY.md            # durable memory — injected into every AI prompt (when enable_memory=true)
+  SCAFFOLD.md          # describes the directory structure (tracked by git)
+  setup.sh             # idempotent bootstrap script — run once after cloning
+  60_memory/           # topic memory files (one .md per topic; written by AmbientScanner)
+  00_inbox/inbox.md    # append-only capture
+  10_daily/            # daily notes (YYYY-MM-DD.md), written by companion daily digest
+  20_projects/         # active project briefs
+  80_automation/       # routines, playbooks
+  90_logs/automation-log.md  # companion run log
+  templates/           # daily-note, weekly-review, project-brief, memory-entry templates
+```
+
+Only `SCAFFOLD.md`, `setup.sh`, and `SOUL.md` are tracked by git. Everything else is gitignored.
 
 ### Core Modules (src/apple_flow/)
 
@@ -99,14 +129,20 @@ POST /task → FastAPI → Orchestrator → Codex Connector → iMessage Egress
 | `notes_egress.py` | Appends Codex results back to note body |
 | `calendar_ingress.py` | Polls Apple Calendar for due events via AppleScript |
 | `calendar_egress.py` | Writes Codex results into event description/notes |
+| `companion.py` | CompanionLoop: proactive observation loop — stale approvals, calendar events, overdue reminders, office inbox; synthesizes via AI, sends iMessages; daily digest, weekly review, quiet hours, rate limiting, mute/unmute, cross-channel correlation |
+| `memory.py` | FileMemory: reads/writes `agent-office/MEMORY.md` and `agent-office/60_memory/*.md` topic files; injected into AI prompts before each turn |
+| `scheduler.py` | FollowUpScheduler: SQLite-backed `scheduled_actions` table for time-triggered follow-ups after task completions |
+| `ambient.py` | AmbientScanner: passively reads Notes/Calendar/Mail every 15 min for context enrichment, writes to memory topics; never sends messages |
+
 ### Command Types
 
 - **Non-mutating** (execute immediately): `relay:`, `idea:`, `plan:`
 - **Mutating** (require approval): `task:`, `project:`
-- **Control**: `approve <id>`, `deny <id>`, `status`, `clear context`
+- **Control**: `approve <id>`, `deny <id>`, `deny all`, `status`, `clear context`
 - **Dashboard**: `health:` (daemon stats, uptime, session count)
 - **Memory**: `history:` (recent messages), `history: <query>` (search messages)
 - **Workspace routing**: `@alias` prefix on any command (e.g. `task: @web-app deploy`)
+- **Companion control**: `system: mute` (silence proactive messages), `system: unmute` (re-enable proactive messages)
 
 ### Key Safety Invariants
 
@@ -159,6 +195,7 @@ class ApprovalRequest:
 | `approvals` | Pending approval requests |
 | `events` | Audit log |
 | `kv_state` | Key-value state storage |
+| `scheduled_actions` | Time-triggered follow-ups managed by FollowUpScheduler (`scheduler.py`) |
 
 ## Configuration
 
@@ -248,6 +285,41 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 - `apple_flow_enable_attachments` - enable reading inbound file attachments (default: false)
 - `apple_flow_max_attachment_size_mb` - max attachment size to process (default: 10)
 - `apple_flow_attachment_temp_dir` - temp directory for attachment processing (default: /tmp/apple_flow_attachments)
+
+### Agent Office
+
+- `apple_flow_soul_file` - path to companion SOUL.md injected as claude-cli system prompt (default: "agent-office/SOUL.md")
+
+### Companion Layer
+
+- `apple_flow_enable_companion` - enable the CompanionLoop proactive observation loop (default: false)
+- `apple_flow_companion_poll_interval_seconds` - how often the companion checks for observations (default: 300)
+- `apple_flow_companion_max_proactive_per_hour` - rate limit on proactive iMessages (default: 4)
+- `apple_flow_companion_quiet_hours_start` - start of quiet hours, no proactive messages (default: "22:00")
+- `apple_flow_companion_quiet_hours_end` - end of quiet hours (default: "07:00")
+- `apple_flow_companion_stale_approval_minutes` - minutes before an approval is considered stale (default: 30)
+- `apple_flow_companion_calendar_lookahead_minutes` - how far ahead to look for upcoming events (default: 60)
+- `apple_flow_companion_enable_daily_digest` - write a daily digest note to agent-office/10_daily/ (default: false)
+- `apple_flow_companion_digest_time` - time of day to generate the daily digest (default: "08:00")
+- `apple_flow_companion_weekly_review_day` - day of week for weekly review (default: "sunday")
+- `apple_flow_companion_weekly_review_time` - time of day for weekly review (default: "20:00")
+
+### Memory
+
+- `apple_flow_enable_memory` - inject FileMemory (MEMORY.md + topic files) into AI prompts (default: false)
+- `apple_flow_memory_max_context_chars` - maximum characters of memory to inject per turn (default: 2000)
+
+### Follow-Up Scheduler
+
+- `apple_flow_enable_follow_ups` - enable time-triggered follow-up nudges after task completions (default: false)
+- `apple_flow_default_follow_up_hours` - default delay before a follow-up is sent (default: 2.0)
+- `apple_flow_max_follow_up_nudges` - maximum follow-up messages per task (default: 3)
+
+### Ambient Scanner
+
+- `apple_flow_enable_ambient_scanning` - enable passive context enrichment from Notes/Calendar/Mail (default: false)
+- `apple_flow_ambient_scan_interval_seconds` - how often the ambient scanner runs (default: 900)
+
 See `.env.example` for full list. **When adding a new config field:** update both `config.py` and `.env.example`, add docs to `README.md`, and ensure a sensible default.
 
 ## Admin API
@@ -320,6 +392,12 @@ tests/test_progress_streaming.py  # Incremental progress updates
 tests/test_attachments.py         # File attachment support
 tests/test_cli_connector.py       # Stateless CLI connector (codex exec)
 tests/test_admin_api.py           # FastAPI admin endpoints
+
+# Autonomous Companion Layer
+tests/test_companion.py           # CompanionLoop: proactive observations, quiet hours, rate limiting, mute/unmute (58 tests)
+tests/test_memory.py              # FileMemory: MEMORY.md and topic file read/write, prompt injection (14 tests)
+tests/test_scheduler.py           # FollowUpScheduler: scheduled_actions CRUD, nudge dispatch (14 tests)
+tests/test_ambient.py             # AmbientScanner: passive context enrichment, memory topic writes (11 tests)
 ```
 
 ## Security Model
@@ -395,9 +473,10 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 
 | Metric | Value |
 |--------|-------|
-| Source modules | 26 |
-| Test files | 34 |
-| Config options | 40+ |
+| Source modules | 30 |
+| Test files | 38 |
+| Tests passing | 487 |
+| Config options | 60+ |
 | Python requirement | ≥3.11 |
 | Core dependencies | fastapi, uvicorn, pydantic, pydantic-settings, httpx |
 | Dev dependencies | pytest, pytest-asyncio, httpx |
