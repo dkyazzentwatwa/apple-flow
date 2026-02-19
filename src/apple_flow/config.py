@@ -128,6 +128,9 @@ class RelaySettings(BaseSettings):
     enable_progress_streaming: bool = False
     progress_update_interval_seconds: float = 30.0
 
+    # Executor / verifier behaviour
+    enable_verifier: bool = False  # run a verification turn after execution (adds latency)
+
     # File attachment settings
     enable_attachments: bool = False
     max_attachment_size_mb: int = 10

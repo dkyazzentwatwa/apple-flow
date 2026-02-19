@@ -101,6 +101,7 @@ class RelayOrchestrator:
         auto_context_messages: int = 0,
         enable_progress_streaming: bool = False,
         progress_update_interval_seconds: float = 30.0,
+        enable_verifier: bool = False,
         enable_attachments: bool = False,
         personality_prompt: str = "",
         reminders_egress: Any = None,
@@ -129,6 +130,7 @@ class RelayOrchestrator:
         self.auto_context_messages = auto_context_messages
         self.enable_progress_streaming = enable_progress_streaming
         self.progress_update_interval_seconds = progress_update_interval_seconds
+        self.enable_verifier = enable_verifier
         self.enable_attachments = enable_attachments
         self.personality_prompt = personality_prompt
         self.reminders_egress = reminders_egress
@@ -492,7 +494,11 @@ class RelayOrchestrator:
 
     # --- Approval Workflow ---
 
-    def _resolve_approval(self, sender: str, kind: CommandKind, request_id: str) -> OrchestrationResult:
+    def _resolve_approval(self, sender: str, kind: CommandKind, payload: str) -> OrchestrationResult:
+        # payload may be "req_abc123" or "req_abc123 extra instructions here"
+        parts = payload.split(None, 1)
+        request_id = parts[0]
+        extra_instructions = parts[1].strip() if len(parts) > 1 else ""
         approval = self.store.get_approval(request_id)
         if not approval:
             response = f"Unknown request id: {request_id}"
@@ -541,17 +547,25 @@ class RelayOrchestrator:
             return OrchestrationResult(kind=kind, response=response)
 
         thread_id = self.connector.get_or_create_thread(sender)
-        exec_prompt = (
-            "executor mode: perform the approved plan carefully and provide concise progress + final output. "
-            f"workspace={run['cwd']}"
-        )
+
+        # Build executor prompt — embed the approved plan so stateless connectors
+        # don't have to rely solely on conversation history.
+        plan_summary = approval.get("command_preview", "")
+        exec_prompt_parts = [
+            "executor mode: perform the approved plan carefully and provide concise progress + final output.",
+            f"workspace={run['cwd']}",
+        ]
+        if plan_summary:
+            exec_prompt_parts.append(f"approved plan:\n{plan_summary}")
+        if extra_instructions:
+            exec_prompt_parts.append(f"additional instructions from user: {extra_instructions}")
+        exec_prompt = "\n".join(exec_prompt_parts)
 
         if self.enable_progress_streaming and hasattr(self.connector, "run_turn_streaming"):
             execution_output = self._run_with_progress(sender, thread_id, exec_prompt)
         else:
             execution_output = self.connector.run_turn(thread_id, exec_prompt)
 
-        self.store.update_run_state(approval["run_id"], RunState.VERIFYING.value)
         self._create_event(
             run_id=approval["run_id"],
             step="executor",
@@ -559,17 +573,23 @@ class RelayOrchestrator:
             payload={"snippet": execution_output[:200]},
         )
 
-        verify_prompt = "verifier mode: validate completion evidence and summarize pass/fail with key checks."
-        verification_output = self.connector.run_turn(thread_id, verify_prompt)
+        # Verifier is opt-in — adds a second AI turn to validate output.
+        # Skip by default; enable with apple_flow_enable_verifier=true.
+        if self.enable_verifier:
+            self.store.update_run_state(approval["run_id"], RunState.VERIFYING.value)
+            verify_prompt = "verifier mode: validate completion evidence and summarize pass/fail with key checks."
+            verification_output = self.connector.run_turn(thread_id, verify_prompt)
+            self._create_event(
+                run_id=approval["run_id"],
+                step="verifier",
+                event_type="completed",
+                payload={"snippet": verification_output[:200]},
+            )
+            final = f"Execution:\n{execution_output}\n\nVerification:\n{verification_output}"
+        else:
+            final = execution_output
 
         self.store.update_run_state(approval["run_id"], RunState.COMPLETED.value)
-        self._create_event(
-            run_id=approval["run_id"],
-            step="verifier",
-            event_type="completed",
-            payload={"snippet": verification_output[:200]},
-        )
-        final = f"Execution:\n{execution_output}\n\nVerification:\n{verification_output}"
         self.egress.send(sender, final)
         self._log_to_notes(kind.value, sender, run.get("intent", ""), final)
 

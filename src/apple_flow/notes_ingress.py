@@ -195,7 +195,7 @@ class AppleNotesIngress:
                 set nName to my sanitise(name of n as text)
                 try
                     set nBody to plaintext of n as text
-                    if length of nBody > 200 then set nBody to text 1 thru 200 of nBody
+                    if length of nBody > 4000 then set nBody to text 1 thru 4000 of nBody
                     set nBody to my sanitise(nBody)
                 on error
                     set nBody to ""
