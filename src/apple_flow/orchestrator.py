@@ -6,7 +6,6 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from hashlib import sha256
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
@@ -111,6 +110,9 @@ class RelayOrchestrator:
         self.egress = egress
         self.store = store
         self.allowed_workspaces = [str(Path(p).resolve()) for p in allowed_workspaces]
+        self._allowed_workspace_set: frozenset[Path] = frozenset(
+            Path(p) for p in self.allowed_workspaces
+        )
         self.default_workspace = str(Path(default_workspace).resolve())
         self.approval_ttl_minutes = approval_ttl_minutes
         self.require_chat_prefix = require_chat_prefix
@@ -144,7 +146,7 @@ class RelayOrchestrator:
     # --- Main Handler ---
 
     def handle_message(self, message: InboundMessage) -> OrchestrationResult:
-        dedupe_hash = sha256(f"{message.sender}:{message.id}:{message.text}".encode()).hexdigest()
+        dedupe_hash = f"{message.sender}:{message.id}"
         inserted = True
         if hasattr(self.store, "record_message"):
             inserted = self.store.record_message(
@@ -646,10 +648,9 @@ class RelayOrchestrator:
         return self._build_unified_prompt(payload, workspace)
 
     def _is_workspace_allowed(self, candidate: str) -> bool:
-        target = str(Path(candidate).resolve())
-        for allowed in self.allowed_workspaces:
-            allowed_path = Path(allowed)
-            if str(allowed_path) == target or allowed_path in Path(target).parents:
+        target = Path(candidate).resolve()
+        for allowed_path in self._allowed_workspace_set:
+            if allowed_path == target or allowed_path in target.parents:
                 return True
         return False
 

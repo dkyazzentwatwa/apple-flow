@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import threading
 from typing import Any
 
 from .apple_tools import TOOLS_CONTEXT
@@ -58,6 +59,10 @@ class ClaudeCliConnector:
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
         self._sender_contexts: dict[str, list[str]] = {}
+        self._contexts_lock = threading.Lock()
+
+        # Cache the system prompt (constant after init)
+        self._cached_system_prompt: str = self._build_system_prompt()
 
     def _build_system_prompt(self) -> str:
         """Build the system context block from personality + TOOLS_CONTEXT."""
@@ -79,6 +84,8 @@ class ClaudeCliConnector:
             cmd.extend(["--tools", ",".join(self.tools)])
         if self.allowed_tools:
             cmd.extend(["--allowedTools", ",".join(self.allowed_tools)])
+        if self._cached_system_prompt:
+            cmd.extend(["--append-system-prompt", self._cached_system_prompt])
         cmd.extend(["-p", full_prompt])
         return cmd
 
@@ -98,7 +105,8 @@ class ClaudeCliConnector:
 
         This implements the "clear context" functionality.
         """
-        self._sender_contexts.pop(sender, None)
+        with self._contexts_lock:
+            self._sender_contexts.pop(sender, None)
         logger.info("Reset context for sender: %s", sender)
         return sender
 
@@ -121,12 +129,14 @@ class ClaudeCliConnector:
         full_prompt = self._build_prompt_with_context(sender, prompt)
         cmd = self._build_cmd(full_prompt)
 
+        with self._contexts_lock:
+            ctx_len = len(self._sender_contexts.get(sender, []))
         logger.info(
             "Executing Claude CLI: sender=%s workspace=%s timeout=%.1fs context_items=%d",
             sender,
             self.workspace or "default",
             self.timeout,
-            len(self._sender_contexts.get(sender, [])),
+            ctx_len,
         )
 
         try:
@@ -242,20 +252,17 @@ class ClaudeCliConnector:
         Returns:
             Full prompt with context prepended (and TOOLS_CONTEXT header if enabled)
         """
-        history = self._sender_contexts.get(sender, [])
+        with self._contexts_lock:
+            history = list(self._sender_contexts.get(sender, []))
 
         parts: list[str] = []
-
-        system = self._build_system_prompt()
-        if system:
-            parts.append(system)
 
         if history:
             recent_context = history[-self.context_window:]
             context_text = "\n\n".join(recent_context)
             parts.append(f"Previous conversation context:\n{context_text}")
 
-        parts.append(f"New message:\n{prompt}" if (history or system) else prompt)
+        parts.append(f"New message:\n{prompt}" if history else prompt)
 
         return "\n\n".join(parts)
 
@@ -267,13 +274,12 @@ class ClaudeCliConnector:
             user_message: User's message
             assistant_response: Assistant's response
         """
-        if sender not in self._sender_contexts:
-            self._sender_contexts[sender] = []
-
         exchange = f"User: {user_message}\nAssistant: {assistant_response}"
-        self._sender_contexts[sender].append(exchange)
-
-        # Limit history size (keep last 2x context_window to have buffer)
         max_history = self.context_window * 2
-        if len(self._sender_contexts[sender]) > max_history:
-            self._sender_contexts[sender] = self._sender_contexts[sender][-max_history:]
+        with self._contexts_lock:
+            if sender not in self._sender_contexts:
+                self._sender_contexts[sender] = []
+            self._sender_contexts[sender].append(exchange)
+            # Limit history size (keep last 2x context_window to have buffer)
+            if len(self._sender_contexts[sender]) > max_history:
+                self._sender_contexts[sender] = self._sender_contexts[sender][-max_history:]

@@ -275,3 +275,14 @@ codex login         # for codex-cli
 - **[.env.example](.env.example)** — Every config option with defaults and comments
 - **[docs/AUTO_START_SETUP.md](docs/AUTO_START_SETUP.md)** — Detailed launchd service setup
 - **[docs/ENV_SETUP.md](docs/ENV_SETUP.md)** — Full environment variable reference
+- **[docs/SKILLS_AND_MCP.md](docs/SKILLS_AND_MCP.md)** — Installing global skills and MCP servers for Claude Code CLI and Codex CLI
+
+### Skills & MCP quick reference
+
+| | Claude Code CLI | Codex CLI |
+|---|---|---|
+| Global skills | `~/.claude/skills/` | `~/.agents/skills/` |
+| Global MCP config | `~/.claude/settings.json` (`mcpServers`) | `~/.codex/config.toml` (`[mcp_servers.*]`) |
+| Add MCP via CLI | `claude mcp add --scope user` | `codex mcp add` |
+
+The **apple-tools MCP** (`apple-tools-mcp`) adds semantic search over Apple Mail, Messages, and Calendar to both CLIs. Install it globally — see [docs/SKILLS_AND_MCP.md](docs/SKILLS_AND_MCP.md) for step-by-step setup.

@@ -75,7 +75,7 @@ class AppleNotesIngress:
             if self.trigger_tag and self.trigger_tag not in body and self.trigger_tag not in title:
                 continue
 
-            text = self._compose_text(title, body)
+            text = self._compose_text(title, body, self.trigger_tag)
             if not text:
                 continue
 
@@ -126,13 +126,26 @@ class AppleNotesIngress:
         return False
 
     @staticmethod
-    def _compose_text(title: str, body: str) -> str:
+    def _compose_text(title: str, body: str, trigger_tag: str = "") -> str:
+        """Compose the prompt text from note title and body, stripping the trigger tag."""
+        def strip_tag(s: str) -> str:
+            if trigger_tag:
+                s = s.replace(trigger_tag, "").strip()
+            return s
+
+        title = strip_tag(title)
+        body = strip_tag(body)
+
         if not title and not body:
             return ""
         if not body:
             return title
         if not title:
             return body
+        # Avoid duplicating content when Notes echoes the title as the first line of body
+        body_first_line = body.split("\n")[0].strip()
+        if body_first_line == title:
+            return title
         return f"{title}\n\n{body}"
 
     def _fetch_notes_via_applescript(self, limit: int) -> list[dict[str, str]]:
