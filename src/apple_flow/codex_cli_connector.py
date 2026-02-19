@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import threading
 from typing import Any
 
 from .apple_tools import TOOLS_CONTEXT
@@ -46,6 +47,7 @@ class CodexCliConnector:
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
         self._sender_contexts: dict[str, list[str]] = {}
+        self._contexts_lock = threading.Lock()
 
     def ensure_started(self) -> None:
         """No-op: CLI spawns fresh process for each turn."""
@@ -63,7 +65,8 @@ class CodexCliConnector:
 
         This implements the "clear context" functionality.
         """
-        self._sender_contexts.pop(sender, None)
+        with self._contexts_lock:
+            self._sender_contexts.pop(sender, None)
         logger.info("Reset context for sender: %s", sender)
         return sender
 
@@ -93,12 +96,14 @@ class CodexCliConnector:
             cmd.extend(["-m", self.model])
         cmd.append(full_prompt)
 
+        with self._contexts_lock:
+            ctx_len = len(self._sender_contexts.get(sender, []))
         logger.info(
             "Executing codex CLI: sender=%s workspace=%s timeout=%.1fs context_items=%d",
             sender,
             self.workspace or "default",
             self.timeout,
-            len(self._sender_contexts.get(sender, [])),
+            ctx_len,
         )
 
         try:
@@ -221,7 +226,8 @@ class CodexCliConnector:
         Returns:
             Full prompt with context prepended (and TOOLS_CONTEXT header if enabled)
         """
-        history = self._sender_contexts.get(sender, [])
+        with self._contexts_lock:
+            history = list(self._sender_contexts.get(sender, []))
 
         parts: list[str] = []
 
@@ -245,15 +251,12 @@ class CodexCliConnector:
             user_message: User's message
             assistant_response: Assistant's response
         """
-        if sender not in self._sender_contexts:
-            self._sender_contexts[sender] = []
-
-        # Format as a single exchange
         exchange = f"User: {user_message}\nAssistant: {assistant_response}"
-
-        self._sender_contexts[sender].append(exchange)
-
-        # Limit history size (keep last 2x context_window to have buffer)
         max_history = self.context_window * 2
-        if len(self._sender_contexts[sender]) > max_history:
-            self._sender_contexts[sender] = self._sender_contexts[sender][-max_history:]
+        with self._contexts_lock:
+            if sender not in self._sender_contexts:
+                self._sender_contexts[sender] = []
+            self._sender_contexts[sender].append(exchange)
+            # Limit history size (keep last 2x context_window to have buffer)
+            if len(self._sender_contexts[sender]) > max_history:
+                self._sender_contexts[sender] = self._sender_contexts[sender][-max_history:]

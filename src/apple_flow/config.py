@@ -58,6 +58,7 @@ class RelaySettings(BaseSettings):
     suppress_duplicate_outbound_seconds: float = 90.0
     send_startup_intro: bool = True
     codex_turn_timeout_seconds: float = 300.0
+    max_concurrent_ai_calls: int = 4
 
     # Workspace aliases for multi-workspace routing
     workspace_aliases: str = ""  # JSON dict: '{"web-app":"/path/to/web-app"}'
