@@ -43,11 +43,16 @@ class CodexCliConnector:
         self.context_window = context_window
         self.model = model.strip()
         self.inject_tools_context = inject_tools_context
+        self.soul_prompt: str = ""
 
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
         self._sender_contexts: dict[str, list[str]] = {}
         self._contexts_lock = threading.Lock()
+
+    def set_soul_prompt(self, soul_prompt: str) -> None:
+        """Set the companion identity prompt, prepended before everything else."""
+        self.soul_prompt = soul_prompt.strip()
 
     def ensure_started(self) -> None:
         """No-op: CLI spawns fresh process for each turn."""
@@ -230,6 +235,9 @@ class CodexCliConnector:
             history = list(self._sender_contexts.get(sender, []))
 
         parts: list[str] = []
+
+        if self.soul_prompt:
+            parts.append(self.soul_prompt)
 
         if self.inject_tools_context:
             parts.append(TOOLS_CONTEXT)

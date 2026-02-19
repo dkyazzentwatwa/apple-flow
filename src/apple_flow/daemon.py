@@ -109,8 +109,8 @@ class RelayDaemon:
         else:
             logger.info("SOUL.md not found at %s — using personality_prompt fallback", soul_path)
 
-        # Inject soul prompt into Claude CLI connector
-        if self._soul_prompt and isinstance(self.connector, ClaudeCliConnector):
+        # Inject soul prompt into connector (both claude-cli and codex-cli support it)
+        if self._soul_prompt and hasattr(self.connector, "set_soul_prompt"):
             self.connector.set_soul_prompt(self._soul_prompt)
 
         # Resolve agent-office path for companion/memory
