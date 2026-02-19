@@ -189,6 +189,7 @@ class RelayDaemon:
             auto_context_messages=settings.auto_context_messages,
             enable_progress_streaming=settings.enable_progress_streaming,
             progress_update_interval_seconds=settings.progress_update_interval_seconds,
+            enable_verifier=settings.enable_verifier,
             enable_attachments=settings.enable_attachments,
             personality_prompt=settings.personality_prompt,
             shutdown_callback=self.request_shutdown,
