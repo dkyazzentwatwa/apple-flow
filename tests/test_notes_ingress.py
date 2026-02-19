@@ -19,10 +19,22 @@ def _make_ingress(store=None, auto_approve=False, trigger_tag=""):
 
 
 def _mock_applescript_output(notes):
-    """Create mock subprocess result with notes JSON output."""
+    """Create mock subprocess result with tab-delimited notes output."""
+    lines = []
+    for n in notes:
+        # Replace tabs/newlines in field values with spaces (matching AppleScript sanitise)
+        def _sanitise(val: str) -> str:
+            return val.replace("\t", " ").replace("\n", " ").replace("\r", " ")
+        line = "\t".join([
+            _sanitise(n.get("id", "")),
+            _sanitise(n.get("name", "")),
+            _sanitise(n.get("body", "")),
+            _sanitise(n.get("modification_date", "")),
+        ])
+        lines.append(line)
     result = MagicMock()
     result.returncode = 0
-    result.stdout = json.dumps(notes)
+    result.stdout = "\n".join(lines)
     result.stderr = ""
     return result
 

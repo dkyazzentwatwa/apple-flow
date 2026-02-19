@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — Codex Office workspace bootstrap
+# setup.sh — Agent Office workspace bootstrap
 # Idempotently scaffolds all folders, intro stubs, canonical files, and templates.
 # Safe to run on an existing workspace: never overwrites existing files.
 
@@ -382,7 +382,7 @@ Last Updated: {{YYYY-MM-DD}}
 # 5. Summary
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Codex Office setup.sh ==="
+echo "=== Agent Office setup.sh ==="
 echo ""
 
 if [[ ${#CREATED[@]} -gt 0 ]]; then

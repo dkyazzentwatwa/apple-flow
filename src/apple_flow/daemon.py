@@ -13,11 +13,14 @@ from .calendar_ingress import AppleCalendarIngress
 from .claude_cli_connector import ClaudeCliConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
+from .ambient import AmbientScanner
+from .companion import CompanionLoop
 from .config import RelaySettings
 from .egress import IMessageEgress
 from .ingress import IMessageIngress
 from .mail_egress import AppleMailEgress
 from .mail_ingress import AppleMailIngress
+from .memory import FileMemory
 from .notes_egress import AppleNotesEgress
 from .notes_ingress import AppleNotesIngress
 from .orchestrator import RelayOrchestrator
@@ -25,6 +28,7 @@ from .policy import PolicyEngine
 from .protocols import ConnectorProtocol
 from .reminders_egress import AppleRemindersEgress
 from .reminders_ingress import AppleRemindersIngress
+from .scheduler import FollowUpScheduler
 from .store import SQLiteStore
 
 logger = logging.getLogger("apple_flow.daemon")
@@ -91,6 +95,68 @@ class RelayDaemon:
                 inject_tools_context=settings.inject_tools_context,
             )
 
+        # Read SOUL.md for companion identity
+        self._soul_prompt = ""
+        soul_path = Path(settings.soul_file)
+        if not soul_path.is_absolute():
+            soul_path = Path(__file__).resolve().parents[2] / settings.soul_file
+        if soul_path.exists():
+            try:
+                self._soul_prompt = soul_path.read_text(encoding="utf-8").strip()
+                logger.info("Loaded SOUL.md from %s (%d chars)", soul_path, len(self._soul_prompt))
+            except Exception as exc:
+                logger.warning("Failed to read SOUL.md at %s: %s", soul_path, exc)
+        else:
+            logger.info("SOUL.md not found at %s — using personality_prompt fallback", soul_path)
+
+        # Inject soul prompt into Claude CLI connector
+        if self._soul_prompt and isinstance(self.connector, ClaudeCliConnector):
+            self.connector.set_soul_prompt(self._soul_prompt)
+
+        # Resolve agent-office path for companion/memory
+        self._office_path = soul_path.parent if self._soul_prompt else None
+
+        # File-based memory (reads/writes agent-office MEMORY.md + 60_memory/)
+        self.memory: FileMemory | None = None
+        if settings.enable_memory and self._office_path:
+            self.memory = FileMemory(self._office_path, max_context_chars=settings.memory_max_context_chars)
+            logger.info("File-based memory enabled (office=%s)", self._office_path)
+
+        # Follow-up scheduler (SQLite-backed)
+        self.scheduler: FollowUpScheduler | None = None
+        if settings.enable_follow_ups:
+            self.scheduler = FollowUpScheduler(self.store)
+            logger.info("Follow-up scheduler enabled")
+
+        # Companion loop (proactive observations + daily digest)
+        self.companion: CompanionLoop | None = None
+        if settings.enable_companion:
+            owner = settings.allowed_senders[0] if settings.allowed_senders else ""
+            if owner:
+                self.companion = CompanionLoop(
+                    connector=self.connector,
+                    egress=self.egress,
+                    store=self.store,
+                    owner=owner,
+                    soul_prompt=self._soul_prompt,
+                    office_path=self._office_path,
+                    config=settings,
+                    scheduler=self.scheduler,
+                    memory=self.memory,
+                )
+                logger.info("Companion loop enabled (owner=%s, poll=%.0fs)", owner, settings.companion_poll_interval_seconds)
+            else:
+                logger.warning("Companion enabled but no allowed_senders configured — skipping")
+
+        # Ambient scanner (passive context enrichment)
+        self.ambient: AmbientScanner | None = None
+        if settings.enable_ambient_scanning and self.memory:
+            self.ambient = AmbientScanner(
+                memory=self.memory,
+                scan_interval_seconds=settings.ambient_scan_interval_seconds,
+            )
+            logger.info("Ambient scanner enabled (interval=%.0fs)", settings.ambient_scan_interval_seconds)
+
         # Create channel-specific egress objects first so they can be passed to main orchestrator
         # (for post-execution cleanup after approval)
         reminders_egress_obj = None
@@ -128,6 +194,8 @@ class RelayDaemon:
             shutdown_callback=self.request_shutdown,
             log_notes_egress=notes_log_egress_obj,
             notes_log_folder_name=settings.notes_log_folder_name,
+            memory=self.memory,
+            scheduler=self.scheduler,
         )
 
         self.orchestrator = RelayOrchestrator(
@@ -308,7 +376,29 @@ class RelayDaemon:
             tasks.append(self._poll_notes_loop())
         if self.calendar_ingress is not None:
             tasks.append(self._poll_calendar_loop())
+        if self.companion is not None:
+            tasks.append(self._companion_loop())
+        if self.ambient is not None:
+            tasks.append(self._ambient_loop())
         await asyncio.gather(*tasks)
+
+    async def _companion_loop(self) -> None:
+        """Companion proactive observation loop."""
+        assert self.companion is not None
+        logger.info("Companion loop started")
+        try:
+            await self.companion.run_forever(lambda: self._shutdown_requested)
+        except Exception as exc:
+            logger.exception("Companion loop error: %s", exc)
+
+    async def _ambient_loop(self) -> None:
+        """Ambient scanner loop — passive context enrichment."""
+        assert self.ambient is not None
+        logger.info("Ambient scanner loop started")
+        try:
+            await self.ambient.run_forever(lambda: self._shutdown_requested)
+        except Exception as exc:
+            logger.exception("Ambient scanner loop error: %s", exc)
 
     async def _poll_imessage_loop(self) -> None:
         """iMessage polling loop (original behaviour)."""
@@ -688,7 +778,7 @@ class RelayDaemon:
             "",
             f"ℹ️  {mode_hint}",
             "✅ approve <id>  |  ❌ deny <id>  |  ❌❌ deny all  |  📊 status",
-            "🏥 health  |  🔍 history: [query]  |  🔄 clear context",
+            "🏥 health  |  🔍 history: [query]  |  📈 usage  |  🔄 clear context",
             "🔧 system: stop  |  system: restart",
             "",
             "Power users:",
@@ -705,6 +795,8 @@ class RelayDaemon:
             gateways.append(f"📝 Notes      → folder: {self.settings.notes_folder_name}")
         if self.settings.enable_calendar_polling:
             gateways.append(f"📅 Calendar   → calendar: {self.settings.calendar_name}")
+        if self.companion is not None:
+            gateways.append("🤖 Companion  → proactive observations active")
 
         gateway_section = ""
         if gateways:
@@ -772,6 +864,8 @@ async def run() -> None:
         channels.append("Apple Notes")
     if settings.enable_calendar_polling:
         channels.append("Apple Calendar")
+    if settings.enable_companion:
+        channels.append("Companion")
 
     logger.info(
         "Apple Flow running (foreground). Allowed senders=%s, strict_sender_poll=%s, channels=%s",

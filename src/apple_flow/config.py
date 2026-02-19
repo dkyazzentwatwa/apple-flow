@@ -133,6 +133,41 @@ class RelaySettings(BaseSettings):
     max_attachment_size_mb: int = 10
     attachment_temp_dir: str = "/tmp/apple_flow_attachments"
 
+    # --- Companion Layer (autonomous proactive assistant) ---
+
+    # Agent Office: workspace directory with SOUL.md, MEMORY.md, templates, logs
+    soul_file: str = "agent-office/SOUL.md"  # relative to repo root or absolute path
+
+    # Companion loop: proactive observations
+    enable_companion: bool = False
+    companion_poll_interval_seconds: float = 300.0
+    companion_max_proactive_per_hour: int = 4
+    companion_quiet_hours_start: str = "22:00"
+    companion_quiet_hours_end: str = "07:00"
+    companion_stale_approval_minutes: int = 30
+    companion_calendar_lookahead_minutes: int = 60
+
+    # Daily digest (morning briefing)
+    companion_enable_daily_digest: bool = False
+    companion_digest_time: str = "08:00"
+
+    # File-based memory (agent-office)
+    enable_memory: bool = False
+    memory_max_context_chars: int = 2000
+
+    # Follow-up scheduler
+    enable_follow_ups: bool = False
+    default_follow_up_hours: float = 2.0
+    max_follow_up_nudges: int = 3
+
+    # Ambient scanning (passive context enrichment)
+    enable_ambient_scanning: bool = False
+    ambient_scan_interval_seconds: float = 900.0
+
+    # Weekly review
+    companion_weekly_review_day: str = "sunday"
+    companion_weekly_review_time: str = "20:00"
+
     @field_validator(
         "allowed_senders",
         "allowed_workspaces",
