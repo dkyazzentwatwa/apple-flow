@@ -640,7 +640,7 @@ class RelayDaemon:
             chat_line,
             "",
             f"ℹ️  {mode_hint}",
-            "✅ approve <id>  |  ❌ deny <id>  |  📊 status",
+            "✅ approve <id>  |  ❌ deny <id>  |  ❌❌ deny all  |  📊 status",
             "🏥 health  |  🔍 history: [query]  |  🔄 clear context",
             "🔧 system: stop  |  system: restart",
             "",
