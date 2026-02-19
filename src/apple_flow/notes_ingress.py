@@ -151,67 +151,67 @@ class AppleNotesIngress:
     def _fetch_notes_via_applescript(self, limit: int) -> list[dict[str, str]]:
         escaped_folder = self.folder_name.replace('"', '\\"')
 
+        # Tab-delimited output: one note per line as id<TAB>name<TAB>body<TAB>mod_date.
+        # Tabs and newlines within fields are replaced with spaces using fast
+        # AppleScript text-item-delimiter substitution instead of the slow
+        # character-by-character escapeJSON handler.
         script = f'''
+        on sanitise(txt)
+            -- Replace tabs with spaces
+            set AppleScript's text item delimiters to (ASCII character 9)
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            -- Replace newlines (LF) with spaces
+            set AppleScript's text item delimiters to (ASCII character 10)
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            -- Replace carriage returns with spaces
+            set AppleScript's text item delimiters to (ASCII character 13)
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            set AppleScript's text item delimiters to ""
+            return txt
+        end sanitise
+
         tell application "Notes"
             set maxCount to {int(limit)}
-            set resultList to {{}}
+            set outputLines to {{}}
 
             try
                 set targetFolder to folder "{escaped_folder}"
             on error
-                return "[]"
+                return ""
             end try
 
             set allNotes to every note of targetFolder
 
             repeat with n in allNotes
-                if (count of resultList) >= maxCount then exit repeat
+                if (count of outputLines) >= maxCount then exit repeat
 
-                set nId to id of n as text
-                set nName to name of n as text
+                set nId to my sanitise(id of n as text)
+                set nName to my sanitise(name of n as text)
                 try
                     set nBody to plaintext of n as text
-                    -- Truncate to avoid slow character-by-character escaping on large notes
-                    if length of nBody > 3000 then set nBody to text 1 thru 3000 of nBody
+                    if length of nBody > 200 then set nBody to text 1 thru 200 of nBody
+                    set nBody to my sanitise(nBody)
                 on error
                     set nBody to ""
                 end try
                 try
-                    set nModDate to modification date of n as text
+                    set nModDate to my sanitise(modification date of n as text)
                 on error
                     set nModDate to ""
                 end try
 
-                set rec to "{{\\"id\\": \\"" & my escapeJSON(nId) & "\\", \\"name\\": \\"" & my escapeJSON(nName) & "\\", \\"body\\": \\"" & my escapeJSON(nBody) & "\\", \\"modification_date\\": \\"" & my escapeJSON(nModDate) & "\\"}}"
-                set end of resultList to rec
+                set end of outputLines to nId & (ASCII character 9) & nName & (ASCII character 9) & nBody & (ASCII character 9) & nModDate
             end repeat
 
-            set AppleScript's text item delimiters to ","
-            return "[" & (resultList as text) & "]"
+            set AppleScript's text item delimiters to (ASCII character 10)
+            return (outputLines as text)
         end tell
-
-        on escapeJSON(txt)
-            set output to ""
-            repeat with ch in (characters of txt)
-                set charCode to (ASCII number of ch)
-                if ch is "\\"" then
-                    set output to output & "\\\\\\""
-                else if ch is "\\\\" then
-                    set output to output & "\\\\\\\\"
-                else if ch is (ASCII character 10) then
-                    set output to output & "\\\\n"
-                else if ch is (ASCII character 13) then
-                    set output to output & "\\\\n"
-                else if ch is (ASCII character 9) then
-                    set output to output & "\\\\t"
-                else if charCode < 32 and charCode is not 10 and charCode is not 13 and charCode is not 9 then
-                    set output to output & " "
-                else
-                    set output to output & ch
-                end if
-            end repeat
-            return output
-        end escapeJSON
         '''
 
         max_attempts = self.fetch_retries + 1
@@ -227,13 +227,9 @@ class AppleNotesIngress:
                     logger.warning("Notes AppleScript failed (rc=%s): %s", result.returncode, result.stderr.strip())
                     return []
                 output = result.stdout.strip()
-                if not output or output == "[]":
+                if not output:
                     return []
-                cleaned = "".join(char if (32 <= ord(char) < 127) else " " for char in output)
-                return json.loads(cleaned)
-            except json.JSONDecodeError as exc:
-                logger.warning("Failed to parse Notes AppleScript output: %s", exc)
-                return []
+                return self._parse_tab_delimited(output)
             except subprocess.TimeoutExpired:
                 if attempt >= max_attempts:
                     logger.warning(
@@ -254,3 +250,19 @@ class AppleNotesIngress:
                 logger.warning("Unexpected error fetching notes: %s", exc)
                 return []
         return []
+
+    @staticmethod
+    def _parse_tab_delimited(output: str) -> list[dict[str, str]]:
+        """Parse tab-delimited notes output into list of dicts."""
+        notes: list[dict[str, str]] = []
+        for line in output.splitlines():
+            parts = line.split("\t")
+            if len(parts) < 4:
+                continue
+            notes.append({
+                "id": parts[0],
+                "name": parts[1],
+                "body": parts[2],
+                "modification_date": parts[3],
+            })
+        return notes

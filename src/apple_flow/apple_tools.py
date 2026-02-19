@@ -1029,22 +1029,53 @@ def calendar_create(
     Returns:
         Event UID string or None
     """
+    from datetime import datetime, timedelta
+
     def _esc(s: str) -> str:
         return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
+    def _parse_dt(s: str) -> datetime:
+        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s.strip(), fmt)
+            except ValueError:
+                continue
+        raise ValueError(f"Cannot parse date: {s!r}")
+
+    def _dt_to_as(dt: datetime) -> str:
+        """Build an AppleScript snippet that produces a date object."""
+        month_names = ["January","February","March","April","May","June",
+                       "July","August","September","October","November","December"]
+        mo = month_names[dt.month - 1]
+        h12 = dt.hour % 12 or 12
+        ampm = "AM" if dt.hour < 12 else "PM"
+        return f'date "{mo} {dt.day}, {dt.year} {h12}:{dt.minute:02d}:{dt.second:02d} {ampm}"'
+
     esc_title = _esc(title)
-    esc_start = _esc(start_date)
+
+    try:
+        start_dt = _parse_dt(start_date)
+    except ValueError as exc:
+        logger.warning("calendar_create: bad start_date: %s", exc)
+        return None
+
+    if end_date:
+        try:
+            end_dt = _parse_dt(end_date)
+        except ValueError as exc:
+            logger.warning("calendar_create: bad end_date: %s", exc)
+            return None
+    else:
+        end_dt = start_dt + timedelta(hours=1)
+
+    as_start = _dt_to_as(start_dt)
+    as_end = _dt_to_as(end_dt)
 
     if calendar:
         esc_cal = _esc(calendar)
         cal_clause = f'set targetCal to calendar "{esc_cal}"'
     else:
         cal_clause = "set targetCal to default calendar"
-
-    end_clause = ""
-    if end_date:
-        esc_end = _esc(end_date)
-        end_clause = f'set end date of newEvent to date "{esc_end}"'
 
     notes_clause = ""
     if notes:
@@ -1059,8 +1090,7 @@ def calendar_create(
             return "error: calendar not found"
         end try
         try
-            set newEvent to make new event at targetCal with properties {{summary:"{esc_title}", start date:date "{esc_start}"}}
-            {end_clause}
+            set newEvent to make new event at targetCal with properties {{summary:"{esc_title}", start date:{as_start}, end date:{as_end}}}
             {notes_clause}
             return uid of newEvent as text
         on error errMsg

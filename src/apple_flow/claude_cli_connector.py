@@ -55,6 +55,7 @@ class ClaudeCliConnector:
         self.allowed_tools = [t.strip() for t in (allowed_tools or []) if t and t.strip()]
         self.inject_tools_context = inject_tools_context
         self.system_prompt = system_prompt.strip()
+        self.soul_prompt: str = ""
 
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
@@ -64,9 +65,16 @@ class ClaudeCliConnector:
         # Cache the system prompt (constant after init)
         self._cached_system_prompt: str = self._build_system_prompt()
 
+    def set_soul_prompt(self, soul_prompt: str) -> None:
+        """Set the SOUL.md content and rebuild the cached system prompt."""
+        self.soul_prompt = soul_prompt.strip()
+        self._cached_system_prompt = self._build_system_prompt()
+
     def _build_system_prompt(self) -> str:
-        """Build the system context block from personality + TOOLS_CONTEXT."""
+        """Build the system context block from soul + personality + TOOLS_CONTEXT."""
         parts = []
+        if self.soul_prompt:
+            parts.append(self.soul_prompt)
         if self.system_prompt:
             parts.append(self.system_prompt)
         if self.inject_tools_context:

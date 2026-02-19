@@ -18,6 +18,7 @@ class CommandKind(str, Enum):
     STATUS = "status"
     HEALTH = "health"
     HISTORY = "history"
+    USAGE = "usage"
     SYSTEM = "system"
 
 
@@ -69,6 +70,7 @@ _PREFIX_TO_KIND = {
     "project": CommandKind.PROJECT,
     "health": CommandKind.HEALTH,
     "history": CommandKind.HISTORY,
+    "usage": CommandKind.USAGE,
     "system": CommandKind.SYSTEM,
 }
 
@@ -98,6 +100,9 @@ def parse_command(raw_text: str) -> ParsedCommand:
 
     if lowered == "health":
         return ParsedCommand(kind=CommandKind.HEALTH, payload="")
+
+    if lowered == "usage":
+        return ParsedCommand(kind=CommandKind.USAGE, payload="")
 
     if lowered.startswith("approve "):
         return ParsedCommand(kind=CommandKind.APPROVE, payload=text.split(" ", 1)[1].strip())

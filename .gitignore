@@ -45,3 +45,9 @@ data/
 # Logs
 logs/
 *.log
+
+# Agent Office — track only the scaffold, setup script, and SOUL.md
+agent-office/*
+!agent-office/SCAFFOLD.md
+!agent-office/setup.sh
+!agent-office/SOUL.md

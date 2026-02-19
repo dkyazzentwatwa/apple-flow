@@ -1,4 +1,4 @@
-# SCAFFOLD.md — Codex Office AI Recreation Spec
+# SCAFFOLD.md — Agent Office AI Recreation Spec
 
 An AI reads this document and follows the numbered Recreation Steps at the end to rebuild the workspace from scratch.
 
@@ -9,7 +9,7 @@ An AI reads this document and follows the numbered Recreation Steps at the end t
 | Field | Value |
 |---|---|
 | Owner | `cypher-server` |
-| Path | `/Users/Shared/codex-office` |
+| Path | `/Users/Shared/agent-office` |
 | Purpose | Local-first second-brain: fast capture, daily execution, durable memory, automation audit trail |
 
 **Non-Negotiables**
@@ -225,7 +225,7 @@ Copy the following files verbatim from the source workspace. Do not auto-generat
 
 Follow these steps in order to rebuild the workspace from zero:
 
-1. **Create root directory** at the target path (e.g. `/Users/Shared/codex-office`).
+1. **Create root directory** at the target path (e.g. `/Users/Shared/agent-office`).
 
 2. **Create all 10 numbered folders** plus `templates/`:
    ```

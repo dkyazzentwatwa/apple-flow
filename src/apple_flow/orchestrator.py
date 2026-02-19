@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import html as _html_mod
+import json
 import logging
 import re
+import subprocess
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 logger = logging.getLogger("apple_flow.orchestrator")
@@ -15,6 +17,10 @@ logger = logging.getLogger("apple_flow.orchestrator")
 from .commanding import CommandKind, ParsedCommand, is_likely_mutating, parse_command
 from .models import InboundMessage, RunState
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
+
+if TYPE_CHECKING:
+    from .memory import FileMemory
+    from .scheduler import FollowUpScheduler
 
 _SEP = "━" * 30
 
@@ -105,6 +111,8 @@ class RelayOrchestrator:
         shutdown_callback: Callable[[], None] | None = None,
         log_notes_egress: Any = None,
         notes_log_folder_name: str = "codex-logs",
+        memory: FileMemory | None = None,
+        scheduler: FollowUpScheduler | None = None,
     ):
         self.connector = connector
         self.egress = egress
@@ -131,6 +139,8 @@ class RelayOrchestrator:
         self.shutdown_callback = shutdown_callback
         self.log_notes_egress = log_notes_egress
         self.notes_log_folder_name = notes_log_folder_name
+        self.memory = memory
+        self.scheduler = scheduler
 
     # --- Workspace Resolution (Feature 1) ---
 
@@ -174,7 +184,7 @@ class RelayOrchestrator:
             if not command.payload:
                 hint = (
                     f"Use `{self.chat_prefix} <message>` for general chat.\n"
-                    "Or use `idea:`, `plan:`, `task:`, `project:`, `health`, or `history:`."
+                    "Or use `idea:`, `plan:`, `task:`, `project:`, `health`, `history:`, or `usage`."
                 )
                 self.egress.send(message.sender, hint)
                 return OrchestrationResult(kind=CommandKind.CHAT, response=hint)
@@ -189,6 +199,9 @@ class RelayOrchestrator:
 
         if command.kind is CommandKind.HISTORY:
             return self._handle_history(message.sender, command.payload)
+
+        if command.kind is CommandKind.USAGE:
+            return self._handle_usage(message.sender, command.payload)
 
         if command.kind is CommandKind.STATUS:
             pending = self.store.list_pending_approvals()
@@ -252,6 +265,7 @@ class RelayOrchestrator:
         prompt = self._build_non_mutating_prompt(command.kind, command.payload, workspace)
         prompt = self._inject_auto_context(message.sender, prompt)
         prompt = self._inject_attachment_context(message, prompt)
+        prompt = self._inject_memory_context(prompt)
 
         response = self.connector.run_turn(thread_id, prompt)
         self.egress.send(message.sender, response)
@@ -292,6 +306,86 @@ class RelayOrchestrator:
         response = "\n".join(parts)
         self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.HEALTH, response=response)
+
+    # --- Feature: Token Usage (ccusage) ---
+
+    def _handle_usage(self, sender: str, payload: str) -> OrchestrationResult:
+        sub = payload.lower().strip()
+
+        if sub in ("monthly", "month"):
+            cmd = ["npx", "--yes", "ccusage", "monthly", "--json"]
+            mode = "monthly"
+        elif sub in ("blocks", "block"):
+            cmd = ["npx", "--yes", "ccusage", "blocks", "--json"]
+            mode = "blocks"
+        elif sub == "today":
+            since = datetime.now(UTC).strftime("%Y%m%d")
+            cmd = ["npx", "--yes", "ccusage", "daily", "--json", "--since", since]
+            mode = "daily"
+        else:
+            since = (datetime.now(UTC) - timedelta(days=6)).strftime("%Y%m%d")
+            cmd = ["npx", "--yes", "ccusage", "daily", "--json", "--since", since]
+            mode = "daily"
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            data = json.loads(result.stdout)
+        except subprocess.TimeoutExpired:
+            response = "Usage data unavailable: ccusage timed out."
+            self.egress.send(sender, response)
+            return OrchestrationResult(kind=CommandKind.USAGE, response=response)
+        except (json.JSONDecodeError, FileNotFoundError, Exception) as exc:
+            response = f"Usage data unavailable: {exc}"
+            self.egress.send(sender, response)
+            return OrchestrationResult(kind=CommandKind.USAGE, response=response)
+
+        lines: list[str] = []
+
+        if mode == "daily":
+            rows = data.get("daily", [])
+            if not rows:
+                lines.append("No usage data found.")
+            else:
+                lines.append("Token usage (last 7 days):")
+                total_cost = 0.0
+                for row in rows:
+                    tokens = row["totalTokens"]
+                    cost = row["totalCost"]
+                    total_cost += cost
+                    tok_str = f"{tokens / 1_000_000:.2f}M" if tokens >= 1_000_000 else f"{tokens / 1_000:.0f}K"
+                    lines.append(f"  {row['date']}: {tok_str} tokens  ${cost:.2f}")
+                lines.append(f"Total: ${total_cost:.2f}")
+
+        elif mode == "monthly":
+            rows = data.get("monthly", [])
+            if not rows:
+                lines.append("No usage data found.")
+            else:
+                lines.append("Monthly token usage:")
+                for row in rows:
+                    month = row.get("month", row.get("date", "?"))
+                    tokens = row["totalTokens"]
+                    cost = row["totalCost"]
+                    tok_str = f"{tokens / 1_000_000:.2f}M" if tokens >= 1_000_000 else f"{tokens / 1_000:.0f}K"
+                    lines.append(f"  {month}: {tok_str}  ${cost:.2f}")
+
+        elif mode == "blocks":
+            active_blocks = [b for b in data.get("blocks", []) if not b.get("isGap")]
+            if not active_blocks:
+                lines.append("No billing blocks found.")
+            else:
+                lines.append("Recent billing blocks (5-hr windows):")
+                for block in active_blocks[-5:]:
+                    start = block["startTime"][:16].replace("T", " ")
+                    cost = block.get("costUSD", 0)
+                    tokens = block.get("totalTokens", 0)
+                    active_tag = " [ACTIVE]" if block.get("isActive") else ""
+                    tok_str = f"{tokens / 1_000_000:.2f}M" if tokens >= 1_000_000 else f"{tokens / 1_000:.0f}K"
+                    lines.append(f"  {start}: {tok_str}  ${cost:.2f}{active_tag}")
+
+        response = "\n".join(lines)
+        self.egress.send(sender, response)
+        return OrchestrationResult(kind=CommandKind.USAGE, response=response)
 
     # --- Feature 3: Conversation Memory ---
 
@@ -338,8 +432,16 @@ class RelayOrchestrator:
             self.egress.send(sender, response)
             if self.shutdown_callback is not None:
                 self.shutdown_callback()
+        elif sub == "mute":
+            self.store.set_state("companion_muted", "true")
+            response = "Companion muted. Send 'system: unmute' to re-enable proactive messages."
+            self.egress.send(sender, response)
+        elif sub == "unmute":
+            self.store.set_state("companion_muted", "false")
+            response = "Companion unmuted. Proactive messages re-enabled."
+            self.egress.send(sender, response)
         else:
-            response = "Unknown system command. Use: system: stop  or  system: restart"
+            response = "Unknown system command. Use: system: stop | restart | mute | unmute"
             self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.SYSTEM, response=sub)
 
@@ -356,6 +458,20 @@ class RelayOrchestrator:
             context_lines.append(f"[{msg.get('received_at', '?')}] {msg.get('text', '')[:200]}")
         context_block = "\n".join(context_lines)
         return f"Recent conversation history:\n{context_block}\n\n{prompt}"
+
+    # --- Memory Context Injection ---
+
+    def _inject_memory_context(self, prompt: str) -> str:
+        """Inject file-based memory context from agent-office into the prompt."""
+        if not self.memory:
+            return prompt
+        try:
+            context = self.memory.get_context_for_prompt()
+            if context:
+                return f"Persistent memory context:\n{context}\n\n{prompt}"
+        except Exception:
+            pass
+        return prompt
 
     # --- Feature 8: Attachment Context ---
 
@@ -461,6 +577,19 @@ class RelayOrchestrator:
         source_context = self.store.get_run_source_context(approval["run_id"])
         if source_context:
             self._handle_post_execution_cleanup(source_context, final)
+
+        # Schedule a follow-up check if enabled
+        if self.scheduler:
+            try:
+                from .scheduler import FollowUpScheduler
+                self.scheduler.schedule(
+                    run_id=approval["run_id"],
+                    sender=sender,
+                    action_type="follow_up",
+                    payload={"summary": f"Follow up on approved task {request_id}"},
+                )
+            except Exception as exc:
+                logger.debug("Failed to schedule follow-up: %s", exc)
 
         return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=final)
 
