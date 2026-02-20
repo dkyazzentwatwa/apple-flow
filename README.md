@@ -19,12 +19,34 @@
 
 ## ✨ What is Apple Flow?
 
-Apple Flow turns your iMessage into an AI command center. Text yourself to:
+Apple Flow turns your Apple apps into an AI command center. Interact through any of these gateways:
 
-- 💬 **Chat** with Claude, Codex, or Cline
-- 📋 **Execute tasks** with approval gates
-- 📅 **Automate** your Apple apps (Mail, Reminders, Notes, Calendar)
-- 🤖 **Get proactive updates** from an AI companion that watches your life
+### 💬 Chat Gateways
+| Gateway | How it works |
+|---------|--------------|
+| **iMessage** | Text yourself — no bot tokens, no setup beyond Full Disk Access |
+| **Apple Mail** | Send emails to your AI, get replies in your inbox |
+
+### 📥 Task Ingress (Create tasks from Apple apps)
+| Gateway | How it works |
+|---------|--------------|
+| **Apple Reminders** | Add a reminder → becomes a task for AI |
+| **Apple Notes** | Tag a note with `!!agent` → AI processes it |
+| **Apple Calendar** | Create an event → AI executes when it's due |
+
+### 📤 Response & Logging
+| Gateway | How it works |
+|---------|--------------|
+| **iMessage** | All AI responses sent here by default |
+| **Apple Notes** | Optional: log every AI response as a new note |
+
+### 🤖 Proactive Companion
+Your AI companion watches your life and sends proactive iMessage updates:
+- ⏰ **Stale approvals** — "Hey, you have a task waiting for approval"
+- 📅 **Upcoming events** — "Meeting in 30 minutes"
+- 🔔 **Overdue reminders** — "That task is 2 days overdue"
+- 🌅 **Daily digest** — Morning briefing at 8 AM
+- 📊 **Weekly review** — Summary every Sunday evening
 
 **The best part?** It's 100% local-first. Your data never leaves your Mac.
 
