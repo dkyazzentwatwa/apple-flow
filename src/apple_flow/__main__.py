@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import sys
 
+import importlib.metadata
 import uvicorn
 
 from .apple_tools import (
@@ -200,9 +201,18 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def _get_version() -> str:
+    """Get the version from package metadata."""
+    try:
+        return importlib.metadata.version("apple-flow")
+    except importlib.metadata.PackageNotFoundError:
+        return "0.1.0 (dev)"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Apple Flow runtime")
-    parser.add_argument("mode", choices=["daemon", "admin", "tools"], nargs="?", default="daemon")
+    parser.add_argument("mode", choices=["daemon", "admin", "tools", "version"], nargs="?", default="daemon")
+    parser.add_argument("--version", "-V", action="store_true", help="Show version and exit")
 
     # Tools-specific flags (only used when mode=tools)
     parser.add_argument("tool_args", nargs="*", help="Tool name followed by its positional arguments")
@@ -223,6 +233,11 @@ def main() -> None:
     parser.add_argument("--calendar", dest="calendar_name", metavar="CALENDAR", help=argparse.SUPPRESS)
 
     args = parser.parse_args()
+
+    # Handle --version flag or version mode
+    if args.version or args.mode == "version":
+        print(f"apple-flow {_get_version()}")
+        return
 
     if args.mode == "daemon":
         try:
