@@ -13,6 +13,7 @@ from .commanding import CommandKind
 from .models import InboundMessage, RunState
 from .notes_logging import log_to_notes
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
+from .utils import normalize_sender
 
 if TYPE_CHECKING:
     from .scheduler import FollowUpScheduler
@@ -79,7 +80,13 @@ class ApprovalHandler:
             return OrchestrationResult(kind=kind, response=response)
 
         approval_sender = approval.get("sender")
-        if approval_sender and approval_sender != sender:
+        if approval_sender and normalize_sender(approval_sender) != normalize_sender(sender):
+            logger.debug(
+                "Approval sender mismatch: approval_sender=%r (normalized=%r), "
+                "request_sender=%r (normalized=%r)",
+                approval_sender, normalize_sender(approval_sender),
+                sender, normalize_sender(sender),
+            )
             response = f"Only the original requester can {kind.value} request {request_id}."
             self.egress.send(sender, response)
             return OrchestrationResult(kind=kind, response=response)

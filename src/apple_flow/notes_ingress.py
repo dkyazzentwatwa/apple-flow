@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 from .models import InboundMessage
 from .protocols import StoreProtocol
+from .utils import normalize_sender
 
 logger = logging.getLogger("apple_flow.notes_ingress")
 
@@ -37,7 +38,7 @@ class AppleNotesIngress:
     ):
         self.folder_name = folder_name
         self.trigger_tag = trigger_tag.strip()
-        self.owner_sender = owner_sender
+        self.owner_sender = normalize_sender(owner_sender)
         self.auto_approve = auto_approve
         self.fetch_timeout_seconds = fetch_timeout_seconds
         self.fetch_retries = max(0, int(fetch_retries))

@@ -45,7 +45,7 @@ def build_app(store: Any | None = None) -> FastAPI:
 
     verify_token = _make_auth_dependency(settings.admin_api_token)
 
-    app = FastAPI(title="Apple Flow Admin API", version="0.2.0")
+    app = FastAPI(title="Apple Flow Admin API", version="0.2.1")
     app.state.store = active_store
     # orchestrator is injected by daemon at startup (if running alongside polling)
     app.state.orchestrator = None

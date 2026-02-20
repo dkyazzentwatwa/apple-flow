@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 from .models import InboundMessage
 from .protocols import StoreProtocol
+from .utils import normalize_sender
 
 logger = logging.getLogger("apple_flow.calendar_ingress")
 
@@ -33,7 +34,7 @@ class AppleCalendarIngress:
         store: StoreProtocol | None = None,
     ):
         self.calendar_name = calendar_name
-        self.owner_sender = owner_sender
+        self.owner_sender = normalize_sender(owner_sender)
         self.auto_approve = auto_approve
         self.lookahead_minutes = lookahead_minutes
         self.trigger_tag = trigger_tag.strip()

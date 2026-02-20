@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-02-20
+
+### Fixed
+- **Cross-gateway approval verification**: Approvals from non-iMessage gateways (Notes, Reminders, Calendar) silently failed when the user tried to approve via iMessage due to sender format mismatch. Both sides of the approval sender comparison now use `normalize_sender()` for consistent E.164 matching.
+- **Owner sender normalization at ingress**: `notes_ingress.py`, `reminders_ingress.py`, and `calendar_ingress.py` now normalize `owner_sender` at construction time (defense in depth).
+- **Approval mismatch debug logging**: Added debug log in `approval.py` showing raw and normalized senders when verification fails, making format mismatches visible in daemon logs.
+
+### Changed
+- **Branding cleanup**: Replaced remaining Codex product-name artifacts with Apple Flow across codebase.
+
+### Added
+- **GitHub Actions CI**: Added CI workflow with ruff linting.
+- **Cross-gateway approval tests**: 4 new tests in `test_approval_security.py` covering Notes/Reminders/Calendar approval via iMessage and rejection of genuinely different senders.
+
 ## [0.2.0] - 2026-02-20
 
 ### Security
@@ -95,11 +109,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.2.1 | 2026-02-20 | Cross-gateway approval fix, CI, branding cleanup |
 | 0.2.0 | 2026-02-20 | Security hardening, admin API auth, version unification |
 | 0.1.0 | 2026-02-19 | Initial public release |
 
 ---
 
-[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dkyazzentwatwa/apple-flow/releases/tag/v0.1.0

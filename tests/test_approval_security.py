@@ -167,3 +167,160 @@ def test_unknown_approval_request():
     result = orchestrator.handle_message(msg)
     assert result.kind is CommandKind.APPROVE
     assert "Unknown request id" in result.response
+
+
+# --- Cross-gateway approval tests ---
+
+
+def _make_orchestrator():
+    """Helper to create an orchestrator with standard test defaults."""
+    return RelayOrchestrator(
+        connector=FakeConnector(),
+        egress=FakeEgress(),
+        store=FakeStore(),
+        allowed_workspaces=["/tmp"],
+        default_workspace="/tmp",
+    )
+
+
+def test_cross_gateway_notes_unnormalized_owner_approved_via_imessage():
+    """Notes task with un-normalized owner can be approved via iMessage (normalized sender)."""
+    orchestrator = _make_orchestrator()
+
+    # Notes ingress would set owner_sender to the raw config value.
+    # After our fix, it normalizes — but the approval comparison should
+    # also handle any residual mismatch.  Simulate a task from a
+    # sender with formatting that normalizes to the same digits.
+    raw_sender = "1-555-123-4567"  # formatted with dashes (11 digits)
+    normalized_sender = "+15551234567"  # E.164 via iMessage ingress
+
+    # Create a task as if from Notes ingress (raw sender)
+    msg1 = InboundMessage(
+        id="note_n1",
+        sender=raw_sender,
+        text="task: deploy web app",
+        received_at="2026-02-20T10:00:00Z",
+        is_from_me=False,
+        context={"channel": "notes", "note_id": "n1", "note_title": "deploy web app", "folder_name": "agent-task"},
+    )
+    result1 = orchestrator.handle_message(msg1)
+    assert result1.kind is CommandKind.TASK
+    request_id = result1.approval_request_id
+    assert request_id is not None
+
+    # Approve via iMessage with normalized E.164 sender
+    msg2 = InboundMessage(
+        id="m2",
+        sender=normalized_sender,
+        text=f"approve {request_id}",
+        received_at="2026-02-20T10:01:00Z",
+        is_from_me=False,
+    )
+    result2 = orchestrator.handle_message(msg2)
+    assert result2.kind is CommandKind.APPROVE
+    assert "original requester" not in result2.response
+
+    approval = orchestrator.store.get_approval(request_id)
+    assert approval["status"] == "approved"
+
+
+def test_cross_gateway_reminders_unnormalized_owner_approved_via_imessage():
+    """Reminders task with un-normalized owner can be approved via iMessage."""
+    orchestrator = _make_orchestrator()
+
+    raw_sender = "1 (555) 987-6543"  # formatted with country code + parens
+    normalized_sender = "+15559876543"  # E.164 via iMessage ingress
+
+    msg1 = InboundMessage(
+        id="reminder_r1",
+        sender=raw_sender,
+        text="task: run database migration",
+        received_at="2026-02-20T10:00:00Z",
+        is_from_me=False,
+        context={"channel": "reminders", "reminder_id": "r1", "reminder_name": "run migration", "list_name": "agent-task"},
+    )
+    result1 = orchestrator.handle_message(msg1)
+    assert result1.kind is CommandKind.TASK
+    request_id = result1.approval_request_id
+    assert request_id is not None
+
+    msg2 = InboundMessage(
+        id="m2",
+        sender=normalized_sender,
+        text=f"approve {request_id}",
+        received_at="2026-02-20T10:01:00Z",
+        is_from_me=False,
+    )
+    result2 = orchestrator.handle_message(msg2)
+    assert result2.kind is CommandKind.APPROVE
+    assert "original requester" not in result2.response
+
+    approval = orchestrator.store.get_approval(request_id)
+    assert approval["status"] == "approved"
+
+
+def test_cross_gateway_calendar_unnormalized_owner_approved_via_imessage():
+    """Calendar task with un-normalized owner can be approved via iMessage."""
+    orchestrator = _make_orchestrator()
+
+    raw_sender = "1.555.123.4567"  # dot-separated with country code
+    normalized_sender = "+15551234567"  # E.164 via iMessage ingress
+
+    msg1 = InboundMessage(
+        id="cal_e1",
+        sender=raw_sender,
+        text="task: update SSL certificates",
+        received_at="2026-02-20T10:00:00Z",
+        is_from_me=False,
+        context={"channel": "calendar", "event_id": "e1", "event_summary": "update certs", "calendar_name": "agent-schedule"},
+    )
+    result1 = orchestrator.handle_message(msg1)
+    assert result1.kind is CommandKind.TASK
+    request_id = result1.approval_request_id
+    assert request_id is not None
+
+    msg2 = InboundMessage(
+        id="m2",
+        sender=normalized_sender,
+        text=f"approve {request_id}",
+        received_at="2026-02-20T10:01:00Z",
+        is_from_me=False,
+    )
+    result2 = orchestrator.handle_message(msg2)
+    assert result2.kind is CommandKind.APPROVE
+    assert "original requester" not in result2.response
+
+    approval = orchestrator.store.get_approval(request_id)
+    assert approval["status"] == "approved"
+
+
+def test_cross_gateway_mismatched_sender_still_rejected():
+    """A genuinely different sender is still correctly rejected across gateways."""
+    orchestrator = _make_orchestrator()
+
+    msg1 = InboundMessage(
+        id="note_n2",
+        sender="+15551111111",
+        text="task: deploy staging",
+        received_at="2026-02-20T10:00:00Z",
+        is_from_me=False,
+        context={"channel": "notes", "note_id": "n2", "note_title": "deploy staging", "folder_name": "agent-task"},
+    )
+    result1 = orchestrator.handle_message(msg1)
+    request_id = result1.approval_request_id
+    assert request_id is not None
+
+    # Different person tries to approve
+    msg2 = InboundMessage(
+        id="m2",
+        sender="+15559999999",
+        text=f"approve {request_id}",
+        received_at="2026-02-20T10:01:00Z",
+        is_from_me=False,
+    )
+    result2 = orchestrator.handle_message(msg2)
+    assert result2.kind is CommandKind.APPROVE
+    assert "original requester" in result2.response
+
+    approval = orchestrator.store.get_approval(request_id)
+    assert approval["status"] == "pending"

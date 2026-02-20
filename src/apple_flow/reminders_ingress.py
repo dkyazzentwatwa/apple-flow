@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 from .models import InboundMessage
 from .protocols import StoreProtocol
+from .utils import normalize_sender
 
 logger = logging.getLogger("apple_flow.reminders_ingress")
 
@@ -34,7 +35,7 @@ class AppleRemindersIngress:
         store: StoreProtocol | None = None,
     ):
         self.list_name = list_name
-        self.owner_sender = owner_sender
+        self.owner_sender = normalize_sender(owner_sender)
         self.auto_approve = auto_approve
         self.trigger_tag = trigger_tag.strip()
         self._store = store
