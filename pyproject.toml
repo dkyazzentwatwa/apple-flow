@@ -4,27 +4,64 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apple-flow"
-version = "1.0.0"
-description = "Local-first macOS daemon bridging iMessage, Mail, Reminders, Notes, and Calendar to AI CLI tools"
+version = "0.1.0"
+description = "Local-first macOS daemon bridging iMessage, Mail, Reminders, Notes, and Calendar to AI assistants"
 readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.11"
+authors = [
+    {name = "dkyazzentwatwa"}
+]
+keywords = [
+    "macos",
+    "imessage",
+    "ai",
+    "claude",
+    "codex",
+    "apple",
+    "assistant",
+    "automation",
+    "local-first",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: MacOS X",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Chat",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Systems Administration",
+]
 dependencies = [
-  "fastapi>=0.115.0",
-  "uvicorn[standard]>=0.30.0",
-  "pydantic>=2.8.0",
-  "pydantic-settings>=2.3.0",
-  "httpx>=0.27.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.3.0",
+    "httpx>=0.27.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.3.0",
-  "pytest-asyncio>=0.23.0",
-  "httpx>=0.27.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
 ]
 
 [project.scripts]
 apple-flow = "apple_flow.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/dkyazzentwatwa/apple-flow"
+Documentation = "https://github.com/dkyazzentwatwa/apple-flow#readme"
+Repository = "https://github.com/dkyazzentwatwa/apple-flow"
+Issues = "https://github.com/dkyazzentwatwa/apple-flow/issues"
+Changelog = "https://github.com/dkyazzentwatwa/apple-flow/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
