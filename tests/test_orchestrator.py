@@ -164,7 +164,7 @@ def test_reminder_task_moves_to_archive_after_approval():
             "channel": "reminders",
             "reminder_id": "x-apple-reminder://ABC123",
             "reminder_name": "Create test file",
-            "list_name": "Codex Tasks",
+            "list_name": "agent-task",
         },
     )
 
@@ -189,7 +189,7 @@ def test_reminder_task_moves_to_archive_after_approval():
     assert len(reminders_egress.moved_reminders) == 1
     moved = reminders_egress.moved_reminders[0]
     assert moved["reminder_id"] == "x-apple-reminder://ABC123"
-    assert moved["source_list_name"] == "Codex Tasks"
+    assert moved["source_list_name"] == "agent-task"
     assert moved["archive_list_name"] == "Archive"
     assert "[Apple Flow Result]" in moved["result_text"]
 

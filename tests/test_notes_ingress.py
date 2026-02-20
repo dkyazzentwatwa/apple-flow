@@ -10,7 +10,7 @@ from apple_flow.notes_ingress import AppleNotesIngress
 
 def _make_ingress(store=None, auto_approve=False, trigger_tag=""):
     return AppleNotesIngress(
-        folder_name="Codex Inbox",
+        folder_name="agent-task",
         trigger_tag=trigger_tag,
         owner_sender="+15551234567",
         auto_approve=auto_approve,
@@ -198,7 +198,7 @@ def test_fetch_retries_on_timeout_then_succeeds(mock_run):
     ]
 
     ingress = AppleNotesIngress(
-        folder_name="Codex Inbox",
+        folder_name="agent-task",
         trigger_tag="!!codex",
         owner_sender="+15551234567",
         fetch_retries=1,
@@ -257,7 +257,7 @@ def test_fetch_skips_notes_without_trigger_tag(mock_run):
     mock_run.return_value = _mock_applescript_output(notes)
 
     ingress = AppleNotesIngress(
-        folder_name="Codex Inbox",
+        folder_name="agent-task",
         trigger_tag="#codex",
         owner_sender="+15551234567",
     )
@@ -277,7 +277,7 @@ def test_fetch_processes_notes_with_trigger_tag_in_title(mock_run):
     mock_run.return_value = _mock_applescript_output(notes)
 
     ingress = AppleNotesIngress(
-        folder_name="Codex Inbox",
+        folder_name="agent-task",
         trigger_tag="#codex",
         owner_sender="+15551234567",
     )
@@ -296,7 +296,7 @@ def test_fetch_processes_notes_with_trigger_tag_in_body(mock_run):
     mock_run.return_value = _mock_applescript_output(notes)
 
     ingress = AppleNotesIngress(
-        folder_name="Codex Inbox",
+        folder_name="agent-task",
         trigger_tag="#codex",
         owner_sender="+15551234567",
     )
@@ -316,7 +316,7 @@ def test_fetch_processes_all_notes_when_trigger_tag_empty(mock_run):
     mock_run.return_value = _mock_applescript_output(notes)
 
     ingress = AppleNotesIngress(
-        folder_name="Codex Inbox",
+        folder_name="agent-task",
         trigger_tag="",
         owner_sender="+15551234567",
     )
@@ -335,7 +335,7 @@ def test_fetch_custom_trigger_tag(mock_run):
     mock_run.return_value = _mock_applescript_output(notes)
 
     ingress = AppleNotesIngress(
-        folder_name="Codex Inbox",
+        folder_name="agent-task",
         trigger_tag="@go",
         owner_sender="+15551234567",
     )

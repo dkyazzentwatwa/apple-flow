@@ -2,7 +2,7 @@
 
 Polls a designated Reminders list for incomplete reminders, converts them to
 InboundMessage objects, and tracks processed IDs in the SQLite store to avoid
-re-processing.  Each reminder becomes a ``task:`` command for Codex (or a
+re-processing. Each reminder becomes a ``task:`` command for the AI assistant (or a
 non-mutating command if ``auto_approve`` is enabled).
 """
 
@@ -27,7 +27,7 @@ class AppleRemindersIngress:
 
     def __init__(
         self,
-        list_name: str = "Codex Tasks",
+        list_name: str = "agent-task",
         owner_sender: str = "",
         auto_approve: bool = False,
         trigger_tag: str = "",

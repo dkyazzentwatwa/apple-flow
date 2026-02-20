@@ -2,7 +2,7 @@
 
 Polls a designated Notes folder for notes, converts them to InboundMessage
 objects, and tracks processed note IDs in the SQLite store.  Each note becomes
-a command for Codex (title may contain a prefix like ``task:``).
+a command for the AI assistant (title may contain a prefix like ``task:``).
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ class AppleNotesIngress:
 
     def __init__(
         self,
-        folder_name: str = "Codex Inbox",
+        folder_name: str = "agent-task",
         trigger_tag: str = "#codex",
         owner_sender: str = "",
         auto_approve: bool = False,

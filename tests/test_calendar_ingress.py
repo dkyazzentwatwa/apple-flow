@@ -10,7 +10,7 @@ from apple_flow.calendar_ingress import AppleCalendarIngress
 
 def _make_ingress(store=None, auto_approve=False):
     return AppleCalendarIngress(
-        calendar_name="Codex Schedule",
+        calendar_name="agent-schedule",
         owner_sender="+15551234567",
         auto_approve=auto_approve,
         lookahead_minutes=5,
@@ -176,7 +176,7 @@ def test_trigger_tag_required_skips_without_tag(mock_run):
     mock_run.return_value = _mock_applescript_output(events)
 
     ingress = AppleCalendarIngress(
-        calendar_name="Codex Schedule",
+        calendar_name="agent-schedule",
         owner_sender="+15551234567",
         trigger_tag="!!agent",
     )
@@ -193,7 +193,7 @@ def test_trigger_tag_in_description_passes_and_stripped(mock_run):
     mock_run.return_value = _mock_applescript_output(events)
 
     ingress = AppleCalendarIngress(
-        calendar_name="Codex Schedule",
+        calendar_name="agent-schedule",
         owner_sender="+15551234567",
         trigger_tag="!!agent",
     )
@@ -213,7 +213,7 @@ def test_trigger_tag_empty_processes_all(mock_run):
     mock_run.return_value = _mock_applescript_output(events)
 
     ingress = AppleCalendarIngress(
-        calendar_name="Codex Schedule",
+        calendar_name="agent-schedule",
         owner_sender="+15551234567",
         trigger_tag="",
     )

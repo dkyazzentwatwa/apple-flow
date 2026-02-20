@@ -7,7 +7,7 @@ from apple_flow.notes_egress import AppleNotesEgress
 
 
 def _make_egress():
-    return AppleNotesEgress(folder_name="Codex Inbox")
+    return AppleNotesEgress(folder_name="agent-task")
 
 
 @patch("apple_flow.notes_egress.subprocess.run")
@@ -231,7 +231,7 @@ def test_create_log_note_success(mock_run):
     result.stderr = ""
     mock_run.return_value = result
 
-    egress = AppleNotesEgress(folder_name="Codex Inbox")
+    egress = AppleNotesEgress(folder_name="agent-task")
     ok = egress.create_log_note(
         folder_name="codex-logs",
         title="[chat] hello — 2024-01-15 14:32:05 UTC",
@@ -253,7 +253,7 @@ def test_create_log_note_failure_returncode(mock_run):
     result.stderr = ""
     mock_run.return_value = result
 
-    egress = AppleNotesEgress(folder_name="Codex Inbox")
+    egress = AppleNotesEgress(folder_name="agent-task")
     ok = egress.create_log_note(
         folder_name="codex-logs",
         title="[chat] test — 2024-01-15",
@@ -266,7 +266,7 @@ def test_create_log_note_failure_returncode(mock_run):
 def test_create_log_note_timeout(mock_run):
     mock_run.side_effect = subprocess.TimeoutExpired(cmd="osascript", timeout=15)
 
-    egress = AppleNotesEgress(folder_name="Codex Inbox")
+    egress = AppleNotesEgress(folder_name="agent-task")
     ok = egress.create_log_note("codex-logs", "[idea] test", "body text")
     assert ok is False
 
@@ -275,7 +275,7 @@ def test_create_log_note_timeout(mock_run):
 def test_create_log_note_osascript_not_found(mock_run):
     mock_run.side_effect = FileNotFoundError("osascript not found")
 
-    egress = AppleNotesEgress(folder_name="Codex Inbox")
+    egress = AppleNotesEgress(folder_name="agent-task")
     ok = egress.create_log_note("codex-logs", "[plan] test", "body text")
     assert ok is False
 
@@ -288,7 +288,7 @@ def test_create_log_note_escapes_double_quotes(mock_run):
     result.stderr = ""
     mock_run.return_value = result
 
-    egress = AppleNotesEgress(folder_name="Codex Inbox")
+    egress = AppleNotesEgress(folder_name="agent-task")
     ok = egress.create_log_note(
         folder_name="codex-logs",
         title='[chat] He said "hello"',

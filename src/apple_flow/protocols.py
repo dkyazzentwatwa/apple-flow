@@ -98,7 +98,7 @@ class StoreProtocol(Protocol):
 
 @runtime_checkable
 class ConnectorProtocol(Protocol):
-    """Protocol for Codex backend connectors."""
+    """Protocol for AI backend connectors."""
 
     def ensure_started(self) -> None:
         """Ensure the backend process is running."""

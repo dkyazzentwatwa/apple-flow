@@ -12,7 +12,7 @@ from apple_flow.reminders_ingress import AppleRemindersIngress
 def test_fetch_new_converts_to_inbound_messages(monkeypatch):
     store = FakeStore()
     ingress = AppleRemindersIngress(
-        list_name="Codex Tasks",
+        list_name="agent-task",
         owner_sender="+15551234567",
         store=store,
     )
@@ -43,7 +43,7 @@ def test_fetch_new_converts_to_inbound_messages(monkeypatch):
 def test_fetch_new_auto_approve_uses_relay_prefix(monkeypatch):
     store = FakeStore()
     ingress = AppleRemindersIngress(
-        list_name="Codex Tasks",
+        list_name="agent-task",
         owner_sender="+15551234567",
         auto_approve=True,
         store=store,
@@ -61,7 +61,7 @@ def test_fetch_new_auto_approve_uses_relay_prefix(monkeypatch):
 def test_fetch_new_skips_already_processed(monkeypatch):
     store = FakeStore()
     ingress = AppleRemindersIngress(
-        list_name="Codex Tasks",
+        list_name="agent-task",
         owner_sender="+15551234567",
         store=store,
     )
@@ -82,7 +82,7 @@ def test_fetch_new_skips_already_processed(monkeypatch):
 def test_fetch_new_skips_empty_names(monkeypatch):
     store = FakeStore()
     ingress = AppleRemindersIngress(
-        list_name="Codex Tasks",
+        list_name="agent-task",
         owner_sender="+15551234567",
         store=store,
     )
@@ -98,7 +98,7 @@ def test_fetch_new_skips_empty_names(monkeypatch):
 def test_fetch_new_skips_missing_id(monkeypatch):
     store = FakeStore()
     ingress = AppleRemindersIngress(
-        list_name="Codex Tasks",
+        list_name="agent-task",
         owner_sender="+15551234567",
         store=store,
     )
@@ -114,7 +114,7 @@ def test_fetch_new_skips_missing_id(monkeypatch):
 def test_mark_processed_persists_to_store():
     store = FakeStore()
     ingress = AppleRemindersIngress(
-        list_name="Codex Tasks",
+        list_name="agent-task",
         owner_sender="+15551234567",
         store=store,
     )
@@ -135,7 +135,7 @@ def test_processed_ids_hydrated_from_store():
     store.set_state("reminders_processed_ids", json.dumps(["rem_old_1", "rem_old_2"]))
 
     ingress = AppleRemindersIngress(
-        list_name="Codex Tasks",
+        list_name="agent-task",
         owner_sender="+15551234567",
         store=store,
     )
@@ -180,7 +180,7 @@ def test_compose_text_empty():
 def test_fetch_new_respects_limit(monkeypatch):
     store = FakeStore()
     ingress = AppleRemindersIngress(
-        list_name="Codex Tasks",
+        list_name="agent-task",
         owner_sender="+15551234567",
         store=store,
     )

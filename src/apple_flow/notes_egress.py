@@ -1,6 +1,6 @@
-"""Writes Codex results back to Apple Notes.
+"""Writes AI results back to Apple Notes.
 
-Appends Codex response to the note body with a separator.
+Appends the AI response to the note body with a separator.
 """
 
 from __future__ import annotations
@@ -12,13 +12,13 @@ logger = logging.getLogger("apple_flow.notes_egress")
 
 
 class AppleNotesEgress:
-    """Updates notes in Notes.app with Codex results."""
+    """Updates notes in Notes.app with AI results."""
 
-    def __init__(self, folder_name: str = "Codex Inbox"):
+    def __init__(self, folder_name: str = "agent-task"):
         self.folder_name = folder_name
 
     def append_result(self, note_id: str, result_text: str) -> bool:
-        """Append Codex result to the note body with a separator.
+        """Append AI result to the note body with a separator.
 
         Returns True on success, False on failure.
         """
@@ -37,7 +37,7 @@ class AppleNotesEgress:
                 set targetFolder to folder "{escaped_folder}"
                 set matchedNote to (first note of targetFolder whose id is "{escaped_id}")
                 set existingBody to plaintext of matchedNote
-                set body of matchedNote to existingBody & "\\n\\n--- Codex Response ---\\n" & "{escaped_text}"
+                set body of matchedNote to existingBody & "\\n\\n--- Apple Flow Response ---\\n" & "{escaped_text}"
                 return "ok"
             on error errMsg
                 return "error: " & errMsg

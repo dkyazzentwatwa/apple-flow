@@ -1,7 +1,7 @@
-"""Writes Codex results back to Apple Reminders and marks them complete.
+"""Writes AI results back to Apple Reminders and marks them complete.
 
 Unlike iMessage/Mail egress which sends new messages, this egress *mutates*
-the source reminder: it writes the Codex response into the reminder's notes
+the source reminder: it writes the AI response into the reminder's notes
 field and marks it as completed.
 """
 
@@ -14,9 +14,9 @@ logger = logging.getLogger("apple_flow.reminders_egress")
 
 
 class AppleRemindersEgress:
-    """Updates reminders in Reminders.app with Codex results."""
+    """Updates reminders in Reminders.app with AI results."""
 
-    def __init__(self, list_name: str = "Codex Tasks"):
+    def __init__(self, list_name: str = "agent-task"):
         self.list_name = list_name
 
     def complete_reminder(self, reminder_id: str, result_text: str) -> bool:
@@ -140,7 +140,7 @@ class AppleRemindersEgress:
 
         Args:
             reminder_id: The x-apple-reminder:// URI of the reminder
-            result_text: The Codex execution result to write to the reminder body
+            result_text: The AI execution result to write to the reminder body
             source_list_name: The list where the reminder currently lives
             archive_list_name: The list to move the reminder to
 

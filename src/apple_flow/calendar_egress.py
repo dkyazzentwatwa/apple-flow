@@ -1,4 +1,4 @@
-"""Writes Codex results back to Apple Calendar event notes."""
+"""Writes AI results back to Apple Calendar event notes."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ logger = logging.getLogger("apple_flow.calendar_egress")
 
 
 class AppleCalendarEgress:
-    """Updates calendar events with Codex results."""
+    """Updates calendar events with AI results."""
 
-    def __init__(self, calendar_name: str = "Codex Schedule"):
+    def __init__(self, calendar_name: str = "agent-schedule"):
         self.calendar_name = calendar_name
 
     def annotate_event(self, event_id: str, result_text: str) -> bool:

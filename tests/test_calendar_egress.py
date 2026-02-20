@@ -7,7 +7,7 @@ from apple_flow.calendar_egress import AppleCalendarEgress
 
 
 def _make_egress():
-    return AppleCalendarEgress(calendar_name="Codex Schedule")
+    return AppleCalendarEgress(calendar_name="agent-schedule")
 
 
 @patch("apple_flow.calendar_egress.subprocess.run")

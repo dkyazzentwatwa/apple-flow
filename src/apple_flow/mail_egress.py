@@ -156,7 +156,7 @@ class AppleMailEgress:
 
         script = f'''
         tell application "Mail"
-            set newMessage to make new outgoing message with properties {{subject:"Codex Voice Memo", content:"Voice memo attached.", visible:false{sender_prop}}}
+            set newMessage to make new outgoing message with properties {{subject:"Apple Flow Voice Memo", content:"Voice memo attached.", visible:false{sender_prop}}}
             tell newMessage
                 make new to recipient at end of to recipients with properties {{address:"{escaped_recipient}"}}
                 make new attachment with properties {{file name:(POSIX file "{escaped_path}" as alias)}} at after the last paragraph

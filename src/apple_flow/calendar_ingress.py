@@ -25,7 +25,7 @@ class AppleCalendarIngress:
 
     def __init__(
         self,
-        calendar_name: str = "Codex Schedule",
+        calendar_name: str = "agent-schedule",
         owner_sender: str = "",
         auto_approve: bool = False,
         lookahead_minutes: int = 5,
