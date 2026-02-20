@@ -1,10 +1,10 @@
 """Tests for conversation memory (history command + auto-context)."""
 
+from conftest import FakeConnector, FakeEgress, FakeStore
+
 from apple_flow.commanding import CommandKind
 from apple_flow.models import InboundMessage
 from apple_flow.orchestrator import RelayOrchestrator
-
-from conftest import FakeConnector, FakeEgress, FakeStore
 
 
 def _make_orchestrator(store=None, auto_context_messages=0):

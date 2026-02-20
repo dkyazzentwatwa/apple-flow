@@ -352,7 +352,7 @@ def test_note_context_key_note_title_is_used():
     )
 
     result = orchestrator.handle_message(msg)
-    run = store.get_run(result.run_id)
+    store.get_run(result.run_id)
     src = store.get_run_source_context(result.run_id)
     assert src is not None
     assert src["note_name"] == "Write tests"   # orchestrator stores it as note_name

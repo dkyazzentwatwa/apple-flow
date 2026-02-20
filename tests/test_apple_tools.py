@@ -3,11 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 import apple_flow.apple_tools as at
 from apple_flow.apple_tools import (
@@ -38,7 +34,6 @@ from apple_flow.apple_tools import (
     reminders_list_lists,
     reminders_search,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -82,7 +77,7 @@ def _make_notes(n: int = 2) -> list[dict]:
 
 class TestRunScript:
     def test_returns_stdout_on_success(self):
-        with patch("subprocess.run", return_value=_ok_result("hello")) as m:
+        with patch("subprocess.run", return_value=_ok_result("hello")):
             result = _run_script("tell application")
             assert result == "hello"
 

@@ -13,8 +13,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from apple_flow.ambient import AmbientScanner
-from apple_flow.memory import FileMemory
+from apple_flow.ambient import AmbientScanner  # noqa: E402
+from apple_flow.memory import FileMemory  # noqa: E402
 
 
 @pytest.fixture

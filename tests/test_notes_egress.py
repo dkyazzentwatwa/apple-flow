@@ -1,7 +1,7 @@
 """Tests for Apple Notes egress."""
 
-from unittest.mock import patch, MagicMock
 import subprocess
+from unittest.mock import MagicMock, patch
 
 from apple_flow.notes_egress import AppleNotesEgress
 

@@ -4,20 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from datetime import datetime, time, date, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import FakeConnector, FakeEgress, FakeStore
-from apple_flow.companion import CompanionLoop
+from conftest import FakeConnector, FakeEgress, FakeStore  # noqa: E402
+
+from apple_flow.companion import CompanionLoop  # noqa: E402
 
 
 def _make_config(**overrides):

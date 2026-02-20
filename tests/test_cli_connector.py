@@ -5,8 +5,6 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import Mock, patch
 
-import pytest
-
 from apple_flow.codex_cli_connector import CodexCliConnector
 
 

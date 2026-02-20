@@ -8,15 +8,14 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from .ambient import AmbientScanner
 from .calendar_egress import AppleCalendarEgress
 from .calendar_ingress import AppleCalendarIngress
 from .claude_cli_connector import ClaudeCliConnector
 from .cline_connector import ClineConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
-from .ambient import AmbientScanner
 from .companion import CompanionLoop
-from .office_sync import OfficeSyncer
 from .config import RelaySettings
 from .egress import IMessageEgress
 from .ingress import IMessageIngress
@@ -25,6 +24,7 @@ from .mail_ingress import AppleMailIngress
 from .memory import FileMemory
 from .notes_egress import AppleNotesEgress
 from .notes_ingress import AppleNotesIngress
+from .office_sync import OfficeSyncer
 from .orchestrator import RelayOrchestrator
 from .policy import PolicyEngine
 from .protocols import ConnectorProtocol
@@ -709,7 +709,6 @@ class RelayDaemon:
                     if not msg.text.strip():
                         continue
 
-                    note_id = msg.context.get("note_id", "")
                     note_title = msg.context.get("note_title", "")
                     logger.info("Inbound note id=%s title=%r chars=%s", msg.id, note_title, len(msg.text))
                     dispatchable_notes.append(msg)
@@ -726,7 +725,7 @@ class RelayDaemon:
                             if result.kind.value in ("task", "project"):
                                 self.notes_egress.append_result(
                                     note_id,
-                                    f"[Apple Flow] Awaiting approval — check iMessage to approve/deny.",
+                                    "[Apple Flow] Awaiting approval — check iMessage to approve/deny.",
                                 )
                             else:
                                 self.notes_egress.move_to_archive(
@@ -784,7 +783,7 @@ class RelayDaemon:
                             if result.kind.value in ("task", "project"):
                                 self.calendar_egress.annotate_event(
                                     event_id,
-                                    f"[Apple Flow] Awaiting approval — check iMessage to approve/deny.",
+                                    "[Apple Flow] Awaiting approval — check iMessage to approve/deny.",
                                 )
                             else:
                                 self.calendar_egress.annotate_event(event_id, result.response)

@@ -1,7 +1,7 @@
 """Tests for Apple Calendar egress."""
 
-from unittest.mock import patch, MagicMock
 import subprocess
+from unittest.mock import MagicMock, patch
 
 from apple_flow.calendar_egress import AppleCalendarEgress
 

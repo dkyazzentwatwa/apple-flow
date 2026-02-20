@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from apple_flow.mail_ingress import AppleMailIngress
 
 

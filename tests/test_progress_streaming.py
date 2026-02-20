@@ -1,13 +1,11 @@
 """Tests for progress streaming during long tasks."""
 
-from unittest.mock import MagicMock, patch
 from dataclasses import dataclass, field
 
-from apple_flow.commanding import CommandKind
+from conftest import FakeEgress, FakeStore
+
 from apple_flow.models import InboundMessage
 from apple_flow.orchestrator import RelayOrchestrator
-
-from conftest import FakeEgress, FakeStore
 
 
 @dataclass

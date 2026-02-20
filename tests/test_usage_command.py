@@ -3,13 +3,11 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
+from conftest import FakeConnector, FakeEgress, FakeStore
 
 from apple_flow.commanding import CommandKind, parse_command
 from apple_flow.models import InboundMessage
 from apple_flow.orchestrator import RelayOrchestrator
-
-from conftest import FakeConnector, FakeEgress, FakeStore
 
 
 def _make_orchestrator():

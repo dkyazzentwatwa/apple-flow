@@ -1,11 +1,11 @@
 """Tests for Apple Notes ingress."""
 
 import json
-from unittest.mock import patch, MagicMock
-
-from apple_flow.notes_ingress import AppleNotesIngress
+from unittest.mock import MagicMock, patch
 
 from conftest import FakeStore
+
+from apple_flow.notes_ingress import AppleNotesIngress
 
 
 def _make_ingress(store=None, auto_approve=False, trigger_tag=""):

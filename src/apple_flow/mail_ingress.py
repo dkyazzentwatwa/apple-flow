@@ -113,13 +113,6 @@ class AppleMailIngress:
         else:
             mailbox_ref = "inbox"
 
-        # Calculate cutoff date for max_age_days
-        from datetime import timedelta
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=self.max_age_days)
-        # AppleScript date format: "Monday, January 1, 2024 at 12:00:00 AM"
-        # We'll use a simpler approach: calculate seconds since epoch
-        cutoff_timestamp = int(cutoff_date.timestamp())
-
         # Build sender filter clause for AppleScript
         conditions = ["read status is false"]
 

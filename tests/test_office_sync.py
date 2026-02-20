@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import textwrap
 import uuid
 from pathlib import Path
@@ -12,7 +11,6 @@ import httpx
 import pytest
 
 from apple_flow.office_sync import OfficeSyncer
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

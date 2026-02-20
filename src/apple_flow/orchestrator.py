@@ -4,19 +4,18 @@ import json
 import logging
 import re
 import subprocess
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
-logger = logging.getLogger("apple_flow.orchestrator")
-
 from .approval import ApprovalHandler, OrchestrationResult
 from .commanding import CommandKind, ParsedCommand, is_likely_mutating, parse_command
-from .models import InboundMessage, RunState
+from .models import InboundMessage
 from .notes_logging import log_to_notes
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
+
+logger = logging.getLogger("apple_flow.orchestrator")
 
 if TYPE_CHECKING:
     from .memory import FileMemory
@@ -167,11 +166,10 @@ class RelayOrchestrator:
                 lines = [f"Pending approvals ({len(pending)}):"]
                 for req in pending:
                     req_id = req.get("request_id", "?")
-                    summary = req.get("summary", "")
                     preview = req.get("command_preview", "")[:80].replace("\n", " ")
                     lines.append(f"\n{req_id}")
                     lines.append(f"  {preview}")
-                lines.append(f"\nReply `approve <id>` or `deny <id>` to act on one.")
+                lines.append("\nReply `approve <id>` or `deny <id>` to act on one.")
                 lines.append("Reply `deny all` to cancel all.")
                 response = "\n".join(lines)
             self.egress.send(message.sender, response)

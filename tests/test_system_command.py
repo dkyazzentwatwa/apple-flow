@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
-
 from apple_flow.commanding import CommandKind, parse_command
 from apple_flow.models import InboundMessage
 from apple_flow.orchestrator import RelayOrchestrator

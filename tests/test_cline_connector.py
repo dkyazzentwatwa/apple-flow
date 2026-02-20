@@ -6,8 +6,6 @@ import json
 import subprocess
 from unittest.mock import Mock, patch
 
-import pytest
-
 from apple_flow.cline_connector import ClineConnector
 
 

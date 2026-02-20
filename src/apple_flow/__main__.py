@@ -4,11 +4,11 @@ import argparse
 import asyncio
 import atexit
 import fcntl
-import json
-from pathlib import Path
-import sys
-
 import importlib.metadata
+import json
+import sys
+from pathlib import Path
+
 import uvicorn
 
 from .apple_tools import (

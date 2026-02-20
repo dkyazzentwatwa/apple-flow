@@ -13,8 +13,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from apple_flow.store import SQLiteStore
-from apple_flow.scheduler import FollowUpScheduler
+from apple_flow.scheduler import FollowUpScheduler  # noqa: E402
+from apple_flow.store import SQLiteStore  # noqa: E402
 
 
 @pytest.fixture

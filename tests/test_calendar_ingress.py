@@ -1,11 +1,11 @@
 """Tests for Apple Calendar ingress."""
 
 import json
-from unittest.mock import patch, MagicMock
-
-from apple_flow.calendar_ingress import AppleCalendarIngress
+from unittest.mock import MagicMock, patch
 
 from conftest import FakeStore
+
+from apple_flow.calendar_ingress import AppleCalendarIngress
 
 
 def _make_ingress(store=None, auto_approve=False):

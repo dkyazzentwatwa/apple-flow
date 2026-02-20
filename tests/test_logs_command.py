@@ -1,15 +1,9 @@
 """Tests for the `logs` command — tail daemon log via iMessage."""
 from __future__ import annotations
 
-import textwrap
-from pathlib import Path
-
-import pytest
-
 from apple_flow.commanding import CommandKind, parse_command
 from apple_flow.models import InboundMessage
 from apple_flow.orchestrator import RelayOrchestrator
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -94,7 +88,7 @@ def test_logs_custom_n(fake_store, fake_connector, fake_egress, tmp_path):
     log_file.write_text("\n".join(lines))
 
     orch = _make_orchestrator(fake_store, fake_connector, fake_egress, log_file_path=str(log_file))
-    result = orch.handle_message(_msg("logs: 5"))
+    orch.handle_message(_msg("logs: 5"))
 
     sent = fake_egress.messages[0][1]
     assert "Last 5 lines" in sent
@@ -114,7 +108,7 @@ def test_logs_capped_at_50(fake_store, fake_connector, fake_egress, tmp_path):
     log_file.write_text("\n".join(lines))
 
     orch = _make_orchestrator(fake_store, fake_connector, fake_egress, log_file_path=str(log_file))
-    result = orch.handle_message(_msg("logs: 999"))
+    orch.handle_message(_msg("logs: 999"))
 
     sent = fake_egress.messages[0][1]
     assert "Last 50 lines" in sent
