@@ -11,6 +11,8 @@
 [![macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos)
 [![GitHub release](https://img.shields.io/github/v/release/dkyazzentwatwa/apple-flow?include_prereleases)](https://github.com/dkyazzentwatwa/apple-flow/releases)
 
+**[apple-flow-site.vercel.app](https://apple-flow-site.vercel.app/)**
+
 *A local-first macOS daemon that bridges iMessage, Mail, Reminders, Notes, and Calendar to your favorite AI assistant. No apps. No cloud. Just iMessage.*
 
 </div>
