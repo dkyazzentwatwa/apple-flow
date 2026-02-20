@@ -11,7 +11,7 @@ Thank you for your interest in contributing to Apple Flow! This document provide
 - [Testing](#testing)
 - [Pull Request Process](#pull-request-process)
 - [Coding Standards](#coding-standards)
-- [Project Structure](#project-standards)
+- [Project Structure](#project-structure)
 
 ## Code of Conduct
 

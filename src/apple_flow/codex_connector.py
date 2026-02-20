@@ -153,7 +153,7 @@ class CodexAppServerConnector:
             {
                 "clientInfo": {
                     "name": "apple-flow",
-                    "version": "0.1.0",
+                    "version": "0.2.0",
                 }
             },
             timeout_seconds=60.0,  # Give Codex more time to start up

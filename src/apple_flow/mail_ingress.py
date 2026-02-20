@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import subprocess
 from datetime import datetime, timezone
 
@@ -252,7 +251,7 @@ class AppleMailIngress:
             mailbox_ref = "inbox"
 
         # Build AppleScript to mark specific messages as read
-        id_checks = " or ".join([f'(id of msg as text) is "{mid}"' for mid in message_ids if mid])
+        id_checks = " or ".join([f'(id of msg as text) is "{mid.replace(chr(34), "")}"' for mid in message_ids if mid])
         if not id_checks:
             return
 

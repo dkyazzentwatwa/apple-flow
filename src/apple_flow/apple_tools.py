@@ -44,32 +44,6 @@ MESSAGES:  messages_list_recent_chats [--limit N]  |  messages_search "q" [--lim
 # Shared helpers
 # ---------------------------------------------------------------------------
 
-_ESCAPE_JSON_HANDLER = r"""
-on escapeJSON(txt)
-    set output to ""
-    repeat with ch in (characters of txt)
-        set charCode to (ASCII number of ch)
-        if ch is "\"" then
-            set output to output & "\\\""
-        else if ch is "\\" then
-            set output to output & "\\\\"
-        else if ch is (ASCII character 10) then
-            set output to output & "\\n"
-        else if ch is (ASCII character 13) then
-            set output to output & "\\n"
-        else if ch is (ASCII character 9) then
-            set output to output & "\\t"
-        else if charCode < 32 and charCode is not 10 and charCode is not 13 and charCode is not 9 then
-            set output to output & " "
-        else
-            set output to output & ch
-        end if
-    end repeat
-    return output
-end escapeJSON
-"""
-
-
 def _run_script(script: str, timeout: float = 30.0) -> str | None:
     """Run an osascript -e command. Returns stdout string or None on any failure."""
     try:
@@ -1191,11 +1165,11 @@ def messages_search(
             SELECT m.text, COALESCE(h.id, 'unknown') AS handle, m.date
             FROM message m
             LEFT JOIN handle h ON m.handle_id = h.ROWID
-            WHERE m.text LIKE ?
+            WHERE m.text LIKE ? ESCAPE '\'
             ORDER BY m.ROWID DESC
             LIMIT ?
             """,
-            (f"%{query}%", limit),
+            (f"%{query.replace(chr(92), chr(92)*2).replace('%', chr(92)+'%').replace('_', chr(92)+'_')}%", limit),
         ).fetchall()
         data = [
             {"handle": row["handle"], "text": row["text"] or "", "date": str(row["date"])}

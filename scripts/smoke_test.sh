@@ -13,7 +13,7 @@
 #   - Daemon running (PID visible in logs/apple-flow.err.log)
 #   - All 5 channels enabled in .env
 #   - Admin API reachable at http://127.0.0.1:8787
-#   - Mail test requires user@example.com configured in Mail.app
+#   - Mail test requires the configured MAIL_ADDRESS in Mail.app
 #
 # Log notes:
 #   - iMessage:  logs text=  (trigger tag NOT stripped)

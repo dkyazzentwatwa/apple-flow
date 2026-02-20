@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Initial public release preparation
+## [0.2.0] - 2026-02-20
+
+### Security
+- **Admin API authentication**: new `admin_api_token` config field adds `Authorization: Bearer` token auth to all admin endpoints except `/health`
+- **iMessage egress AppleScript injection fix**: added newline escaping (`.replace("\n", "\\n")`) to `egress.py` `_osascript_send()`, matching all other egress modules
+- **Mail ingress AppleScript injection fix**: escape double-quotes in message IDs in `mail_ingress.py` `_mark_as_read()`
+- **SQL LIKE wildcard escaping**: `store.py` `search_messages()` and `apple_tools.py` `messages_search()` now escape `%` and `_` in user queries
+- **PII scrubbed from tracked files**: replaced real phone number and email in `scripts/smoke_test.sh` with placeholders
+
+### Fixed
+- **Version consistency**: unified version to `0.2.0` across `pyproject.toml`, `__init__.py`, `main.py`, `codex_connector.py`, and `__main__.py`
+- **CLAUDE.md stale defaults**: corrected 8 documented config defaults that diverged from actual `config.py` values (`require_chat_prefix`, `codex_cli_context_window`, `claude_cli_context_window`, `auto_context_messages`, `reminders_list_name`, `notes_folder_name`, `calendar_name`, `mail_signature`)
+- **Silent exception logging**: added `logger.debug` to memory context injection failure in `orchestrator.py`
+
+### Removed
+- Unused `import re` in `mail_ingress.py`
+- Unused `_ESCAPE_JSON_HANDLER` constant in `apple_tools.py`
+
+### Documentation
+- Fixed CONTRIBUTING.md table of contents link mismatch
+- Added `cline_act_mode` and `admin_api_token` to `.env.example`
 - Comprehensive security documentation (SECURITY.md)
 - Contribution guidelines (CONTRIBUTING.md)
 - PyPI package configuration
@@ -76,9 +95,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.2.0 | 2026-02-20 | Security hardening, admin API auth, version unification |
 | 0.1.0 | 2026-02-19 | Initial public release |
 
 ---
 
-[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dkyazzentwatwa/apple-flow/releases/tag/v0.1.0

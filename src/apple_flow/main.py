@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import secrets
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .config import RelaySettings
@@ -22,13 +23,29 @@ class TaskSubmission(BaseModel):
     text: str = Field(min_length=1)
 
 
+def _make_auth_dependency(token: str):
+    """Create a FastAPI dependency that validates the Authorization: Bearer token."""
+    async def _verify_token(request: Request) -> None:
+        if not token:
+            return  # no token configured — auth disabled
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+        provided = auth_header[7:]
+        if not secrets.compare_digest(provided, token):
+            raise HTTPException(status_code=401, detail="Invalid API token")
+    return _verify_token
+
+
 def build_app(store: Any | None = None) -> FastAPI:
     settings = RelaySettings()
     active_store = store if store is not None else SQLiteStore(Path(settings.db_path))
     if hasattr(active_store, "bootstrap"):
         active_store.bootstrap()
 
-    app = FastAPI(title="Apple Flow Admin API", version="0.1.0")
+    verify_token = _make_auth_dependency(settings.admin_api_token)
+
+    app = FastAPI(title="Apple Flow Admin API", version="0.2.0")
     app.state.store = active_store
     # orchestrator is injected by daemon at startup (if running alongside polling)
     app.state.orchestrator = None
@@ -37,29 +54,29 @@ def build_app(store: Any | None = None) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.get("/sessions")
+    @app.get("/sessions", dependencies=[Depends(verify_token)])
     def sessions() -> list[dict[str, Any]]:
         return app.state.store.list_sessions()
 
-    @app.get("/runs/{run_id}")
+    @app.get("/runs/{run_id}", dependencies=[Depends(verify_token)])
     def get_run(run_id: str) -> dict[str, Any]:
         run = app.state.store.get_run(run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="run not found")
         return run
 
-    @app.get("/approvals/pending")
+    @app.get("/approvals/pending", dependencies=[Depends(verify_token)])
     def pending_approvals() -> list[dict[str, Any]]:
         return app.state.store.list_pending_approvals()
 
-    @app.post("/approvals/{request_id}/override")
+    @app.post("/approvals/{request_id}/override", dependencies=[Depends(verify_token)])
     def override_approval(request_id: str, body: ApprovalOverrideBody) -> dict[str, Any]:
         ok = app.state.store.resolve_approval(request_id, body.status)
         if not ok:
             raise HTTPException(status_code=404, detail="approval not found")
         return {"request_id": request_id, "status": body.status}
 
-    @app.get("/metrics")
+    @app.get("/metrics", dependencies=[Depends(verify_token)])
     def metrics() -> dict[str, int]:
         events_count = len(app.state.store.list_events()) if hasattr(app.state.store, "list_events") else 0
         return {
@@ -68,7 +85,7 @@ def build_app(store: Any | None = None) -> FastAPI:
             "recent_events": events_count,
         }
 
-    @app.get("/audit/events")
+    @app.get("/audit/events", dependencies=[Depends(verify_token)])
     def audit_events(limit: int = 200) -> list[dict[str, Any]]:
         if not hasattr(app.state.store, "list_events"):
             return []
@@ -76,7 +93,7 @@ def build_app(store: Any | None = None) -> FastAPI:
 
     # --- Feature 4: Siri Shortcuts / Programmatic Task Submission ---
 
-    @app.post("/task")
+    @app.post("/task", dependencies=[Depends(verify_token)])
     def submit_task(body: TaskSubmission) -> dict[str, Any]:
         """Submit a task programmatically (for Shortcuts.app, curl, scripts).
 

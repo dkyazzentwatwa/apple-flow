@@ -473,7 +473,7 @@ class RelayOrchestrator:
             if context:
                 return f"Persistent memory context:\n{context}\n\n{prompt}"
         except Exception:
-            pass
+            logger.debug("Failed to inject memory context", exc_info=True)
         return prompt
 
     # --- Attachment Context ---

@@ -53,6 +53,7 @@ class RelaySettings(BaseSettings):
 
     admin_host: str = "127.0.0.1"
     admin_port: int = 8787
+    admin_api_token: str = ""  # shared-secret token for admin API auth (empty = no auth)
 
     messages_db_path: Path = Path.home() / "Library" / "Messages" / "chat.db"
     process_historical_on_first_start: bool = False

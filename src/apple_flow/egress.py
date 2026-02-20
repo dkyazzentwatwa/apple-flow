@@ -37,8 +37,13 @@ class IMessageEgress:
 
     @staticmethod
     def _osascript_send(recipient: str, text: str) -> None:
-        # Escape backslashes first, then quotes
-        escaped_text = text.replace('\\', '\\\\').replace('"', '\\"')
+        # Escape backslashes first, then quotes, then newlines
+        escaped_text = (
+            text.replace('\\', '\\\\')
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "")
+        )
         script = f'''
         tell application "Messages"
             set targetService to 1st service whose service type = iMessage

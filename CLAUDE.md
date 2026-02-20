@@ -147,7 +147,7 @@ Only `SCAFFOLD.md`, `setup.sh`, and `SOUL.md` are tracked by git. Everything els
 ### Key Safety Invariants
 
 - `only_poll_allowed_senders=true` filters at SQL query time
-- `require_chat_prefix=true` ignores messages without `relay:` prefix
+- `require_chat_prefix=true` ignores messages without `relay:` prefix (default: false — natural language mode)
 - Mutating commands always go through approval workflow
 - **Approval sender verification**: only the original requester can approve/deny their requests
 - Duplicate outbound suppression prevents echo loops
@@ -211,7 +211,7 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 ### Safety Settings
 
 - `apple_flow_only_poll_allowed_senders` - filter at SQL query time (default: true)
-- `apple_flow_require_chat_prefix` - require `relay:` prefix on messages (default: true)
+- `apple_flow_require_chat_prefix` - require `relay:` prefix on messages (default: false)
 - `apple_flow_chat_prefix` - custom prefix string (default: "relay:")
 - `apple_flow_approval_ttl_minutes` - how long approvals remain valid (default: 20)
 - `apple_flow_max_messages_per_minute` - rate limit per sender (default: 30)
@@ -223,12 +223,12 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 
 **Codex CLI** (`connector=codex-cli`, requires `codex login`):
 - `apple_flow_codex_cli_command` - path to codex binary (default: "codex")
-- `apple_flow_codex_cli_context_window` - recent exchanges to include as context (default: 3)
+- `apple_flow_codex_cli_context_window` - recent exchanges to include as context (default: 10)
 - `apple_flow_codex_cli_model` - model flag (e.g. `gpt-5.3-codex`; empty = codex default)
 
 **Claude Code CLI** (`connector=claude-cli`, requires `claude auth login`):
 - `apple_flow_claude_cli_command` - path to claude binary (default: "claude")
-- `apple_flow_claude_cli_context_window` - recent exchanges to include as context (default: 3)
+- `apple_flow_claude_cli_context_window` - recent exchanges to include as context (default: 10)
 - `apple_flow_claude_cli_model` - model flag (e.g. `claude-sonnet-4-6`, `claude-opus-4-6`; empty = claude default)
 - `apple_flow_claude_cli_dangerously_skip_permissions` - pass `--dangerously-skip-permissions` (default: true)
 - `apple_flow_claude_cli_tools` - comma-separated values passed to `--tools` (optional, e.g. `default,WebSearch`)
@@ -252,12 +252,12 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 - `apple_flow_mail_from_address` - sender address for outbound replies (empty = default)
 - `apple_flow_mail_allowed_senders` - comma-separated email addresses to accept
 - `apple_flow_mail_max_age_days` - only process emails from last N days (default: 2)
-- `apple_flow_mail_signature` - signature appended to all email replies (default: "Codex 🤖, Your 24/7 Assistant")
+- `apple_flow_mail_signature` - signature appended to all email replies (default: "Apple Flow 🤖, Your 24/7 Assistant")
 
 ### Apple Reminders Integration
 
 - `apple_flow_enable_reminders_polling` - enable Apple Reminders as task queue ingress (default: false)
-- `apple_flow_reminders_list_name` - Reminders list to poll (default: "Codex Tasks")
+- `apple_flow_reminders_list_name` - Reminders list to poll (default: "agent-task")
 - `apple_flow_reminders_owner` - sender identity for reminder tasks (e.g. phone number; defaults to first allowed_sender)
 - `apple_flow_reminders_auto_approve` - skip approval gate for reminder tasks (default: false)
 - `apple_flow_reminders_poll_interval_seconds` - poll interval for Reminders (default: 5s)
@@ -265,7 +265,7 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 ### Apple Notes Integration
 
 - `apple_flow_enable_notes_polling` - enable Apple Notes as long-form task ingress (default: false)
-- `apple_flow_notes_folder_name` - Notes folder to poll (default: "Codex Inbox")
+- `apple_flow_notes_folder_name` - Notes folder to poll (default: "agent-task")
 - `apple_flow_notes_owner` - sender identity for note tasks (defaults to first allowed_sender)
 - `apple_flow_notes_auto_approve` - skip approval gate for note tasks (default: false)
 - `apple_flow_notes_poll_interval_seconds` - poll interval for Notes (default: 10s)
@@ -276,7 +276,7 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 ### Apple Calendar Integration
 
 - `apple_flow_enable_calendar_polling` - enable Apple Calendar as scheduled task ingress (default: false)
-- `apple_flow_calendar_name` - Calendar to poll (default: "Codex Schedule")
+- `apple_flow_calendar_name` - Calendar to poll (default: "agent-schedule")
 - `apple_flow_calendar_owner` - sender identity for calendar tasks (defaults to first allowed_sender)
 - `apple_flow_calendar_auto_approve` - skip approval gate for calendar tasks (default: false)
 - `apple_flow_calendar_poll_interval_seconds` - poll interval for Calendar (default: 30s)
@@ -285,7 +285,7 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 ### Advanced Features
 
 - `apple_flow_workspace_aliases` - JSON dict mapping @alias names to workspace paths (default: empty)
-- `apple_flow_auto_context_messages` - number of recent messages to auto-inject as context (default: 0 = disabled)
+- `apple_flow_auto_context_messages` - number of recent messages to auto-inject as context (default: 10)
 - `apple_flow_enable_progress_streaming` - send periodic progress updates during long tasks (default: false)
 - `apple_flow_progress_update_interval_seconds` - minimum seconds between progress updates (default: 30)
 - `apple_flow_enable_attachments` - enable reading inbound file attachments (default: false)
@@ -330,7 +330,7 @@ See `.env.example` for full list. **When adding a new config field:** update bot
 
 ## Admin API
 
-The admin API runs on port 8787 by default (`python -m apple_flow admin`).
+The admin API runs on port 8787 by default (`python -m apple_flow admin`). Set `apple_flow_admin_api_token` to a secret string to require `Authorization: Bearer <token>` on all endpoints except `/health`.
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|

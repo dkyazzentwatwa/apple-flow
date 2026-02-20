@@ -370,9 +370,11 @@ class SQLiteStore:
     def search_messages(self, sender: str, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Search messages from a sender by text content."""
         conn = self._connect()
+        # Escape LIKE wildcards to prevent data disclosure via % or _ in user input
+        escaped_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         with self._lock:
             rows = conn.execute(
-                "SELECT * FROM messages WHERE sender = ? AND text LIKE ? ORDER BY received_at DESC LIMIT ?",
-                (sender, f"%{query}%", limit),
+                "SELECT * FROM messages WHERE sender = ? AND text LIKE ? ESCAPE '\\' ORDER BY received_at DESC LIMIT ?",
+                (sender, f"%{escaped_query}%", limit),
             ).fetchall()
             return [self._row_to_dict(row) for row in rows if row is not None]
