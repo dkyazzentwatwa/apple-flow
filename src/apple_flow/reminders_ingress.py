@@ -149,20 +149,29 @@ class AppleRemindersIngress:
             repeat with rem in openItems
                 if (count of resultList) >= maxCount then exit repeat
 
-                set remId to id of rem as text
-                set remName to name of rem as text
+                set theReminder to contents of rem
                 try
-                    set remBody to body of rem as text
+                    set remId to "" & (id of theReminder)
+                on error
+                    set remId to ""
+                end try
+                try
+                    set remName to "" & (name of theReminder)
+                on error
+                    set remName to ""
+                end try
+                try
+                    set remBody to "" & (body of theReminder)
                 on error
                     set remBody to ""
                 end try
                 try
-                    set remCreation to creation date of rem as text
+                    set remCreation to "" & (creation date of theReminder)
                 on error
                     set remCreation to ""
                 end try
                 try
-                    set remDue to due date of rem as text
+                    set remDue to "" & (due date of theReminder)
                 on error
                     set remDue to ""
                 end try

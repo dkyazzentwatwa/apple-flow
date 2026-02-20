@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -14,6 +13,7 @@ import apple_flow.apple_tools as at
 from apple_flow.apple_tools import (
     TOOLS_CONTEXT,
     _format_output,
+    _parse_delimited_output,
     _parse_json_output,
     _run_script,
     calendar_create,
@@ -62,11 +62,11 @@ def _err_result(stderr: str = "boom") -> MagicMock:
     return r
 
 
-def _notes_json(items: list[dict]) -> str:
-    parts = []
-    for item in items:
-        parts.append(json.dumps(item))
-    return "[" + ",".join(parts) + "]"
+def _notes_tab(items: list[dict]) -> str:
+    return "\n".join(
+        "\t".join([i.get("id", ""), i.get("name", ""), i.get("preview", ""), i.get("modification_date", "")])
+        for i in items
+    )
 
 
 def _make_notes(n: int = 2) -> list[dict]:
@@ -128,6 +128,40 @@ class TestParseJsonOutput:
         raw = '[{"id": "1\x01\x02", "name": "test"}]'
         result = _parse_json_output(raw)
         assert result[0]["id"] == "1  "
+
+
+# ---------------------------------------------------------------------------
+# _parse_delimited_output
+# ---------------------------------------------------------------------------
+
+class TestParseDelimitedOutput:
+    def test_parses_valid_tab_delimited(self):
+        raw = "id-1\tNote 1\tpreview\t2026-01-01"
+        result = _parse_delimited_output(raw, ["id", "name", "preview", "modification_date"])
+        assert result == [{"id": "id-1", "name": "Note 1", "preview": "preview", "modification_date": "2026-01-01"}]
+
+    def test_parses_multiple_records(self):
+        raw = "id-1\tNote 1\tpreview\t2026-01-01\nid-2\tNote 2\tbody\t2026-01-02"
+        result = _parse_delimited_output(raw, ["id", "name", "preview", "modification_date"])
+        assert len(result) == 2
+        assert result[1]["name"] == "Note 2"
+
+    def test_skips_lines_with_wrong_field_count(self):
+        raw = "id-1\ttoo-few-fields"
+        result = _parse_delimited_output(raw, ["id", "name", "preview", "modification_date"])
+        assert result == []
+
+    def test_empty_string_returns_empty(self):
+        assert _parse_delimited_output("", ["id", "name"]) == []
+
+    def test_none_returns_empty(self):
+        assert _parse_delimited_output(None, ["id", "name"]) == []
+
+    def test_mixed_valid_and_invalid_lines(self):
+        raw = "bad-line\nid-1\tName\tpreview\t2026-01-01\nalso-bad"
+        result = _parse_delimited_output(raw, ["id", "name", "preview", "modification_date"])
+        assert len(result) == 1
+        assert result[0]["id"] == "id-1"
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +233,7 @@ class TestNotesListFolders:
 class TestNotesList:
     def test_returns_notes_list(self):
         notes = _make_notes(3)
-        raw = _notes_json(notes)
+        raw = _notes_tab(notes)
         with patch("subprocess.run", return_value=_ok_result(raw)):
             result = notes_list()
             assert isinstance(result, list)
@@ -208,7 +242,7 @@ class TestNotesList:
 
     def test_as_text_returns_string_with_name(self):
         notes = _make_notes(2)
-        raw = _notes_json(notes)
+        raw = _notes_tab(notes)
         with patch("subprocess.run", return_value=_ok_result(raw)):
             result = notes_list(as_text=True)
             assert isinstance(result, str)
@@ -218,8 +252,8 @@ class TestNotesList:
         with patch("subprocess.run", return_value=_err_result()):
             assert notes_list() == []
 
-    def test_returns_empty_on_invalid_json(self):
-        with patch("subprocess.run", return_value=_ok_result("not json")):
+    def test_returns_empty_on_malformed_input(self):
+        with patch("subprocess.run", return_value=_ok_result("id-1\ttoo-few-fields")):
             assert notes_list() == []
 
 
@@ -230,7 +264,7 @@ class TestNotesSearch:
             {"id": "2", "name": "random note", "preview": "stuff", "modification_date": ""},
             {"id": "3", "name": "project beta", "preview": "more", "modification_date": ""},
         ]
-        raw = _notes_json(notes)
+        raw = _notes_tab(notes)
         with patch("subprocess.run", return_value=_ok_result(raw)):
             result = notes_search("project")
             assert isinstance(result, list)
@@ -242,21 +276,21 @@ class TestNotesSearch:
             {"id": "1", "name": "untitled", "preview": "contains keyword here", "modification_date": ""},
             {"id": "2", "name": "other", "preview": "nothing here", "modification_date": ""},
         ]
-        raw = _notes_json(notes)
+        raw = _notes_tab(notes)
         with patch("subprocess.run", return_value=_ok_result(raw)):
             result = notes_search("keyword")
             assert len(result) == 1
 
     def test_case_insensitive(self):
         notes = [{"id": "1", "name": "IMPORTANT Note", "preview": "", "modification_date": ""}]
-        raw = _notes_json(notes)
+        raw = _notes_tab(notes)
         with patch("subprocess.run", return_value=_ok_result(raw)):
             result = notes_search("important")
             assert len(result) == 1
 
     def test_as_text_returns_string(self):
         notes = [{"id": "1", "name": "My Note", "preview": "content", "modification_date": ""}]
-        raw = _notes_json(notes)
+        raw = _notes_tab(notes)
         with patch("subprocess.run", return_value=_ok_result(raw)):
             result = notes_search("note", as_text=True)
             assert isinstance(result, str)
@@ -327,8 +361,11 @@ class TestNotesAppend:
 # Apple Mail
 # ---------------------------------------------------------------------------
 
-def _mail_json(items: list[dict]) -> str:
-    return "[" + ",".join(json.dumps(m) for m in items) + "]"
+def _mail_tab(items: list[dict]) -> str:
+    return "\n".join(
+        "\t".join([i.get("id", ""), i.get("sender", ""), i.get("subject", ""), i.get("body_preview", ""), i.get("date", ""), i.get("read", "")])
+        for i in items
+    )
 
 
 def _make_mails(n: int = 2) -> list[dict]:
@@ -348,14 +385,14 @@ def _make_mails(n: int = 2) -> list[dict]:
 class TestMailListUnread:
     def test_returns_list(self):
         mails = _make_mails(3)
-        with patch("subprocess.run", return_value=_ok_result(_mail_json(mails))):
+        with patch("subprocess.run", return_value=_ok_result(_mail_tab(mails))):
             result = mail_list_unread()
             assert isinstance(result, list)
             assert len(result) == 3
 
     def test_as_text_returns_string_with_sender(self):
         mails = _make_mails(1)
-        with patch("subprocess.run", return_value=_ok_result(_mail_json(mails))):
+        with patch("subprocess.run", return_value=_ok_result(_mail_tab(mails))):
             result = mail_list_unread(as_text=True)
             assert isinstance(result, str)
             assert "user1@example.com" in result
@@ -372,8 +409,8 @@ class TestMailListUnread:
         with patch("subprocess.run", side_effect=FileNotFoundError):
             assert mail_list_unread() == []
 
-    def test_returns_empty_on_invalid_json(self):
-        with patch("subprocess.run", return_value=_ok_result("bad json")):
+    def test_returns_empty_on_malformed_input(self):
+        with patch("subprocess.run", return_value=_ok_result("id-1\ttoo-few-fields")):
             assert mail_list_unread() == []
 
 
@@ -383,7 +420,7 @@ class TestMailSearch:
             {"id": "1", "sender": "a@b.com", "subject": "Invoice #123", "body_preview": "", "date": "", "read": "false"},
             {"id": "2", "sender": "x@y.com", "subject": "Hello World", "body_preview": "", "date": "", "read": "false"},
         ]
-        with patch("subprocess.run", return_value=_ok_result(_mail_json(mails))):
+        with patch("subprocess.run", return_value=_ok_result(_mail_tab(mails))):
             result = mail_search("invoice")
             assert isinstance(result, list)
             assert len(result) == 1
@@ -394,7 +431,7 @@ class TestMailSearch:
             {"id": "1", "sender": "boss@work.com", "subject": "Re: stuff", "body_preview": "", "date": "", "read": "false"},
             {"id": "2", "sender": "friend@personal.com", "subject": "Hi", "body_preview": "", "date": "", "read": "false"},
         ]
-        with patch("subprocess.run", return_value=_ok_result(_mail_json(mails))):
+        with patch("subprocess.run", return_value=_ok_result(_mail_tab(mails))):
             result = mail_search("work.com")
             assert len(result) == 1
 
@@ -403,7 +440,7 @@ class TestMailSearch:
             {"id": "1", "sender": "a@b.com", "subject": "Greet", "body_preview": "contains keyword here", "date": "", "read": "false"},
             {"id": "2", "sender": "a@b.com", "subject": "Other", "body_preview": "nothing special", "date": "", "read": "false"},
         ]
-        with patch("subprocess.run", return_value=_ok_result(_mail_json(mails))):
+        with patch("subprocess.run", return_value=_ok_result(_mail_tab(mails))):
             result = mail_search("keyword")
             assert len(result) == 1
 
@@ -453,8 +490,11 @@ class TestMailSend:
 # Apple Reminders
 # ---------------------------------------------------------------------------
 
-def _rem_json(items: list[dict]) -> str:
-    return "[" + ",".join(json.dumps(r) for r in items) + "]"
+def _rem_tab(items: list[dict]) -> str:
+    return "\n".join(
+        "\t".join([i.get("id", ""), i.get("name", ""), i.get("body", ""), i.get("due_date", ""), i.get("completed", ""), i.get("list", "")])
+        for i in items
+    )
 
 
 def _make_reminders(n: int = 2) -> list[dict]:
@@ -489,14 +529,14 @@ class TestRemindersListLists:
 class TestRemindersList:
     def test_returns_list(self):
         rems = _make_reminders(3)
-        with patch("subprocess.run", return_value=_ok_result(_rem_json(rems))):
+        with patch("subprocess.run", return_value=_ok_result(_rem_tab(rems))):
             result = reminders_list()
             assert isinstance(result, list)
             assert len(result) == 3
 
     def test_as_text_contains_name(self):
         rems = _make_reminders(2)
-        with patch("subprocess.run", return_value=_ok_result(_rem_json(rems))):
+        with patch("subprocess.run", return_value=_ok_result(_rem_tab(rems))):
             result = reminders_list(as_text=True)
             assert isinstance(result, str)
             assert "Task 1" in result
@@ -513,8 +553,8 @@ class TestRemindersList:
         with patch("subprocess.run", side_effect=FileNotFoundError):
             assert reminders_list() == []
 
-    def test_returns_empty_on_invalid_json(self):
-        with patch("subprocess.run", return_value=_ok_result("not json")):
+    def test_returns_empty_on_malformed_input(self):
+        with patch("subprocess.run", return_value=_ok_result("id-1\ttoo-few-fields")):
             assert reminders_list() == []
 
 
@@ -525,7 +565,7 @@ class TestRemindersSearch:
             {"id": "2", "name": "dentist appointment", "body": "", "due_date": "", "completed": "false", "list": ""},
             {"id": "3", "name": "buy milk", "body": "", "due_date": "", "completed": "false", "list": ""},
         ]
-        with patch("subprocess.run", return_value=_ok_result(_rem_json(rems))):
+        with patch("subprocess.run", return_value=_ok_result(_rem_tab(rems))):
             result = reminders_search("buy")
             assert isinstance(result, list)
             assert len(result) == 2
@@ -535,13 +575,13 @@ class TestRemindersSearch:
             {"id": "1", "name": "meeting", "body": "discuss project alpha", "due_date": "", "completed": "false", "list": ""},
             {"id": "2", "name": "lunch", "body": "with team", "due_date": "", "completed": "false", "list": ""},
         ]
-        with patch("subprocess.run", return_value=_ok_result(_rem_json(rems))):
+        with patch("subprocess.run", return_value=_ok_result(_rem_tab(rems))):
             result = reminders_search("project")
             assert len(result) == 1
 
     def test_case_insensitive(self):
         rems = [{"id": "1", "name": "URGENT Task", "body": "", "due_date": "", "completed": "false", "list": ""}]
-        with patch("subprocess.run", return_value=_ok_result(_rem_json(rems))):
+        with patch("subprocess.run", return_value=_ok_result(_rem_tab(rems))):
             assert len(reminders_search("urgent")) == 1
 
     def test_returns_empty_on_failure(self):
@@ -594,8 +634,11 @@ class TestRemindersComplete:
 # Apple Calendar
 # ---------------------------------------------------------------------------
 
-def _evt_json(items: list[dict]) -> str:
-    return "[" + ",".join(json.dumps(e) for e in items) + "]"
+def _evt_tab(items: list[dict]) -> str:
+    return "\n".join(
+        "\t".join([i.get("id", ""), i.get("summary", ""), i.get("description", ""), i.get("start_date", ""), i.get("end_date", ""), i.get("calendar", "")])
+        for i in items
+    )
 
 
 def _make_events(n: int = 2) -> list[dict]:
@@ -634,7 +677,7 @@ class TestCalendarListCalendars:
 class TestCalendarListEvents:
     def test_returns_events(self):
         evts = _make_events(3)
-        with patch("subprocess.run", return_value=_ok_result(_evt_json(evts))):
+        with patch("subprocess.run", return_value=_ok_result(_evt_tab(evts))):
             result = calendar_list_events()
             assert isinstance(result, list)
             assert len(result) == 3
@@ -642,7 +685,7 @@ class TestCalendarListEvents:
 
     def test_as_text_contains_summary(self):
         evts = _make_events(2)
-        with patch("subprocess.run", return_value=_ok_result(_evt_json(evts))):
+        with patch("subprocess.run", return_value=_ok_result(_evt_tab(evts))):
             result = calendar_list_events(as_text=True)
             assert isinstance(result, str)
             assert "Event 1" in result
@@ -651,8 +694,8 @@ class TestCalendarListEvents:
         with patch("subprocess.run", return_value=_err_result()):
             assert calendar_list_events() == []
 
-    def test_returns_empty_on_invalid_json(self):
-        with patch("subprocess.run", return_value=_ok_result("not json")):
+    def test_returns_empty_on_malformed_input(self):
+        with patch("subprocess.run", return_value=_ok_result("id-1\ttoo-few-fields")):
             assert calendar_list_events() == []
 
     def test_returns_empty_on_timeout(self):
@@ -671,7 +714,7 @@ class TestCalendarSearch:
             {"id": "2", "summary": "Doctor Visit", "description": "", "start_date": "", "end_date": "", "calendar": ""},
             {"id": "3", "summary": "Team Retrospective", "description": "", "start_date": "", "end_date": "", "calendar": ""},
         ]
-        with patch("subprocess.run", return_value=_ok_result(_evt_json(evts))):
+        with patch("subprocess.run", return_value=_ok_result(_evt_tab(evts))):
             result = calendar_search("team")
             assert isinstance(result, list)
             assert len(result) == 2
@@ -681,13 +724,13 @@ class TestCalendarSearch:
             {"id": "1", "summary": "Lunch", "description": "discuss quarterly targets", "start_date": "", "end_date": "", "calendar": ""},
             {"id": "2", "summary": "Gym", "description": "morning workout", "start_date": "", "end_date": "", "calendar": ""},
         ]
-        with patch("subprocess.run", return_value=_ok_result(_evt_json(evts))):
+        with patch("subprocess.run", return_value=_ok_result(_evt_tab(evts))):
             result = calendar_search("quarterly")
             assert len(result) == 1
 
     def test_case_insensitive(self):
         evts = [{"id": "1", "summary": "BOARD MEETING", "description": "", "start_date": "", "end_date": "", "calendar": ""}]
-        with patch("subprocess.run", return_value=_ok_result(_evt_json(evts))):
+        with patch("subprocess.run", return_value=_ok_result(_evt_tab(evts))):
             assert len(calendar_search("board")) == 1
 
     def test_returns_empty_on_failure(self):

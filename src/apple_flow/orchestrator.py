@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import html as _html_mod
 import json
 import logging
-import re
 import subprocess
 import time
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -14,76 +11,18 @@ from uuid import uuid4
 
 logger = logging.getLogger("apple_flow.orchestrator")
 
+from .approval import ApprovalHandler, OrchestrationResult
 from .commanding import CommandKind, ParsedCommand, is_likely_mutating, parse_command
 from .models import InboundMessage, RunState
+from .notes_logging import log_to_notes
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
 
 if TYPE_CHECKING:
     from .memory import FileMemory
+    from .office_sync import OfficeSyncer
     from .scheduler import FollowUpScheduler
 
 _SEP = "━" * 30
-
-
-def _inline_md(text: str) -> str:
-    """Convert inline markdown spans to HTML (bold, italic, code, links)."""
-    text = _html_mod.escape(text)
-    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-    text = re.sub(r"__(.+?)__", r"<b>\1</b>", text)
-    text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
-    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
-    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
-    return text
-
-
-def _md_to_html(text: str) -> str:
-    """Convert a markdown string to HTML suitable for Apple Notes body."""
-    lines = text.split("\n")
-    parts: list[str] = []
-    in_ul = False
-
-    def close_ul() -> None:
-        nonlocal in_ul
-        if in_ul:
-            parts.append("</ul>")
-            in_ul = False
-
-    for line in lines:
-        s = line.strip()
-        if s in ("---", "***", "___"):
-            close_ul()
-            parts.append("<hr>")
-        elif s.startswith("### "):
-            close_ul()
-            parts.append(f"<h3>{_inline_md(s[4:])}</h3>")
-        elif s.startswith("## "):
-            close_ul()
-            parts.append(f"<h2>{_inline_md(s[3:])}</h2>")
-        elif s.startswith("# "):
-            close_ul()
-            parts.append(f"<h1>{_inline_md(s[2:])}</h1>")
-        elif s.startswith("- ") or s.startswith("* "):
-            if not in_ul:
-                parts.append("<ul>")
-                in_ul = True
-            parts.append(f"<li>{_inline_md(s[2:])}</li>")
-        elif not s:
-            close_ul()
-            parts.append("<br>")
-        else:
-            close_ul()
-            parts.append(f"<p>{_inline_md(s)}</p>")
-
-    close_ul()
-    return "".join(parts)
-
-
-@dataclass(slots=True)
-class OrchestrationResult:
-    kind: CommandKind
-    run_id: str | None = None
-    approval_request_id: str | None = None
-    response: str | None = None
 
 
 class RelayOrchestrator:
@@ -114,6 +53,7 @@ class RelayOrchestrator:
         notes_log_folder_name: str = "codex-logs",
         memory: FileMemory | None = None,
         scheduler: FollowUpScheduler | None = None,
+        office_syncer: OfficeSyncer | None = None,
     ):
         self.connector = connector
         self.egress = egress
@@ -123,31 +63,39 @@ class RelayOrchestrator:
             Path(p) for p in self.allowed_workspaces
         )
         self.default_workspace = str(Path(default_workspace).resolve())
-        self.approval_ttl_minutes = approval_ttl_minutes
         self.require_chat_prefix = require_chat_prefix
         self.chat_prefix = (chat_prefix or "relay:").strip()
         self.workspace_aliases = workspace_aliases or {}
         self.auto_context_messages = auto_context_messages
-        self.enable_progress_streaming = enable_progress_streaming
-        self.progress_update_interval_seconds = progress_update_interval_seconds
-        self.enable_verifier = enable_verifier
         self.enable_attachments = enable_attachments
         self.personality_prompt = personality_prompt
-        self.reminders_egress = reminders_egress
-        self.reminders_archive_list_name = reminders_archive_list_name
-        self.notes_egress = notes_egress
-        self.notes_archive_folder_name = notes_archive_folder_name
-        self.calendar_egress = calendar_egress
         self.shutdown_callback = shutdown_callback
         self.log_notes_egress = log_notes_egress
         self.notes_log_folder_name = notes_log_folder_name
         self.memory = memory
-        self.scheduler = scheduler
+        self.office_syncer = office_syncer
 
-    # --- Workspace Resolution (Feature 1) ---
+        self._approval = ApprovalHandler(
+            connector=connector,
+            egress=egress,
+            store=store,
+            approval_ttl_minutes=approval_ttl_minutes,
+            enable_progress_streaming=enable_progress_streaming,
+            progress_update_interval_seconds=progress_update_interval_seconds,
+            enable_verifier=enable_verifier,
+            reminders_egress=reminders_egress,
+            reminders_archive_list_name=reminders_archive_list_name,
+            notes_egress=notes_egress,
+            notes_archive_folder_name=notes_archive_folder_name,
+            calendar_egress=calendar_egress,
+            scheduler=scheduler,
+            log_notes_egress=log_notes_egress,
+            notes_log_folder_name=notes_log_folder_name,
+        )
+
+    # --- Workspace Resolution ---
 
     def _resolve_workspace(self, alias: str) -> str:
-        """Resolve a workspace alias to an absolute path."""
         if not alias:
             return self.default_workspace
         resolved = self.workspace_aliases.get(alias)
@@ -191,7 +139,6 @@ class RelayOrchestrator:
                 self.egress.send(message.sender, hint)
                 return OrchestrationResult(kind=CommandKind.CHAT, response=hint)
         elif command.kind is CommandKind.CHAT and not self.require_chat_prefix:
-            # Natural language mode: strip relay: prefix if present (optional graceful compat)
             if raw_text.lower().startswith(self.chat_prefix.lower()):
                 stripped = raw_text[len(self.chat_prefix) :].strip()
                 command = ParsedCommand(kind=CommandKind.CHAT, payload=stripped, workspace=command.workspace)
@@ -243,7 +190,7 @@ class RelayOrchestrator:
             return OrchestrationResult(kind=command.kind, response=response)
 
         if command.kind in {CommandKind.APPROVE, CommandKind.DENY}:
-            return self._resolve_approval(message.sender, command.kind, command.payload)
+            return self._approval.resolve(message.sender, command.kind, command.payload)
 
         if command.kind is CommandKind.SYSTEM:
             return self._handle_system(message.sender, command.payload)
@@ -262,7 +209,11 @@ class RelayOrchestrator:
         self.store.upsert_session(message.sender, thread_id, command.kind.value)
 
         if command.kind in {CommandKind.TASK, CommandKind.PROJECT}:
-            return self._handle_approval_required_command(message, command.kind, thread_id, command.payload, workspace)
+            return self._approval.handle_approval_required(
+                message, command.kind, thread_id, command.payload, workspace,
+                default_workspace=self.default_workspace,
+                is_workspace_allowed=self._is_workspace_allowed,
+            )
 
         prompt = self._build_non_mutating_prompt(command.kind, command.payload, workspace)
         prompt = self._inject_auto_context(message.sender, prompt)
@@ -274,7 +225,7 @@ class RelayOrchestrator:
         self._log_to_notes(command.kind.value, message.sender, command.payload, response)
         return OrchestrationResult(kind=command.kind, response=response)
 
-    # --- Feature 2: Health Dashboard ---
+    # --- Health Dashboard ---
 
     def _handle_health(self, sender: str) -> OrchestrationResult:
         parts = ["Apple Flow Health"]
@@ -309,7 +260,7 @@ class RelayOrchestrator:
         self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.HEALTH, response=response)
 
-    # --- Feature: Token Usage (ccusage) ---
+    # --- Token Usage (ccusage) ---
 
     def _handle_usage(self, sender: str, payload: str) -> OrchestrationResult:
         sub = payload.lower().strip()
@@ -389,7 +340,7 @@ class RelayOrchestrator:
         self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.USAGE, response=response)
 
-    # --- Feature 3: Conversation Memory ---
+    # --- Conversation Memory ---
 
     def _handle_history(self, sender: str, query: str) -> OrchestrationResult:
         if query and hasattr(self.store, "search_messages"):
@@ -442,8 +393,18 @@ class RelayOrchestrator:
             self.store.set_state("companion_muted", "false")
             response = "Companion unmuted. Proactive messages re-enabled."
             self.egress.send(sender, response)
+        elif sub in ("sync office", "sync"):
+            if self.office_syncer:
+                try:
+                    result = self.office_syncer.sync_all()
+                    response = "Synced: " + ", ".join(f"{t}={n}" for t, n in result.items())
+                except Exception as exc:
+                    response = f"Office sync failed: {exc}"
+            else:
+                response = "Office sync not enabled. Set apple_flow_enable_office_sync=true and apple_flow_supabase_service_key."
+            self.egress.send(sender, response)
         else:
-            response = "Unknown system command. Use: system: stop | restart | mute | unmute"
+            response = "Unknown system command. Use: system: stop | restart | mute | unmute | sync office"
             self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.SYSTEM, response=sub)
 
@@ -464,7 +425,6 @@ class RelayOrchestrator:
     # --- Memory Context Injection ---
 
     def _inject_memory_context(self, prompt: str) -> str:
-        """Inject file-based memory context from agent-office into the prompt."""
         if not self.memory:
             return prompt
         try:
@@ -475,7 +435,7 @@ class RelayOrchestrator:
             pass
         return prompt
 
-    # --- Feature 8: Attachment Context ---
+    # --- Attachment Context ---
 
     def _inject_attachment_context(self, message: InboundMessage, prompt: str) -> str:
         if not self.enable_attachments:
@@ -492,301 +452,14 @@ class RelayOrchestrator:
         attachment_block = "\n".join(attachment_lines)
         return f"{prompt}\n\nAttached files:\n{attachment_block}"
 
-    # --- Approval Workflow ---
-
-    def _resolve_approval(self, sender: str, kind: CommandKind, payload: str) -> OrchestrationResult:
-        # payload may be "req_abc123" or "req_abc123 extra instructions here"
-        parts = payload.split(None, 1)
-        request_id = parts[0]
-        extra_instructions = parts[1].strip() if len(parts) > 1 else ""
-        approval = self.store.get_approval(request_id)
-        if not approval:
-            response = f"Unknown request id: {request_id}"
-            self.egress.send(sender, response)
-            return OrchestrationResult(kind=kind, response=response)
-
-        approval_sender = approval.get("sender")
-        if approval_sender and approval_sender != sender:
-            response = f"Only the original requester can {kind.value} request {request_id}."
-            self.egress.send(sender, response)
-            return OrchestrationResult(kind=kind, response=response)
-
-        if kind is CommandKind.DENY:
-            self.store.resolve_approval(request_id, "denied")
-            self.store.update_run_state(approval["run_id"], RunState.DENIED.value)
-            self._create_event(
-                run_id=approval["run_id"],
-                step="approval",
-                event_type="denied",
-                payload={"request_id": request_id},
-            )
-            response = f"Denied request {request_id}."
-            self.egress.send(sender, response)
-            return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=response)
-
-        expires_at = self._parse_dt(approval.get("expires_at"))
-        if expires_at is not None and datetime.now(UTC) > expires_at:
-            self.store.resolve_approval(request_id, "expired")
-            self.store.update_run_state(approval["run_id"], RunState.FAILED.value)
-            response = f"Approval request {request_id} expired. Send a new task/project request."
-            self.egress.send(sender, response)
-            return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=response)
-
-        self.store.resolve_approval(request_id, "approved")
-        self.store.update_run_state(approval["run_id"], RunState.EXECUTING.value)
-        self._create_event(
-            run_id=approval["run_id"],
-            step="approval",
-            event_type="approved",
-            payload={"request_id": request_id},
-        )
-        run = self.store.get_run(approval["run_id"])
-        if run is None:
-            response = f"Request {request_id} approved, but run was not found."
-            self.egress.send(sender, response)
-            return OrchestrationResult(kind=kind, response=response)
-
-        thread_id = self.connector.get_or_create_thread(sender)
-
-        # Build executor prompt — embed the approved plan so stateless connectors
-        # don't have to rely solely on conversation history.
-        plan_summary = approval.get("command_preview", "")
-        exec_prompt_parts = [
-            "executor mode: perform the approved plan carefully and provide concise progress + final output.",
-            f"workspace={run['cwd']}",
-        ]
-        if plan_summary:
-            exec_prompt_parts.append(f"approved plan:\n{plan_summary}")
-        if extra_instructions:
-            exec_prompt_parts.append(f"additional instructions from user: {extra_instructions}")
-        exec_prompt = "\n".join(exec_prompt_parts)
-
-        if self.enable_progress_streaming and hasattr(self.connector, "run_turn_streaming"):
-            execution_output = self._run_with_progress(sender, thread_id, exec_prompt)
-        else:
-            execution_output = self.connector.run_turn(thread_id, exec_prompt)
-
-        self._create_event(
-            run_id=approval["run_id"],
-            step="executor",
-            event_type="completed",
-            payload={"snippet": execution_output[:200]},
-        )
-
-        # Verifier is opt-in — adds a second AI turn to validate output.
-        # Skip by default; enable with apple_flow_enable_verifier=true.
-        if self.enable_verifier:
-            self.store.update_run_state(approval["run_id"], RunState.VERIFYING.value)
-            verify_prompt = "verifier mode: validate completion evidence and summarize pass/fail with key checks."
-            verification_output = self.connector.run_turn(thread_id, verify_prompt)
-            self._create_event(
-                run_id=approval["run_id"],
-                step="verifier",
-                event_type="completed",
-                payload={"snippet": verification_output[:200]},
-            )
-            final = f"Execution:\n{execution_output}\n\nVerification:\n{verification_output}"
-        else:
-            final = execution_output
-
-        self.store.update_run_state(approval["run_id"], RunState.COMPLETED.value)
-        self.egress.send(sender, final)
-        self._log_to_notes(kind.value, sender, run.get("intent", ""), final)
-
-        # Post-execution cleanup: move reminders to archive, update notes, etc.
-        source_context = self.store.get_run_source_context(approval["run_id"])
-        if source_context:
-            self._handle_post_execution_cleanup(source_context, final)
-
-        # Schedule a follow-up check if enabled
-        if self.scheduler:
-            try:
-                from .scheduler import FollowUpScheduler
-                self.scheduler.schedule(
-                    run_id=approval["run_id"],
-                    sender=sender,
-                    action_type="follow_up",
-                    payload={"summary": f"Follow up on approved task {request_id}"},
-                )
-            except Exception as exc:
-                logger.debug("Failed to schedule follow-up: %s", exc)
-
-        return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=final)
-
-    def _handle_approval_required_command(
-        self,
-        message: InboundMessage,
-        kind: CommandKind,
-        thread_id: str,
-        payload: str,
-        workspace: str | None = None,
-    ) -> OrchestrationResult:
-        ws = workspace or self.default_workspace
-        if not self._is_workspace_allowed(ws):
-            response = (
-                f"Workspace blocked by policy: {ws}. "
-                "Ask the admin to add it to allowed_workspaces."
-            )
-            self.egress.send(message.sender, response)
-            return OrchestrationResult(kind=kind, response=response)
-
-        run_id = f"run_{uuid4().hex[:12]}"
-
-        # Extract source context for tracking the originating channel (reminders, notes, etc.)
-        source_context = None
-        if message.context:
-            # Build source_context from message.context if present
-            channel = message.context.get("channel")
-            if channel == "reminders":
-                source_context = {
-                    "channel": "reminders",
-                    "reminder_id": message.context.get("reminder_id"),
-                    "reminder_name": message.context.get("reminder_name"),
-                    "list_name": message.context.get("list_name"),
-                }
-            elif channel == "notes":
-                source_context = {
-                    "channel": "notes",
-                    "note_id": message.context.get("note_id"),
-                    "note_name": message.context.get("note_title"),
-                    "folder_name": message.context.get("folder_name"),
-                }
-            elif channel == "calendar":
-                source_context = {
-                    "channel": "calendar",
-                    "event_id": message.context.get("event_id"),
-                    "event_name": message.context.get("event_summary"),
-                    "calendar_name": message.context.get("calendar_name"),
-                }
-
-        self.store.create_run(
-            run_id=run_id,
-            sender=message.sender,
-            intent=kind.value,
-            state=RunState.PLANNING.value,
-            cwd=ws,
-            risk_level="execute",
-            source_context=source_context,
-        )
-
-        planner_prompt = (
-            "planner mode: produce an objective, steps, risks, and done criteria. "
-            f"intent={kind.value}; request={payload}; workspace={ws}"
-        )
-        plan_output = self.connector.run_turn(thread_id, planner_prompt)
-
-        self.store.update_run_state(run_id, RunState.AWAITING_APPROVAL.value)
-        request_id = f"req_{uuid4().hex[:8]}"
-        expires_at = (datetime.now(UTC) + timedelta(minutes=self.approval_ttl_minutes)).isoformat()
-        self.store.create_approval(
-            request_id=request_id,
-            run_id=run_id,
-            summary=f"{kind.value} execution requires approval",
-            command_preview=plan_output[:800],
-            expires_at=expires_at,
-            sender=message.sender,
-        )
-        self._create_event(
-            run_id=run_id,
-            step="planner",
-            event_type="awaiting_approval",
-            payload={"request_id": request_id, "plan_snippet": plan_output[:200]},
-        )
-
-        outbound = (
-            f"Here's my plan:\n{plan_output}\n\n"
-            f"Reply `approve {request_id}` to proceed, or `deny {request_id}` to cancel."
-        )
-        self.egress.send(message.sender, outbound)
-        self._log_to_notes(kind.value, message.sender, payload, outbound)
-        return OrchestrationResult(kind=kind, run_id=run_id, approval_request_id=request_id, response=outbound)
-
-    # --- Feature 7: Progress Streaming ---
-
-    def _run_with_progress(self, sender: str, thread_id: str, prompt: str) -> str:
-        last_update = time.monotonic()
-
-        def on_progress(line: str) -> None:
-            nonlocal last_update
-            now = time.monotonic()
-            if (now - last_update) >= self.progress_update_interval_seconds:
-                preview = line.strip()[:200]
-                if preview:
-                    self.egress.send(sender, f"[Progress] {preview}")
-                last_update = now
-
-        return self.connector.run_turn_streaming(thread_id, prompt, on_progress)
-
-    # --- Post-Execution Cleanup ---
-
-    def _handle_post_execution_cleanup(self, source_context: dict[str, Any], result: str) -> None:
-        """Handle cleanup after task execution (move reminders to archive, update notes, etc.)"""
-        channel = source_context.get("channel")
-
-        if channel == "reminders" and self.reminders_egress:
-            reminder_id = source_context.get("reminder_id")
-            list_name = source_context.get("list_name")
-            if reminder_id and list_name:
-                self.reminders_egress.move_to_archive(
-                    reminder_id=reminder_id,
-                    result_text=f"[Apple Flow Result]\n\n{result}",
-                    source_list_name=list_name,
-                    archive_list_name=self.reminders_archive_list_name,
-                )
-
-        elif channel == "notes" and self.notes_egress:
-            note_id = source_context.get("note_id")
-            folder_name = source_context.get("folder_name")
-            if note_id and folder_name and hasattr(self.notes_egress, "move_to_archive"):
-                self.notes_egress.move_to_archive(
-                    note_id=note_id,
-                    result_text=f"[Apple Flow Result]\n\n{result}",
-                    source_folder_name=folder_name,
-                    archive_subfolder_name=self.notes_archive_folder_name,
-                )
-
-        elif channel == "calendar" and self.calendar_egress:
-            event_id = source_context.get("event_id")
-            if event_id and hasattr(self.calendar_egress, "annotate_event"):
-                self.calendar_egress.annotate_event(event_id, f"\n\n[Apple Flow Result]\n{result}")
+    # --- Notes Logging (delegated) ---
 
     def _log_to_notes(self, kind: str, sender: str, request: str, response: str) -> None:
-        """Create a rich-HTML log note for a completed AI turn (fire-and-forget)."""
-        if self.log_notes_egress is None:
-            return
-        try:
-            now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-            payload_preview = request[:50].replace("\n", " ")
-            title = f"[{kind}] {payload_preview} — {now_str}"
-
-            request_html = _md_to_html(request)
-            response_html = _md_to_html(response)
-
-            body = (
-                f"<h1>Agent Log</h1>"
-                f"<p><b>Command:</b> {_html_mod.escape(kind)}"
-                f" &nbsp;|&nbsp; <b>Sender:</b> {_html_mod.escape(sender)}<br>"
-                f"<b>Time:</b> {now_str}</p>"
-                f"<hr>"
-                f"<h2>Request</h2>"
-                f"{request_html}"
-                f"<hr>"
-                f"<h2>Response</h2>"
-                f"{response_html}"
-            )
-
-            self.log_notes_egress.create_log_note(
-                folder_name=self.notes_log_folder_name,
-                title=title,
-                body=body,
-            )
-        except Exception as exc:  # pragma: no cover
-            logger.warning("Failed to log to Notes: %s", exc)
+        log_to_notes(self.log_notes_egress, self.notes_log_folder_name, kind, sender, request, response)
 
     # --- Prompt Building ---
 
     def _build_unified_prompt(self, payload: str, workspace: str | None = None) -> str:
-        """Return the user payload. Personality/system context is handled by the connector via --system."""
         return payload
 
     def _build_non_mutating_prompt(self, kind: CommandKind, payload: str, workspace: str | None = None) -> str:

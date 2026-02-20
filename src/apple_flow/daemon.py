@@ -11,10 +11,12 @@ from pathlib import Path
 from .calendar_egress import AppleCalendarEgress
 from .calendar_ingress import AppleCalendarIngress
 from .claude_cli_connector import ClaudeCliConnector
+from .cline_connector import ClineConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
 from .ambient import AmbientScanner
 from .companion import CompanionLoop
+from .office_sync import OfficeSyncer
 from .config import RelaySettings
 from .egress import IMessageEgress
 from .ingress import IMessageIngress
@@ -51,7 +53,7 @@ class RelayDaemon:
 
         # Choose connector based on configuration
         connector_type = settings.get_connector_type()
-        known_connectors = {"codex-cli", "claude-cli", "codex-app-server"}
+        known_connectors = {"codex-cli", "claude-cli", "cline", "codex-app-server"}
         if connector_type not in known_connectors:
             raise ValueError(
                 f"Unknown connector type: {connector_type!r}. "
@@ -83,6 +85,17 @@ class RelayDaemon:
                 system_prompt=settings.personality_prompt.replace(
                     "{workspace}", settings.default_workspace
                 ),
+            )
+        elif connector_type == "cline":
+            logger.info("Using Cline CLI connector (cline -y) for agentic execution")
+            self.connector = ClineConnector(
+                cline_command=settings.cline_command,
+                workspace=settings.default_workspace,
+                timeout=settings.codex_turn_timeout_seconds,
+                context_window=settings.cline_context_window,
+                model=settings.cline_model,
+                use_json=settings.cline_use_json,
+                act_mode=settings.cline_act_mode,
             )
         else:  # codex-cli (default)
             logger.info("Using CLI connector (codex exec) for stateless execution")
@@ -128,6 +141,21 @@ class RelayDaemon:
             self.scheduler = FollowUpScheduler(self.store)
             logger.info("Follow-up scheduler enabled")
 
+        # Office syncer (agent-office → Supabase)
+        self.office_syncer: OfficeSyncer | None = None
+        if settings.enable_office_sync and settings.supabase_service_key and self._office_path:
+            self.office_syncer = OfficeSyncer(
+                office_path=self._office_path,
+                supabase_url=settings.supabase_url,
+                service_key=settings.supabase_service_key,
+            )
+            logger.info(
+                "Office sync enabled (url=%s, office=%s, interval=%.0fs)",
+                settings.supabase_url,
+                self._office_path,
+                settings.office_sync_interval_seconds,
+            )
+
         # Companion loop (proactive observations + daily digest)
         self.companion: CompanionLoop | None = None
         if settings.enable_companion:
@@ -143,6 +171,7 @@ class RelayDaemon:
                     config=settings,
                     scheduler=self.scheduler,
                     memory=self.memory,
+                    syncer=self.office_syncer,
                 )
                 logger.info("Companion loop enabled (owner=%s, poll=%.0fs)", owner, settings.companion_poll_interval_seconds)
             else:
@@ -197,6 +226,7 @@ class RelayDaemon:
             notes_log_folder_name=settings.notes_log_folder_name,
             memory=self.memory,
             scheduler=self.scheduler,
+            office_syncer=self.office_syncer,
         )
 
         self.orchestrator = RelayOrchestrator(
@@ -759,6 +789,9 @@ class RelayDaemon:
         if connector_type == "claude-cli":
             model_val = self.settings.claude_cli_model or "claude default"
             connector_line = "⚙️  Engine: claude -p (stateless)"
+        elif connector_type == "cline":
+            model_val = self.settings.cline_model or "cline default"
+            connector_line = "⚙️  Engine: cline -y (agentic)"
         elif connector_type == "codex-app-server":
             model_val = self.settings.codex_cli_model or "codex default"
             connector_line = "⚙️  Engine: app-server (stateful, deprecated)"

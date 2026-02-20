@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from .config import RelaySettings
     from .memory import FileMemory
+    from .office_sync import OfficeSyncer
     from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
     from .scheduler import FollowUpScheduler
 
@@ -42,6 +43,7 @@ class CompanionLoop:
         config: RelaySettings,
         scheduler: FollowUpScheduler | None = None,
         memory: FileMemory | None = None,
+        syncer: OfficeSyncer | None = None,
     ):
         self.connector = connector
         self.egress = egress
@@ -52,19 +54,39 @@ class CompanionLoop:
         self.config = config
         self.scheduler = scheduler
         self.memory = memory
+        self.syncer = syncer
 
     # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
 
     async def run_forever(self, is_shutdown: Callable[[], bool]) -> None:
-        """Run observation + digest + weekly review loops concurrently."""
+        """Run observation + digest + weekly review + sync loops concurrently."""
         tasks = [self._observation_loop(is_shutdown)]
         if self.config.companion_enable_daily_digest:
             tasks.append(self._daily_digest_loop(is_shutdown))
         if self.config.enable_companion:
             tasks.append(self._weekly_review_loop(is_shutdown))
+        if self.syncer is not None:
+            tasks.append(self._sync_loop(is_shutdown))
         await asyncio.gather(*tasks)
+
+    async def _sync_loop(self, is_shutdown: Callable[[], bool]) -> None:
+        """Periodically sync agent-office files to Supabase."""
+        logger.info(
+            "Office sync loop started (interval=%.0fs)",
+            self.config.office_sync_interval_seconds,
+        )
+        while not is_shutdown():
+            await asyncio.sleep(self.config.office_sync_interval_seconds)
+            if is_shutdown():
+                break
+            if self.syncer:
+                try:
+                    result = await asyncio.to_thread(self.syncer.sync_all)
+                    logger.info("Office sync complete: %s", result)
+                except Exception as exc:
+                    logger.warning("Office sync error: %s", exc)
 
     # ------------------------------------------------------------------
     # Observation loop

@@ -34,7 +34,7 @@ class RelaySettings(BaseSettings):
     codex_cli_model: str = ""  # e.g., "gpt-5.3-codex" (empty = use codex default)
 
     # Connector selection (overrides use_codex_cli when set)
-    connector: str = ""  # "codex-cli" | "claude-cli" | "codex-app-server"
+    connector: str = ""  # "codex-cli" | "claude-cli" | "cline" | "codex-app-server"
 
     # Claude CLI connector settings (used when connector="claude-cli")
     claude_cli_command: str = "claude"
@@ -43,6 +43,13 @@ class RelaySettings(BaseSettings):
     claude_cli_model: str = ""  # e.g. "claude-sonnet-4-6", "claude-opus-4-6"
     claude_cli_tools: list[str] = Field(default_factory=list)  # e.g. ["default", "WebSearch"]
     claude_cli_allowed_tools: list[str] = Field(default_factory=list)  # e.g. ["WebSearch"]
+
+    # Cline CLI connector settings (used when connector="cline")
+    cline_command: str = "cline"
+    cline_context_window: int = 3
+    cline_model: str = ""  # e.g. "kimi-k2", "gpt-4o" (empty = cline default)
+    cline_use_json: bool = True
+    cline_act_mode: bool = True  # skip plan mode for faster responses
 
     admin_host: str = "127.0.0.1"
     admin_port: int = 8787
@@ -166,6 +173,12 @@ class RelaySettings(BaseSettings):
     # Ambient scanning (passive context enrichment)
     enable_ambient_scanning: bool = False
     ambient_scan_interval_seconds: float = 900.0
+
+    # Agent-office → Supabase sync
+    enable_office_sync: bool = False
+    supabase_url: str = "http://localhost:54321"
+    supabase_service_key: str = ""
+    office_sync_interval_seconds: float = 3600.0
 
     # Weekly review
     companion_weekly_review_day: str = "sunday"

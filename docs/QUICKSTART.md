@@ -5,20 +5,21 @@ Get Apple Flow running in 5 steps. This guide assumes you're new to the project.
 ## What You'll Get
 
 Text or email yourself to:
-- Chat with Claude about your code: `relay: what files handle authentication?`
+- Chat with an AI about your code: `relay: what files handle authentication?`
 - Brainstorm ideas: `idea: build a task manager app`
 - Get implementation plans: `plan: add user authentication`
 - Execute tasks with approval: `task: create a hello world script`
 
-Works via **iMessage** (default) or **Apple Mail** (optional).
+Works via **iMessage** (default), **Apple Mail**, **Apple Reminders**, **Apple Notes**, or **Apple Calendar** (all optional).
 
 ## Prerequisites
 
 - macOS with iMessage signed in
 - Python 3.11 or later
 - At least one AI CLI installed and authenticated:
-  - **Codex CLI** (default) — [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli/)
-  - **Claude Code CLI** — `claude` binary from [claude.ai/code](https://claude.ai/code)
+  - **Codex CLI** (default) -- [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli/)
+  - **Claude Code CLI** -- `claude` binary from [claude.ai/code](https://claude.ai/code)
+  - **Cline CLI** -- `cline` binary, supports any model provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
 
 ---
 
@@ -31,11 +32,11 @@ cd apple-flow
 
 ## Step 2: Grant Full Disk Access
 
-The relay needs to read your iMessage database.
+The daemon needs to read your iMessage database.
 
 ### macOS Ventura/Sonoma/Sequoia:
-1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
-2. Click the **🔒** to unlock (enter password)
+1. Open **System Settings** > **Privacy & Security** > **Full Disk Access**
+2. Click the lock to unlock (enter password)
 3. Click the **+** button
 4. Navigate to and add your terminal app:
    - **Terminal**: `/Applications/Utilities/Terminal.app`
@@ -43,7 +44,7 @@ The relay needs to read your iMessage database.
    - **VS Code Terminal**: `/Applications/Visual Studio Code.app`
 5. Enable the checkbox next to your terminal
 
-### ⚠️ Important
+### Important
 **Fully quit and reopen your terminal app** after granting access. Just closing the window isn't enough!
 
 ```bash
@@ -56,22 +57,26 @@ osascript -e 'quit app "Terminal"'
 
 Run the login command for whichever backend you plan to use. **You only need one.**
 
-**Option A — Codex** (default, uses `codex exec`):
+**Option A -- Codex** (default, uses `codex exec`):
 ```bash
 codex login
 ```
 
-**Option B — Claude Code CLI** (uses `claude -p`):
+**Option B -- Claude Code CLI** (uses `claude -p`):
 ```bash
 claude auth login
 ```
 
-Follow the prompts in your browser. This only needs to be done once per machine.
+**Option C -- Cline CLI** (uses `cline -y`, supports any model):
+No separate auth needed -- Cline uses its own configuration.
+
+Follow the prompts in your browser (Options A/B). This only needs to be done once per machine.
 
 Then set your connector in `.env` (Step 4):
 ```bash
 apple_flow_connector=codex-cli   # for Codex (default)
-apple_flow_connector=claude-cli  # for Claude
+apple_flow_connector=claude-cli  # for Claude Code
+apple_flow_connector=cline       # for Cline
 ```
 
 ## Step 4: Configure Your Settings
@@ -96,18 +101,19 @@ apple_flow_allowed_workspaces=/Users/yourname/code
 apple_flow_default_workspace=/Users/yourname/code/my-project
 
 # 3. Your AI backend connector (pick one)
-apple_flow_connector=codex-cli   # default — requires: codex login
-apple_flow_connector=claude-cli  # alternative — requires: claude auth login
+apple_flow_connector=codex-cli   # default -- requires: codex login
+apple_flow_connector=claude-cli  # alternative -- requires: claude auth login
+apple_flow_connector=cline       # alternative -- uses its own config
 ```
 
 **Phone Number Format:**
-- ✅ Correct: `+15551234567` (with country code)
-- ❌ Wrong: `5551234567` (missing +1)
-- ❌ Wrong: `(555) 123-4567` (with formatting)
+- Correct: `+15551234567` (with country code)
+- Wrong: `5551234567` (missing +1)
+- Wrong: `(555) 123-4567` (with formatting)
 
 **Workspace Path:**
 - Use **absolute paths** (starting with `/`)
-- This is where Codex can read/write files
+- This is where the AI agent can read/write files
 - Separate multiple paths with commas
 
 ### Optional Settings
@@ -123,7 +129,7 @@ apple_flow_send_startup_intro=true
 apple_flow_approval_ttl_minutes=20
 ```
 
-See `.env.example` for all available options.
+See `.env.example` for all 60+ available options.
 
 ## Step 5: Run the Setup Script
 
@@ -132,12 +138,12 @@ See `.env.example` for all available options.
 ```
 
 The script will automatically:
-1. ✅ Create a Python virtual environment
-2. ✅ Install all dependencies (including optimizations)
-3. ✅ Create `.env` from `.env.example` if missing
-4. ✅ Validate your configuration
-5. ✅ Run 380+ tests to ensure everything works
-6. 🚀 Start the Apple Flow daemon
+1. Create a Python virtual environment
+2. Install all dependencies (including optimizations)
+3. Create `.env` from `.env.example` if missing
+4. Validate your configuration
+5. Run 560+ tests to ensure everything works
+6. Start the Apple Flow daemon
 
 **What you'll see:**
 ```
@@ -145,11 +151,11 @@ The script will automatically:
 Creating virtual environment...
 Installing dependencies...
 Running tests...
-===== 382 passed in 0.36s =====
+===== 562 passed in 0.36s =====
 
 Starting Apple Flow daemon...
-2026-02-16 14:00:00,000 INFO Apple Flow running (foreground)
-2026-02-16 14:00:00,100 INFO Ready. Waiting for inbound iMessages. Press Ctrl+C to stop.
+2026-02-19 14:00:00,000 INFO Apple Flow running (foreground)
+2026-02-19 14:00:00,100 INFO Ready. Waiting for inbound iMessages. Press Ctrl+C to stop.
 ```
 
 ---
@@ -164,7 +170,7 @@ Text yourself on iMessage from your configured phone number:
 relay: hello
 ```
 
-You should get a response from Claude!
+You should get a response from your AI backend!
 
 ### Command Types
 
@@ -210,14 +216,41 @@ status              # Check pending approvals
 clear context       # Start fresh conversation
 approve req_abc123  # Approve a task
 deny req_abc123     # Deny a task
+deny all            # Deny all pending approvals
+health:             # Daemon stats, uptime, session count
+history:            # Recent messages
+history: deploy     # Search messages
+```
+
+#### Workspace Routing
+
+Route tasks to specific project directories using `@alias` prefixes:
+
+```bash
+# Configure aliases in .env:
+apple_flow_workspace_aliases={"web-app":"/Users/me/code/web-app","api":"/Users/me/code/api"}
+```
+
+```
+task: @web-app deploy the latest changes
+task: @api add a health check endpoint
+```
+
+#### Companion Control
+
+If the autonomous companion is enabled:
+```
+system: mute        # Silence proactive messages
+system: unmute      # Re-enable proactive messages
 ```
 
 ### Security Features
 
-- **Sender allowlist**: Only your configured phone numbers can use the relay
+- **Sender allowlist**: Only your configured phone numbers can use the daemon
 - **Approval workflow**: Mutating operations require your explicit approval
 - **Sender verification**: Only you can approve/deny your own requests
-- **Workspace restrictions**: Codex only accesses allowed directories
+- **Workspace restrictions**: The AI agent only accesses allowed directories
+- **Rate limiting**: Configurable max messages per minute per sender
 
 ---
 
@@ -254,13 +287,14 @@ nano .env
 # Set: apple_flow_allowed_senders=+15551234567
 ```
 
-### "codex not found" / "claude not found"
+### "codex not found" / "claude not found" / "cline not found"
 
 **Cause**: The CLI for your chosen connector isn't installed or not on `$PATH`.
 
 **Fix**:
 - For Codex: install from [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli/), then run `codex login`
 - For Claude: install the `claude` CLI from [claude.ai/code](https://claude.ai/code), then run `claude auth login`
+- For Cline: install the `cline` CLI and configure it
 - Make sure `apple_flow_connector` in `.env` matches what you installed
 
 ### Tests Failing
@@ -307,7 +341,7 @@ rm -f ~/.codex/relay.daemon.lock
 
 ### Admin API
 
-The relay includes a web API for monitoring:
+The daemon includes a web API for monitoring:
 
 ```bash
 # In another terminal:
@@ -318,14 +352,20 @@ Visit `http://localhost:8787` for:
 - `/sessions` - Active conversations
 - `/approvals/pending` - Pending approvals
 - `/events` - Audit log
+- `POST /task` - Submit tasks programmatically (Siri Shortcuts / curl)
 
 ### Run as Background Service
 
 For always-on operation, see [AUTO_START_SETUP.md](AUTO_START_SETUP.md) for launchd setup.
 
+Or use the one-command setup:
+```bash
+./scripts/setup_autostart.sh
+```
+
 ### Enable Apple Mail Integration (Optional)
 
-To use email instead of (or alongside) iMessage, add to `.env`:
+To use email alongside iMessage, add to `.env`:
 
 ```bash
 apple_flow_enable_mail_polling=true
@@ -334,54 +374,94 @@ apple_flow_mail_from_address=your.email@example.com
 apple_flow_mail_max_age_days=2
 ```
 
-Then restart the daemon. Emails will:
-- Reply in the same thread
-- Include signature: "Apple Flow 🤖, Your 24/7 Assistant"
-- Only process last 2 days of emails
-- Work seamlessly alongside iMessage
+Then restart the daemon. Emails will reply in the same thread and work seamlessly alongside iMessage.
+
+### Enable Apple Reminders Integration (Optional)
+
+Use Reminders.app as a task queue:
+
+```bash
+apple_flow_enable_reminders_polling=true
+apple_flow_reminders_list_name=Codex Tasks
+# apple_flow_reminders_auto_approve=false  # require approval by default
+```
+
+Create a list called "Codex Tasks" in Reminders.app, then add reminders -- they'll be picked up and executed.
+
+### Enable Apple Notes Integration (Optional)
+
+Use Notes.app for long-form tasks:
+
+```bash
+apple_flow_enable_notes_polling=true
+apple_flow_notes_folder_name=Codex Inbox
+```
+
+Create a folder called "Codex Inbox" in Notes.app, then add notes -- results are appended back to the note.
+
+### Enable Apple Calendar Integration (Optional)
+
+Use Calendar.app for scheduled tasks:
+
+```bash
+apple_flow_enable_calendar_polling=true
+apple_flow_calendar_name=Codex Schedule
+```
+
+Create a calendar called "Codex Schedule" in Calendar.app, then add events -- they execute when due.
+
+### Autonomous Companion (Optional)
+
+Enable proactive observations and follow-ups:
+
+```bash
+apple_flow_enable_companion=true
+apple_flow_enable_memory=true
+apple_flow_companion_enable_daily_digest=true
+```
+
+The companion watches for stale approvals, upcoming calendar events, overdue reminders, and synthesizes observations via AI. It respects quiet hours (22:00-07:00 by default) and rate limits.
 
 ### Advanced Configuration
 
-See `.env.example` for all settings:
-- Rate limiting
-- Polling intervals
-- Custom workspace paths
-- Admin API settings
-- Apple Mail configuration
+See `.env.example` for all 60+ settings including:
+- Rate limiting and polling intervals
+- Custom workspace aliases (`@alias` routing)
+- Progress streaming for long tasks
+- File attachment support
+- Ambient context scanning
+- Follow-up scheduling
 
 ---
 
 ## Architecture Overview
 
 ```
-iMessage → Ingress → Policy → Orchestrator → Codex CLI → Egress → iMessage
-                                  ↓                          ↓
-Email → MailIngress ──────────────┘                    MailEgress → Email
-                                  ↓
-                              Store (SQLite)
+iMessage -> Ingress -> Policy -> Orchestrator -> Connector -> Egress -> iMessage
+                                      |                         |
+Email -> MailIngress ----------------+                    MailEgress -> Email
+Reminders -> RemindersIngress -------+               RemindersEgress -> Reminders
+Notes -> NotesIngress ---------------+                  NotesEgress -> Notes
+Calendar -> CalendarIngress ---------+               CalendarEgress -> Calendar
+POST /task -> FastAPI ---------------+
+                                      |
+                                  Store (SQLite)
+                                      |
+                              CompanionLoop (optional, proactive)
+                                      |
+                              AmbientScanner (optional, passive)
 ```
 
-- **Ingress**: Reads from macOS Messages database
-- **MailIngress**: Reads from Apple Mail (optional)
+- **Ingress modules**: Read from macOS app databases/AppleScript
 - **Policy**: Enforces sender allowlist and rate limits
 - **Orchestrator**: Routes commands and manages approvals
-- **Connector**: Stateless CLI per turn — `codex exec` (Codex) or `claude -p` (Claude)
-- **Store**: Persists sessions, runs, and approvals
-- **Egress**: Sends iMessage replies via AppleScript
-- **MailEgress**: Sends threaded email replies (optional)
+- **Connector**: Stateless CLI per turn -- `codex exec`, `claude -p`, or `cline -y`
+- **Store**: Persists sessions, runs, approvals, and scheduled actions
+- **Egress modules**: Send replies via AppleScript to each Apple app
+- **CompanionLoop**: Proactive observations, daily digests, weekly reviews
+- **AmbientScanner**: Passive context enrichment from Notes/Calendar/Mail
 
-### What's New in v1.0.0
-
-- 📱 Five Apple app integrations: iMessage, Mail, Reminders, Notes, Calendar
-- 🤖 Two AI connectors: Claude Code CLI (`claude -p`) and Codex CLI (`codex exec`)
-- 🔒 Approval sender verification (only you can approve your tasks)
-- 💾 Database connection caching + indexes for fast queries
-- 🛡️ Graceful shutdown with signal handling
-- 🧪 380+ comprehensive tests with shared fixtures
-- 📝 Notes logging: per-turn AI response logging to a Notes folder
-- 🏥 Health dashboard, conversation history, progress streaming
-
-For developers, see [CLAUDE.md](../CLAUDE.md) for architecture details.
+For full architecture details, see [CLAUDE.md](../CLAUDE.md) or [AGENTS.md](../AGENTS.md).
 
 ---
 

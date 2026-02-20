@@ -218,7 +218,7 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 
 ### Connector Settings
 
-- `apple_flow_connector` - connector to use: `"codex-cli"` (default), `"claude-cli"`, `"codex-app-server"` (deprecated)
+- `apple_flow_connector` - connector to use: `"codex-cli"` (default), `"claude-cli"`, `"cline"`, `"codex-app-server"` (deprecated)
 - `apple_flow_codex_turn_timeout_seconds` - timeout for all connectors (default: 300s/5min)
 
 **Codex CLI** (`connector=codex-cli`, requires `codex login`):
@@ -233,6 +233,12 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 - `apple_flow_claude_cli_dangerously_skip_permissions` - pass `--dangerously-skip-permissions` (default: true)
 - `apple_flow_claude_cli_tools` - comma-separated values passed to `--tools` (optional, e.g. `default,WebSearch`)
 - `apple_flow_claude_cli_allowed_tools` - comma-separated values passed to `--allowedTools` (optional, e.g. `WebSearch`)
+
+**Cline CLI** (`connector=cline`, supports any model):
+- `apple_flow_cline_command` - path to cline binary (default: "cline")
+- `apple_flow_cline_model` - model to use (e.g. `claude-sonnet-4-5-20250929`, `gpt-4o`, `deepseek-v3`; empty = cline default)
+- `apple_flow_cline_workspace` - workspace directory for cline (default: from `default_workspace`)
+- `apple_flow_cline_timeout` - timeout in seconds (default: 300)
 
 **Legacy app-server** (`connector=codex-app-server`, deprecated):
 - `apple_flow_codex_app_server_cmd` - app-server command
@@ -459,6 +465,7 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 ### Connector selection
 - `"codex-cli"` (default): `codex_cli_connector.py` — stateless `codex exec`, requires `codex login`
 - `"claude-cli"`: `claude_cli_connector.py` — stateless `claude -p`, requires `claude auth login`
+- `"cline"`: `cline_connector.py` — agentic `cline -y`, supports any model provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
 - `"codex-app-server"` (deprecated): `codex_connector.py` — stateful JSON-RPC, prone to state corruption
 - Selection controlled by `apple_flow_connector` config field (falls back to `apple_flow_use_codex_cli` for backwards compat)
 

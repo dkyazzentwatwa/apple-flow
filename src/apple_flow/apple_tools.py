@@ -82,7 +82,7 @@ def _run_script(script: str, timeout: float = 30.0) -> str | None:
         if result.returncode != 0:
             logger.warning("AppleScript failed (rc=%s): %s", result.returncode, result.stderr.strip())
             return None
-        return result.stdout.strip()
+        return result.stdout.strip("\r\n")
     except subprocess.TimeoutExpired:
         logger.warning("AppleScript timed out after %.1fs", timeout)
         return None
@@ -107,6 +107,24 @@ def _parse_json_output(raw: str | None) -> list[dict]:
     except json.JSONDecodeError as exc:
         logger.warning("Failed to parse JSON output: %s", exc)
         return []
+
+
+def _parse_delimited_output(raw: str | None, field_names: list[str]) -> list[dict]:
+    """Parse tab-delimited AppleScript output into a list of dicts.
+
+    Each line is one record; fields are separated by a single tab.
+    Lines with the wrong number of fields are silently skipped.
+    """
+    if not raw:
+        return []
+    records: list[dict] = []
+    expected = len(field_names)
+    for line in raw.splitlines():
+        parts = line.split("\t")
+        if len(parts) != expected:
+            continue
+        records.append(dict(zip(field_names, parts)))
+    return records
 
 
 def _format_output(
@@ -156,7 +174,7 @@ def _notes_fetch_raw(folder: str = "", limit: int = 50) -> list[dict]:
             try
                 set targetContainer to folder "{esc_folder}"
             on error
-                return "[]"
+                return ""
             end try
             set allNotes to every note of targetContainer
         '''
@@ -164,60 +182,54 @@ def _notes_fetch_raw(folder: str = "", limit: int = 50) -> list[dict]:
         fetch_block = "set allNotes to every note"
 
     script = f'''
+    on sanitise(txt)
+        set AppleScript's text item delimiters to (ASCII character 9)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to (ASCII character 10)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to (ASCII character 13)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to ""
+        return txt
+    end sanitise
+
     tell application "Notes"
         set maxCount to {int(limit)}
-        set resultList to {{}}
+        set outputLines to {{}}
         {fetch_block}
 
         repeat with n in allNotes
-            if (count of resultList) >= maxCount then exit repeat
+            if (count of outputLines) >= maxCount then exit repeat
 
-            set nId to id of n as text
-            set nName to name of n as text
+            set nId to my sanitise(id of n as text)
+            set nName to my sanitise(name of n as text)
             try
                 set nBody to plaintext of n as text
                 if length of nBody > 400 then set nBody to text 1 thru 400 of nBody
+                set nBody to my sanitise(nBody)
             on error
                 set nBody to ""
             end try
             try
-                set nModDate to modification date of n as text
+                set nModDate to my sanitise(modification date of n as text)
             on error
                 set nModDate to ""
             end try
 
-            set rec to "{{\\"id\\": \\"" & my escapeJSON(nId) & "\\", \\"name\\": \\"" & my escapeJSON(nName) & "\\", \\"preview\\": \\"" & my escapeJSON(nBody) & "\\", \\"modification_date\\": \\"" & my escapeJSON(nModDate) & "\\"}}"
-            set end of resultList to rec
+            set end of outputLines to nId & (ASCII character 9) & nName & (ASCII character 9) & nBody & (ASCII character 9) & nModDate
         end repeat
 
-        set AppleScript's text item delimiters to ","
-        return "[" & (resultList as text) & "]"
+        set AppleScript's text item delimiters to (ASCII character 10)
+        return (outputLines as text)
     end tell
-
-    on escapeJSON(txt)
-        set output to ""
-        repeat with ch in (characters of txt)
-            set charCode to (ASCII number of ch)
-            if ch is "\\"" then
-                set output to output & "\\\\\\""
-            else if ch is "\\\\" then
-                set output to output & "\\\\\\\\"
-            else if ch is (ASCII character 10) then
-                set output to output & "\\\\n"
-            else if ch is (ASCII character 13) then
-                set output to output & "\\\\n"
-            else if ch is (ASCII character 9) then
-                set output to output & "\\\\t"
-            else if charCode < 32 and charCode is not 10 and charCode is not 13 and charCode is not 9 then
-                set output to output & " "
-            else
-                set output to output & ch
-            end if
-        end repeat
-        return output
-    end escapeJSON
     '''
-    return _parse_json_output(_run_script(script))
+    return _parse_delimited_output(_run_script(script, timeout=60.0), ["id", "name", "preview", "modification_date"])
 
 
 def notes_list(folder: str = "", limit: int = 20, as_text: bool = False) -> list | str:
@@ -422,30 +434,48 @@ def _mail_fetch_raw(
     read_clause = "whose read status is false" if unread_only else ""
 
     script = f'''
+    on sanitise(txt)
+        set AppleScript's text item delimiters to (ASCII character 9)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to (ASCII character 10)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to (ASCII character 13)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to ""
+        return txt
+    end sanitise
+
     tell application "Mail"
         set maxCount to {int(limit)}
         set maxAgeDays to {int(max_age_days)}
         set cutoffDate to (current date) - (maxAgeDays * days)
-        set resultList to {{}}
+        set outputLines to {{}}
 
         set allMessages to (every message of {mailbox_ref} {read_clause})
 
         repeat with msg in allMessages
-            if (count of resultList) >= maxCount then exit repeat
+            if (count of outputLines) >= maxCount then exit repeat
             set msgDate to date received of msg
             if msgDate < cutoffDate then
             else
-                set msgId to id of msg as text
-                set msgSender to sender of msg as text
-                set msgSubject to subject of msg as text
+                set msgId to my sanitise(id of msg as text)
+                set msgSender to my sanitise(sender of msg as text)
+                set msgSubject to my sanitise(subject of msg as text)
                 try
                     set msgBody to content of msg as text
                     if length of msgBody > 500 then set msgBody to text 1 thru 500 of msgBody
+                    set msgBody to my sanitise(msgBody)
                 on error
                     set msgBody to ""
                 end try
                 try
-                    set msgDateStr to date received of msg as text
+                    set msgDateStr to my sanitise(date received of msg as text)
                 on error
                     set msgDateStr to ""
                 end try
@@ -453,39 +483,15 @@ def _mail_fetch_raw(
                 set msgReadStr to "false"
                 if msgRead then set msgReadStr to "true"
 
-                set rec to "{{\\"id\\": \\"" & my escapeJSON(msgId) & "\\", \\"sender\\": \\"" & my escapeJSON(msgSender) & "\\", \\"subject\\": \\"" & my escapeJSON(msgSubject) & "\\", \\"body_preview\\": \\"" & my escapeJSON(msgBody) & "\\", \\"date\\": \\"" & my escapeJSON(msgDateStr) & "\\", \\"read\\": \\"" & msgReadStr & "\\"}}"
-                set end of resultList to rec
+                set end of outputLines to msgId & (ASCII character 9) & msgSender & (ASCII character 9) & msgSubject & (ASCII character 9) & msgBody & (ASCII character 9) & msgDateStr & (ASCII character 9) & msgReadStr
             end if
         end repeat
 
-        set AppleScript's text item delimiters to ","
-        return "[" & (resultList as text) & "]"
+        set AppleScript's text item delimiters to (ASCII character 10)
+        return (outputLines as text)
     end tell
-
-    on escapeJSON(txt)
-        set output to ""
-        repeat with ch in (characters of txt)
-            set charCode to (ASCII number of ch)
-            if ch is "\\"" then
-                set output to output & "\\\\\\""
-            else if ch is "\\\\" then
-                set output to output & "\\\\\\\\"
-            else if ch is (ASCII character 10) then
-                set output to output & "\\\\n"
-            else if ch is (ASCII character 13) then
-                set output to output & "\\\\n"
-            else if ch is (ASCII character 9) then
-                set output to output & "\\\\t"
-            else if charCode < 32 and charCode is not 10 and charCode is not 13 and charCode is not 9 then
-                set output to output & " "
-            else
-                set output to output & ch
-            end if
-        end repeat
-        return output
-    end escapeJSON
     '''
-    return _parse_json_output(_run_script(script))
+    return _parse_delimited_output(_run_script(script, timeout=60.0), ["id", "sender", "subject", "body_preview", "date", "read"])
 
 
 def mail_list_unread(
@@ -638,7 +644,7 @@ def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplet
             try
                 set targetList to list "{esc_list}"
             on error
-                return "[]"
+                return ""
             end try
             set allReminders to (every reminder of targetList {completion_clause})
         '''
@@ -652,23 +658,42 @@ def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplet
         '''
 
     script = f'''
+    on sanitise(txt)
+        set AppleScript's text item delimiters to (ASCII character 9)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to (ASCII character 10)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to (ASCII character 13)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to ""
+        return txt
+    end sanitise
+
     tell application "Reminders"
         set maxCount to {int(limit)}
-        set resultList to {{}}
+        set outputLines to {{}}
         {fetch_block}
 
         repeat with rem in allReminders
-            if (count of resultList) >= maxCount then exit repeat
+            if (count of outputLines) >= maxCount then exit repeat
 
-            set remId to id of rem as text
-            set remName to name of rem as text
+            set remId to my sanitise(id of rem as text)
+            set remName to my sanitise(name of rem as text)
             try
                 set remBody to body of rem as text
+                if length of remBody > 400 then set remBody to text 1 thru 400 of remBody
+                set remBody to my sanitise(remBody)
             on error
                 set remBody to ""
             end try
             try
-                set remDue to due date of rem as text
+                set remDue to my sanitise(due date of rem as text)
             on error
                 set remDue to ""
             end try
@@ -676,43 +701,19 @@ def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplet
             set remCompletedStr to "false"
             if remCompleted then set remCompletedStr to "true"
             try
-                set remList to name of container of rem as text
+                set remList to my sanitise(name of container of rem as text)
             on error
                 set remList to ""
             end try
 
-            set rec to "{{\\"id\\": \\"" & my escapeJSON(remId) & "\\", \\"name\\": \\"" & my escapeJSON(remName) & "\\", \\"body\\": \\"" & my escapeJSON(remBody) & "\\", \\"due_date\\": \\"" & my escapeJSON(remDue) & "\\", \\"completed\\": \\"" & remCompletedStr & "\\", \\"list\\": \\"" & my escapeJSON(remList) & "\\"}}"
-            set end of resultList to rec
+            set end of outputLines to remId & (ASCII character 9) & remName & (ASCII character 9) & remBody & (ASCII character 9) & remDue & (ASCII character 9) & remCompletedStr & (ASCII character 9) & remList
         end repeat
 
-        set AppleScript's text item delimiters to ","
-        return "[" & (resultList as text) & "]"
+        set AppleScript's text item delimiters to (ASCII character 10)
+        return (outputLines as text)
     end tell
-
-    on escapeJSON(txt)
-        set output to ""
-        repeat with ch in (characters of txt)
-            set charCode to (ASCII number of ch)
-            if ch is "\\"" then
-                set output to output & "\\\\\\""
-            else if ch is "\\\\" then
-                set output to output & "\\\\\\\\"
-            else if ch is (ASCII character 10) then
-                set output to output & "\\\\n"
-            else if ch is (ASCII character 13) then
-                set output to output & "\\\\n"
-            else if ch is (ASCII character 9) then
-                set output to output & "\\\\t"
-            else if charCode < 32 and charCode is not 10 and charCode is not 13 and charCode is not 9 then
-                set output to output & " "
-            else
-                set output to output & ch
-            end if
-        end repeat
-        return output
-    end escapeJSON
     '''
-    return _parse_json_output(_run_script(script))
+    return _parse_delimited_output(_run_script(script, timeout=60.0), ["id", "name", "body", "due_date", "completed", "list"])
 
 
 def reminders_list(
@@ -882,7 +883,7 @@ def _calendar_fetch_raw(calendar: str = "", days_ahead: int = 7, limit: int = 50
             try
                 set targetCal to calendar "{esc_cal}"
             on error
-                return "[]"
+                return ""
             end try
             set allEvents to (every event of targetCal whose start date >= nowDate and start date <= futureDate)
         '''
@@ -895,71 +896,66 @@ def _calendar_fetch_raw(calendar: str = "", days_ahead: int = 7, limit: int = 50
         '''
 
     script = f'''
+    on sanitise(txt)
+        set AppleScript's text item delimiters to (ASCII character 9)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to (ASCII character 10)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to (ASCII character 13)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to ""
+        return txt
+    end sanitise
+
     tell application "Calendar"
         set maxCount to {int(limit)}
-        set resultList to {{}}
+        set outputLines to {{}}
         set nowDate to current date
         set futureDate to nowDate + ({int(days_ahead)} * days)
         {fetch_block}
 
         repeat with evt in allEvents
-            if (count of resultList) >= maxCount then exit repeat
+            if (count of outputLines) >= maxCount then exit repeat
 
-            set evtId to uid of evt as text
-            set evtSummary to summary of evt as text
+            set evtId to my sanitise(uid of evt as text)
+            set evtSummary to my sanitise(summary of evt as text)
             try
                 set evtDescription to description of evt as text
+                if length of evtDescription > 400 then set evtDescription to text 1 thru 400 of evtDescription
+                set evtDescription to my sanitise(evtDescription)
             on error
                 set evtDescription to ""
             end try
             try
-                set evtStart to start date of evt as text
+                set evtStart to my sanitise(start date of evt as text)
             on error
                 set evtStart to ""
             end try
             try
-                set evtEnd to end date of evt as text
+                set evtEnd to my sanitise(end date of evt as text)
             on error
                 set evtEnd to ""
             end try
             try
-                set evtCal to name of calendar of evt as text
+                set evtCal to my sanitise(name of calendar of evt as text)
             on error
                 set evtCal to ""
             end try
 
-            set rec to "{{\\"id\\": \\"" & my escapeJSON(evtId) & "\\", \\"summary\\": \\"" & my escapeJSON(evtSummary) & "\\", \\"description\\": \\"" & my escapeJSON(evtDescription) & "\\", \\"start_date\\": \\"" & my escapeJSON(evtStart) & "\\", \\"end_date\\": \\"" & my escapeJSON(evtEnd) & "\\", \\"calendar\\": \\"" & my escapeJSON(evtCal) & "\\"}}"
-            set end of resultList to rec
+            set end of outputLines to evtId & (ASCII character 9) & evtSummary & (ASCII character 9) & evtDescription & (ASCII character 9) & evtStart & (ASCII character 9) & evtEnd & (ASCII character 9) & evtCal
         end repeat
 
-        set AppleScript's text item delimiters to ","
-        return "[" & (resultList as text) & "]"
+        set AppleScript's text item delimiters to (ASCII character 10)
+        return (outputLines as text)
     end tell
-
-    on escapeJSON(txt)
-        set output to ""
-        repeat with ch in (characters of txt)
-            set charCode to (ASCII number of ch)
-            if ch is "\\"" then
-                set output to output & "\\\\\\""
-            else if ch is "\\\\" then
-                set output to output & "\\\\\\\\"
-            else if ch is (ASCII character 10) then
-                set output to output & "\\\\n"
-            else if ch is (ASCII character 13) then
-                set output to output & "\\\\n"
-            else if ch is (ASCII character 9) then
-                set output to output & "\\\\t"
-            else if charCode < 32 and charCode is not 10 and charCode is not 13 and charCode is not 9 then
-                set output to output & " "
-            else
-                set output to output & ch
-            end if
-        end repeat
-        return output
-    end escapeJSON
     '''
-    return _parse_json_output(_run_script(script))
+    return _parse_delimited_output(_run_script(script, timeout=60.0), ["id", "summary", "description", "start_date", "end_date", "calendar"])
 
 
 def calendar_list_events(

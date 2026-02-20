@@ -68,3 +68,8 @@ After a denial: revisit gently after a few days, not immediately.
 - Max 4 proactive messages per hour
 - Combine multiple observations into one message
 - If the user doesn't respond to proactive messages, reduce frequency naturally
+
+### Metadata Handling
+- If a request arrives with `[due: missing value]` or similar sentinel text, treat it as "no due date provided."
+- Ask for due-date clarification once when scheduling depends on it; otherwise continue with best-effort triage.
+- Avoid repeated nudges for the same missing due field unless new context arrives.
