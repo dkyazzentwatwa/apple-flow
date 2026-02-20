@@ -266,10 +266,12 @@ apple_flow_cline_model=kimi-k2  # or gpt-4o, deepseek, etc.
 
 ## 🔔 Optional Integrations
 
+> **Trigger tag:** All optional gateways use the `!!agent` trigger tag by default. Only items containing `!!agent` in their title, subject, or body are picked up — everything else is ignored. The tag is stripped before the task is sent to your AI. You can customize it with `apple_flow_trigger_tag` in your `.env`.
+
 <details>
 <summary><b>📧 Apple Mail</b></summary>
 
-Reply to emails with AI:
+Include `!!agent` anywhere in the subject or body of an email to have it processed by AI. Replies are sent back to the same thread.
 
 ```env
 apple_flow_enable_mail_polling=true
@@ -277,41 +279,49 @@ apple_flow_mail_allowed_senders=you@example.com
 apple_flow_mail_from_address=you@example.com
 ```
 
+**Example:** Send yourself an email with subject `!!agent refactor the auth module` — Apple Flow picks it up and replies with the result.
+
 </details>
 
 <details>
 <summary><b>☑️ Apple Reminders</b></summary>
 
-Incomplete reminders become tasks:
+Add `!!agent` to a reminder's name or notes to turn it into an AI task. The reminder is completed and annotated with the result once done.
 
 ```env
 apple_flow_enable_reminders_polling=true
 apple_flow_reminders_list_name=agent-task
 ```
 
+**Example:** Create a reminder `!!agent summarize today's meeting notes` in your "agent-task" list.
+
 </details>
 
 <details>
 <summary><b>📝 Apple Notes</b></summary>
 
-Notes tagged `!!agent` become tasks:
+Include `!!agent` in a note's title or body to have it processed as a task. The AI result is appended back to the note.
 
 ```env
 apple_flow_enable_notes_polling=true
 apple_flow_notes_folder_name=Codex Inbox
 ```
 
+**Example:** Create a note titled `!!agent draft a project brief` in your "Codex Inbox" folder.
+
 </details>
 
 <details>
 <summary><b>📅 Apple Calendar</b></summary>
 
-Events become scheduled tasks when due:
+Add `!!agent` to an event's title or description. When the event comes due, it's picked up as a scheduled task and the result is written into the event description.
 
 ```env
 apple_flow_enable_calendar_polling=true
 apple_flow_calendar_name=agent-schedule
 ```
+
+**Example:** Create an event `!!agent generate weekly report` at 9am Monday in your "agent-schedule" calendar.
 
 </details>
 
