@@ -41,11 +41,16 @@ Apple Flow is designed with **security-first principles** for local-first AI ass
 - Full Disk Access is required but used safely
 
 #### 6. Stateless AI Execution
-- CLI connectors (`claude-cli`, `codex-cli`) spawn fresh processes per turn
+- CLI connectors (`claude-cli`, `codex-cli`, `cline`) spawn fresh processes per turn
 - No persistent state that could be corrupted
 - Conversation context is managed in-memory with configurable history
 
-#### 7. Echo Suppression
+#### 7. Admin API Authentication
+- Admin API requires a Bearer token when `apple_flow_admin_api_token` is set
+- All endpoints except `/health` are protected
+- Token is a shared secret configured in `.env` and never logged
+
+#### 8. Echo Suppression
 - Outbound messages are fingerprinted to prevent echo loops
 - Configurable suppression window (default: 90 seconds)
 
@@ -62,6 +67,8 @@ Apple Flow is designed with **security-first principles** for local-first AI ass
 | Rate abuse | Per-sender rate limiting |
 | Stale approvals | Approval TTL expiration |
 | State corruption | Stateless CLI execution |
+| Admin API abuse | Bearer token authentication |
+| AppleScript injection | String escaping on all Apple app egress paths |
 
 #### What Apple Flow Does NOT Protect Against
 
@@ -71,13 +78,17 @@ Apple Flow is designed with **security-first principles** for local-first AI ass
 | Malicious AI model outputs | AI behavior depends on the model provider |
 | Physical device access | Local-first means data is on disk |
 | Network interception | No network traffic (local-only by default) |
+| Prompt injection via Apple apps | Mail/Notes/Reminders content is passed to the AI as-is |
 
 ### Data Handling
 
 - **All data stays local** — No telemetry, no cloud uploads
 - **iMessage database** — Read-only access, never modified
 - **SQLite state** — Stored in `~/.codex/relay.db`
-- **Agent office files** — User-editable markdown in `agent-office/`
+- **Agent office files** — User-editable markdown in `agent-office/` (gitignored except scaffold)
+- **Memory files** — `agent-office/MEMORY.md` and `agent-office/60_memory/*.md` stay on disk
+- **Attachments** — Processed in a temp directory (`/tmp/apple_flow_attachments` by default) and never persisted
+- **Phone numbers** — Scrubbed from logs; stored only in SQLite sessions table
 - **Logs** — Written to `logs/` directory (user-controlled)
 
 ### Reporting a Vulnerability
@@ -119,21 +130,32 @@ apple_flow_only_poll_allowed_senders=true      # Default: true
 apple_flow_require_chat_prefix=false           # Natural mode (or true for strict)
 apple_flow_approval_ttl_minutes=20             # Shorter = more secure
 apple_flow_max_messages_per_minute=30          # Prevent abuse
+apple_flow_admin_api_token=<strong-random-secret>  # Protect admin API
+
+# Optional integrations — restrict allowed senders/addresses separately
+apple_flow_mail_allowed_senders=you@example.com
+apple_flow_reminders_auto_approve=false        # Require approval for reminder tasks
+apple_flow_notes_auto_approve=false            # Require approval for note tasks
+apple_flow_calendar_auto_approve=false         # Require approval for calendar tasks
 ```
 
 ## Security Audit
 
-A security audit of AppleScript injection points is planned. Key areas:
+AppleScript injection has been addressed across all egress paths (v0.2.0). All user-controlled strings are escaped before interpolation into AppleScript.
 
-- `egress.py` — iMessage sending via AppleScript
-- `mail_egress.py` — Email sending via AppleScript
-- `notes_egress.py` — Notes creation/modification
-- `reminders_egress.py` — Reminders management
-- `calendar_egress.py` — Calendar event creation
-- `apple_tools.py` — CLI tool AppleScript execution
+**Hardened egress modules:**
 
-All AppleScript strings are escaped before execution, but a formal audit is recommended before production use.
+| Module | Escaping applied |
+|--------|-----------------|
+| `egress.py` | iMessage text: backslash + quote + newline |
+| `mail_egress.py` | Body, subject, recipient, from-address |
+| `notes_egress.py` | Folder name, note text, note ID |
+| `reminders_egress.py` | Reminder title and annotation |
+| `calendar_egress.py` | Event description and annotation |
+| `apple_tools.py` | CLI tool invocation via AppleScript |
+
+A formal third-party audit is still recommended before production use at scale.
 
 ---
 
-**Last updated**: 2026-02-19
+**Last updated**: 2026-02-20
