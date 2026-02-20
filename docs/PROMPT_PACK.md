@@ -463,44 +463,46 @@ system: restart
 
 ## Recurring Calendar Prompts
 
-Create these as **recurring events** in your Apple Calendar (in the calendar configured for Apple Flow, default: `agent-schedule`). The event title is the prompt. When the event comes due, Apple Flow picks it up and executes it.
+Create these as **recurring events** in your Apple Calendar (in the calendar configured for Apple Flow, default: `agent-schedule`). The event title is the prompt. When the event comes due (within the lookahead window), Apple Flow picks it up and executes it.
+
+> **Trigger tag required:** By default, events must include `!!agent` somewhere in the title or description to be picked up. This prevents random calendar events from becoming tasks. The tag is stripped before processing. You can change or disable this via `apple_flow_trigger_tag` in your `.env`.
 
 ### Daily recurring
 
 | Event Title | Recurrence | Time | Purpose |
 |---|---|---|---|
-| `What's on my calendar today and what should I prioritize?` | Every weekday | 7:30 AM | Morning prioritization |
-| `idea: Give me one actionable marketing idea I can execute today` | Every weekday | 8:00 AM | Daily marketing nudge |
-| `health` | Every day | 9:00 AM | Confirm daemon is running |
-| `status` | Every day | 12:00 PM | Midday approval check |
-| `Summarize what I accomplished today based on my recent message history` | Every weekday | 5:30 PM | End-of-day recap |
+| `!!agent What's on my calendar today and what should I prioritize?` | Every weekday | 7:30 AM | Morning prioritization |
+| `!!agent idea: Give me one actionable marketing idea I can execute today` | Every weekday | 8:00 AM | Daily marketing nudge |
+| `!!agent health` | Every day | 9:00 AM | Confirm daemon is running |
+| `!!agent status` | Every day | 12:00 PM | Midday approval check |
+| `!!agent Summarize what I accomplished today based on my recent message history` | Every weekday | 5:30 PM | End-of-day recap |
 
 ### Weekly recurring
 
 | Event Title | Recurrence | Day/Time | Purpose |
 |---|---|---|---|
-| `plan: Review this week's goals and create next week's top 3 priorities` | Weekly | Monday 8:00 AM | Weekly planning |
-| `idea: What's one process in my business I should automate this week?` | Weekly | Monday 9:00 AM | Automation brainstorm |
-| `task: Draft a weekly team update email summarizing progress and blockers` | Weekly | Friday 3:00 PM | Team comms |
-| `usage monthly` | Weekly | Friday 4:00 PM | Cost tracking |
-| `idea: Based on my recent history, what patterns do you see in what I'm working on? Am I focused or scattered?` | Weekly | Sunday 7:00 PM | Self-reflection |
+| `!!agent plan: Review this week's goals and create next week's top 3 priorities` | Weekly | Monday 8:00 AM | Weekly planning |
+| `!!agent idea: What's one process in my business I should automate this week?` | Weekly | Monday 9:00 AM | Automation brainstorm |
+| `!!agent task: Draft a weekly team update email summarizing progress and blockers` | Weekly | Friday 3:00 PM | Team comms |
+| `!!agent usage monthly` | Weekly | Friday 4:00 PM | Cost tracking |
+| `!!agent idea: Based on my recent history, what patterns do you see in what I'm working on? Am I focused or scattered?` | Weekly | Sunday 7:00 PM | Self-reflection |
 
 ### Monthly recurring
 
 | Event Title | Recurrence | Day/Time | Purpose |
 |---|---|---|---|
-| `plan: Monthly business review — what metrics should I look at and what questions should I ask?` | 1st of month | 9:00 AM | Monthly review prep |
-| `task: Create a checklist of recurring monthly tasks — renewals, payments, reports` | 1st of month | 10:00 AM | Admin catch-all |
-| `idea: What should I learn or improve this month to grow the business?` | 1st of month | 8:00 AM | Growth planning |
-| `plan: Review and update our project roadmap for the coming month` | Last weekday of month | 2:00 PM | Roadmap hygiene |
+| `!!agent plan: Monthly business review — what metrics should I look at and what questions should I ask?` | 1st of month | 9:00 AM | Monthly review prep |
+| `!!agent task: Create a checklist of recurring monthly tasks — renewals, payments, reports` | 1st of month | 10:00 AM | Admin catch-all |
+| `!!agent idea: What should I learn or improve this month to grow the business?` | 1st of month | 8:00 AM | Growth planning |
+| `!!agent plan: Review and update our project roadmap for the coming month` | Last weekday of month | 2:00 PM | Roadmap hygiene |
 
 ### Quarterly recurring
 
 | Event Title | Recurrence | Quarterly | Purpose |
 |---|---|---|---|
-| `plan: Quarterly business review — revenue trends, customer growth, top wins, biggest problems` | 1st of quarter | 9:00 AM | QBR prep |
-| `idea: If I could only work on one thing next quarter, what would move the needle most?` | 1st of quarter | 10:00 AM | Strategic focus |
-| `task: Draft a quarterly investor/stakeholder update email` | End of quarter | 3:00 PM | Stakeholder comms |
+| `!!agent plan: Quarterly business review — revenue trends, customer growth, top wins, biggest problems` | 1st of quarter | 9:00 AM | QBR prep |
+| `!!agent idea: If I could only work on one thing next quarter, what would move the needle most?` | 1st of quarter | 10:00 AM | Strategic focus |
+| `!!agent task: Draft a quarterly investor/stakeholder update email` | End of quarter | 3:00 PM | Stakeholder comms |
 
 ---
 
@@ -508,30 +510,34 @@ Create these as **recurring events** in your Apple Calendar (in the calendar con
 
 Add items to your Apple Reminders list (default: `agent-task`) and Apple Flow picks them up. Great for capturing tasks on the go.
 
+> **Trigger tag required:** Include `!!agent` in the reminder name or notes. This tells Apple Flow to pick it up. The tag is stripped before processing.
+
 ### Quick captures from your phone
 
-- `Write a thank-you email to the client from today's meeting`
-- `Research competitors' pricing for our premium tier`
-- `Draft social media copy for the product launch next Tuesday`
-- `Add error logging to the payment processing module`
-- `Create a packing list template for our shipping team`
+- `!!agent Write a thank-you email to the client from today's meeting`
+- `!!agent Research competitors' pricing for our premium tier`
+- `!!agent Draft social media copy for the product launch next Tuesday`
+- `!!agent Add error logging to the payment processing module`
+- `!!agent Create a packing list template for our shipping team`
 
 ### With due dates
 
 Set a due date on the reminder and Apple Flow processes it when it's due:
 
-- `Prepare agenda for Monday's team standup` — due Monday 8:00 AM
-- `Send invoice to Client X for January work` — due Feb 1
-- `Review and rotate API keys` — due 1st of every month
-- `Check SSL certificate expiry dates` — due quarterly
+- `!!agent Prepare agenda for Monday's team standup` — due Monday 8:00 AM
+- `!!agent Send invoice to Client X for January work` — due Feb 1
+- `!!agent Review and rotate API keys` — due 1st of every month
+- `!!agent Check SSL certificate expiry dates` — due quarterly
 
 ### Siri integration
 
 Since these are just Apple Reminders, use Siri:
 
-> "Hey Siri, add a reminder to my agent-task list: Write a blog post about our new feature"
+> "Hey Siri, add a reminder to my agent-task list: bang bang agent Write a blog post about our new feature"
 
-> "Hey Siri, remind me in agent-task tomorrow at 9 AM to review the pull requests"
+> "Hey Siri, remind me in agent-task tomorrow at 9 AM to bang bang agent review the pull requests"
+
+(Siri interprets "bang bang agent" as `!!agent` — or just add the tag manually after Siri creates the reminder.)
 
 ---
 
@@ -539,10 +545,12 @@ Since these are just Apple Reminders, use Siri:
 
 For tasks that need more context than a text message, create a note in your Apple Notes folder (default: `agent-task`). Apple Flow reads the full note body as the prompt.
 
+> **Trigger tag required:** Include `!!agent` somewhere in the note title or body. The tag is stripped before processing.
+
 ### Detailed spec
 
 ```
-# Email Drip Campaign
+# Email Drip Campaign !!agent
 
 Create a 5-email welcome sequence for new subscribers.
 
@@ -562,7 +570,7 @@ Include subject lines with A/B variants.
 ### Code review request
 
 ```
-# Review Auth Implementation
+# Review Auth Implementation !!agent
 
 Review the authentication module at @api workspace.
 
@@ -579,7 +587,7 @@ Return findings as a prioritized list: critical, warning, suggestion.
 ### Research brief
 
 ```
-# Competitor Analysis: Project Management Space
+# Competitor Analysis !!agent
 
 Research these competitors:
 - Asana
@@ -599,7 +607,7 @@ Format as a comparison table, then a 3-paragraph summary of where gaps exist tha
 ### Process documentation
 
 ```
-# Document Our Deployment Process
+# Document Our Deployment Process !!agent
 
 Interview the codebase at @api and create deployment documentation.
 
