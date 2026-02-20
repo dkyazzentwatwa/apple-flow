@@ -13,7 +13,7 @@
 
 **[apple-flow-site.vercel.app](https://apple-flow-site.vercel.app/)**
 
-*A local-first macOS daemon that bridges iMessage, Mail, Reminders, Notes, and Calendar to your favorite AI assistant. No apps. No cloud. Just iMessage.*
+*A local-first macOS daemon that bridges iMessage, Mail, Reminders, Notes, and Calendar to your favorite AI assistant. No apps. No cloud. Just your Apple Apps.*
 
 </div>
 
