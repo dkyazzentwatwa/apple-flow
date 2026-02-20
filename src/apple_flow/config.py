@@ -57,6 +57,7 @@ class RelaySettings(BaseSettings):
     messages_db_path: Path = Path.home() / "Library" / "Messages" / "chat.db"
     process_historical_on_first_start: bool = False
     max_startup_replay_rows: int = 50
+    startup_catchup_window_seconds: int = 60
     notify_blocked_senders: bool = False
     notify_rate_limited_senders: bool = False
     only_poll_allowed_senders: bool = True

@@ -5,7 +5,7 @@ import logging
 import signal
 import sqlite3
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .calendar_egress import AppleCalendarEgress
@@ -376,8 +376,9 @@ class RelayDaemon:
                 self._last_rowid = latest
                 self.store.set_state("last_rowid", str(latest))
 
-        # Record daemon start time for health dashboard
-        self.store.set_state("daemon_started_at", datetime.now(UTC).isoformat())
+        # Record daemon start time for health dashboard and startup catch-up window
+        self._startup_time = datetime.now(UTC)
+        self.store.set_state("daemon_started_at", self._startup_time.isoformat())
 
     def request_shutdown(self) -> None:
         """Request graceful shutdown of the daemon."""
@@ -476,6 +477,24 @@ class RelayDaemon:
                     if self.egress.was_recent_outbound(msg.sender, msg.text):
                         logger.info("Ignoring probable outbound echo from %s (rowid=%s)", msg.sender, msg.id)
                         continue
+                    # Startup catch-up window: skip messages older than N seconds at boot
+                    if self.settings.startup_catchup_window_seconds > 0:
+                        try:
+                            msg_time = datetime.fromisoformat(msg.received_at).replace(tzinfo=UTC)
+                        except Exception:
+                            msg_time = None
+                        if msg_time is not None:
+                            cutoff = self._startup_time - timedelta(
+                                seconds=self.settings.startup_catchup_window_seconds
+                            )
+                            if msg_time < cutoff:
+                                logger.info(
+                                    "Skipping stale message rowid=%s (received %s, older than startup window of %ds)",
+                                    msg.id,
+                                    msg.received_at,
+                                    self.settings.startup_catchup_window_seconds,
+                                )
+                                continue
                     if not self.policy.is_sender_allowed(msg.sender):
                         logger.info("Blocked message from non-allowlisted sender: %s", msg.sender)
                         if self.settings.notify_blocked_senders:

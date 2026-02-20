@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.apple-flow-daily-pm</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{PROJECT_ROOT}}/scripts/automation/daily-shutdown.sh</string>
+    </array>
+    
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>18</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    
+    <key>StandardOutPath</key>
+    <string>{{PROJECT_ROOT}}/logs/automation-daily-pm.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>{{PROJECT_ROOT}}/logs/automation-daily-pm.log</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>APPLE_FLOW_OFFICE_PATH</key>
+        <string>{{OFFICE_PATH}}</string>
+        <key>APPLE_FLOW_ENV_FILE</key>
+        <string>{{PROJECT_ROOT}}/.env</string>
+        <key>PATH</key>
+        <string>{{PATH}}</string>
+    </dict>
+    
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
