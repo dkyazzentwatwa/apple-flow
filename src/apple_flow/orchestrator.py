@@ -422,6 +422,10 @@ class RelayOrchestrator:
         elif sub == "restart":
             response = "Apple Flow restarting... (text 'health' to confirm it's back)"
             self.egress.send(sender, response)
+            try:
+                subprocess.run(["launchctl", "stop", "local.apple-flow"], check=False, timeout=5)
+            except Exception as exc:
+                logger.warning("Failed to trigger launchctl restart: %s", exc)
             if self.shutdown_callback is not None:
                 self.shutdown_callback()
         elif sub == "mute":

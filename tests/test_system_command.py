@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 from apple_flow.commanding import CommandKind, parse_command
 from apple_flow.models import InboundMessage
@@ -74,7 +75,13 @@ def test_system_restart_calls_shutdown_callback(fake_connector, fake_egress, fak
         fake_connector, fake_egress, fake_store,
         shutdown_callback=lambda: called.append(True),
     )
-    result = orchestrator.handle_message(_make_message("system: restart"))
+    with patch("subprocess.run") as mock_run:
+        result = orchestrator.handle_message(_make_message("system: restart"))
+        mock_run.assert_called_once_with(
+            ["launchctl", "stop", "local.apple-flow"],
+            check=False,
+            timeout=5,
+        )
 
     assert result.kind is CommandKind.SYSTEM
     assert called == [True]
