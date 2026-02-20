@@ -140,13 +140,43 @@ cd apple-flow
 
 ### Step 4 — Configure
 
-Edit `.env` with your settings:
+When the setup script pauses, open `.env` in any text editor:
+
+```bash
+nano .env
+# Or: code .env  |  vim .env  |  open -a TextEdit .env
+```
+
+Set these required fields:
 
 ```env
-apple_flow_allowed_senders=+15551234567       # Your phone number
-apple_flow_allowed_workspaces=/Users/you/code # Folders AI can access
-apple_flow_connector=claude-cli               # claude-cli | codex-cli | cline
+apple_flow_allowed_senders=+15551234567       # your own phone number in +1... format
+apple_flow_allowed_workspaces=/Users/you/code # folder(s) the AI can read/write
+
+# Choose your AI connector (pick one):
+apple_flow_connector=claude-cli   # Claude Code CLI  — requires: claude auth login
+apple_flow_connector=codex-cli    # Codex CLI        — requires: codex login
+apple_flow_connector=cline        # Cline CLI        — supports any model provider
 ```
+
+**Enable any additional gateways you want to use** (all optional, off by default):
+
+```env
+# Apple Mail
+apple_flow_enable_mail_polling=true
+apple_flow_mail_allowed_senders=you@example.com
+
+# Apple Reminders (create a list called "Codex Tasks" in Reminders.app)
+apple_flow_enable_reminders_polling=true
+
+# Apple Notes (create a folder called "Codex Inbox" in Notes.app)
+apple_flow_enable_notes_polling=true
+
+# Apple Calendar (create a calendar called "Codex Schedule" in Calendar.app)
+apple_flow_enable_calendar_polling=true
+```
+
+Save and press **Enter** in the terminal to continue.
 
 ### Step 5 — Grant Full Disk Access
 
