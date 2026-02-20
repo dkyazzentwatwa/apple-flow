@@ -20,6 +20,7 @@ class CommandKind(str, Enum):
     HISTORY = "history"
     USAGE = "usage"
     SYSTEM = "system"
+    LOGS = "logs"
 
 
 @dataclass(slots=True)
@@ -72,6 +73,7 @@ _PREFIX_TO_KIND = {
     "history": CommandKind.HISTORY,
     "usage": CommandKind.USAGE,
     "system": CommandKind.SYSTEM,
+    "logs": CommandKind.LOGS,
 }
 
 
@@ -103,6 +105,9 @@ def parse_command(raw_text: str) -> ParsedCommand:
 
     if lowered == "usage":
         return ParsedCommand(kind=CommandKind.USAGE, payload="")
+
+    if lowered == "logs":
+        return ParsedCommand(kind=CommandKind.LOGS, payload="")
 
     if lowered.startswith("approve "):
         return ParsedCommand(kind=CommandKind.APPROVE, payload=text.split(" ", 1)[1].strip())

@@ -227,6 +227,7 @@ class RelayDaemon:
             memory=self.memory,
             scheduler=self.scheduler,
             office_syncer=self.office_syncer,
+            log_file_path=settings.log_file_path,
         )
 
         self.orchestrator = RelayOrchestrator(
@@ -831,7 +832,7 @@ class RelayDaemon:
             "",
             f"ℹ️  {mode_hint}",
             "✅ approve <id>  |  ❌ deny <id>  |  ❌❌ deny all  |  📊 status",
-            "🏥 health  |  🔍 history: [query]  |  📈 usage  |  🔄 clear context",
+            "🏥 health  |  🔍 history: [query]  |  📈 usage  |  📋 logs  |  🔄 clear context",
             "🔧 system: stop  |  system: restart",
             "",
             "Power users:",

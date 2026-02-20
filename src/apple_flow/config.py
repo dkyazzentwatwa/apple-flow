@@ -175,6 +175,9 @@ class RelaySettings(BaseSettings):
     enable_ambient_scanning: bool = False
     ambient_scan_interval_seconds: float = 900.0
 
+    # Log file path (used by `logs` command to tail the daemon log)
+    log_file_path: str = "logs/apple-flow.err.log"
+
     # Agent-office → Supabase sync
     enable_office_sync: bool = False
     supabase_url: str = "http://localhost:54321"

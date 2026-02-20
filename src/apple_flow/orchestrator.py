@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 import time
 from datetime import UTC, datetime, timedelta
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from .scheduler import FollowUpScheduler
 
 _SEP = "━" * 30
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class RelayOrchestrator:
@@ -54,6 +56,7 @@ class RelayOrchestrator:
         memory: FileMemory | None = None,
         scheduler: FollowUpScheduler | None = None,
         office_syncer: OfficeSyncer | None = None,
+        log_file_path: str | None = None,
     ):
         self.connector = connector
         self.egress = egress
@@ -74,6 +77,7 @@ class RelayOrchestrator:
         self.notes_log_folder_name = notes_log_folder_name
         self.memory = memory
         self.office_syncer = office_syncer
+        self.log_file_path = log_file_path
 
         self._approval = ApprovalHandler(
             connector=connector,
@@ -151,6 +155,9 @@ class RelayOrchestrator:
 
         if command.kind is CommandKind.USAGE:
             return self._handle_usage(message.sender, command.payload)
+
+        if command.kind is CommandKind.LOGS:
+            return self._handle_logs(message.sender, command.payload)
 
         if command.kind is CommandKind.STATUS:
             pending = self.store.list_pending_approvals()
@@ -259,6 +266,40 @@ class RelayOrchestrator:
         response = "\n".join(parts)
         self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.HEALTH, response=response)
+
+    # --- Logs ---
+
+    def _handle_logs(self, sender: str, payload: str) -> OrchestrationResult:
+        n = 20
+        if payload.strip():
+            try:
+                requested = int(payload.strip())
+                n = max(1, min(requested, 50))
+            except ValueError:
+                pass
+
+        log_path: Path | None = None
+        if self.log_file_path:
+            candidate = Path(self.log_file_path)
+            if not candidate.is_absolute():
+                # Resolve relative to repo root (two levels above this file)
+                candidate = Path(__file__).resolve().parents[2] / self.log_file_path
+            if candidate.exists():
+                log_path = candidate
+
+        if log_path is None:
+            response = f"Log file not found: {self.log_file_path or '(not configured)'}"
+        else:
+            try:
+                raw_lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                tail = raw_lines[-n:] if len(raw_lines) >= n else raw_lines
+                clean = [_ANSI_ESCAPE.sub("", line) for line in tail]
+                response = f"Last {len(clean)} lines of {log_path.name}:\n" + "\n".join(clean)
+            except OSError as exc:
+                response = f"Could not read log file: {exc}"
+
+        self.egress.send(sender, response)
+        return OrchestrationResult(kind=CommandKind.LOGS, response=response)
 
     # --- Token Usage (ccusage) ---
 
