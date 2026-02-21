@@ -34,7 +34,8 @@ class AppleMailEgress:
         self.retries = retries
         self.echo_window_seconds = echo_window_seconds
         self.suppress_duplicate_outbound_seconds = suppress_duplicate_outbound_seconds
-        self.signature = signature
+        # Convert literal \n from env settings (enable_decoding=False) to real newlines
+        self.signature = signature.replace("\\n", "\n")
         self._recent_fingerprints: dict[str, float] = {}
 
     def send(self, recipient: str, text: str) -> None:
@@ -206,8 +207,18 @@ class AppleMailEgress:
 
     def was_recent_outbound(self, sender: str, text: str) -> bool:
         self._gc_recent()
-        return self._fingerprint(sender, text) in self._recent_fingerprints
+        if self._fingerprint(sender, text) in self._recent_fingerprints:
+            return True
+        # Strip "Re: <subject>\n\n" prefix added by mail client on bounce
+        if "\n\n" in text:
+            body_only = text.split("\n\n", 1)[1]
+            if self._fingerprint(sender, body_only) in self._recent_fingerprints:
+                return True
+        return False
 
     def mark_outbound(self, recipient: str, text: str) -> None:
         self._gc_recent()
         self._recent_fingerprints[self._fingerprint(recipient, text)] = time.time()
+        if self.signature:
+            # Also fingerprint text+signature so bounced replies are detected
+            self._recent_fingerprints[self._fingerprint(recipient, text + self.signature)] = time.time()

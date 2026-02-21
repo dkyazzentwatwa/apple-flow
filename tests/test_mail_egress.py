@@ -77,3 +77,34 @@ def test_gc_removes_expired_entries():
 def test_normalize_text():
     result = AppleMailEgress._normalize_text("  Hello\u2019s  World  ")
     assert result == "hello's world"
+
+
+def test_signature_newlines_decoded():
+    egress = AppleMailEgress(signature="\\n\\nFoo")
+    assert egress.signature == "\n\nFoo"
+
+
+def test_echo_detection_with_re_prefix_and_signature():
+    """Bounced reply with 'Re: subject\n\n' prefix and appended signature is detected."""
+    sig = "\n\n—\nApple Flow 🤖, Your 24/7 Assistant"
+    egress = AppleMailEgress(echo_window_seconds=300.0, signature=sig)
+    egress.mark_outbound("test@example.com", "response")
+    bounced = "Re: Some Subject\n\nresponse" + sig
+    assert egress.was_recent_outbound("test@example.com", bounced) is True
+
+
+def test_echo_detection_body_with_signature_only():
+    """Text that is exactly response+signature is detected via the signature fingerprint."""
+    sig = "\n\n—\nApple Flow 🤖, Your 24/7 Assistant"
+    egress = AppleMailEgress(echo_window_seconds=300.0, signature=sig)
+    egress.mark_outbound("test@example.com", "response")
+    assert egress.was_recent_outbound("test@example.com", "response" + sig) is True
+
+
+def test_non_echo_with_newlines_not_detected():
+    """Unrelated text containing \\n\\n is not falsely flagged as echo."""
+    sig = "\n\n—\nApple Flow 🤖, Your 24/7 Assistant"
+    egress = AppleMailEgress(echo_window_seconds=300.0, signature=sig)
+    egress.mark_outbound("test@example.com", "response")
+    unrelated = "Something else\n\ncompletely different"
+    assert egress.was_recent_outbound("test@example.com", unrelated) is False
