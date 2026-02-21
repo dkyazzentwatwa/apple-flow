@@ -7,7 +7,6 @@ processed messages as read so they aren't re-fetched on the next poll.
 
 from __future__ import annotations
 
-import json
 import logging
 import subprocess
 from datetime import datetime, timezone
@@ -102,7 +101,7 @@ class AppleMailIngress:
         return 0
 
     def _fetch_unread_via_applescript(self, limit: int, sender_filter: list[str] | None = None) -> list[dict[str, str]]:
-        """Run AppleScript to get unread emails as JSON.
+        """Run AppleScript to get unread emails as tab-delimited records.
 
         Args:
             limit: Maximum number of messages to fetch
@@ -129,9 +128,29 @@ class AppleMailIngress:
         where_clause = f"whose {' and '.join(conditions)}"
 
         script = f'''
+        on sanitise(txt)
+            -- Replace tabs with spaces
+            set AppleScript's text item delimiters to (ASCII character 9)
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            -- Replace newlines (LF) with spaces
+            set AppleScript's text item delimiters to (ASCII character 10)
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            -- Replace carriage returns with spaces
+            set AppleScript's text item delimiters to (ASCII character 13)
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            set AppleScript's text item delimiters to ""
+            return txt
+        end sanitise
+
         tell application "Mail"
             set maxCount to {int(limit)}
-            set resultList to {{}}
+            set outputLines to {{}}
             set maxAgeDays to {int(self.max_age_days)}
             set cutoffDate to (current date) - (maxAgeDays * days)
 
@@ -139,60 +158,36 @@ class AppleMailIngress:
 
             repeat with msg in unreadMessages
                 -- Stop if we have enough messages
-                if (count of resultList) >= maxCount then exit repeat
+                if (count of outputLines) >= maxCount then exit repeat
 
                 -- Check if message is recent enough
                 set msgDateReceived to date received of msg
                 if msgDateReceived < cutoffDate then
                     -- Skip old messages
                 else
-                    set msgId to id of msg as text
-                    set msgSender to sender of msg as text
-                    set msgSubject to subject of msg as text
+                    set msgId to my sanitise(id of msg as text)
+                    set msgSender to my sanitise(sender of msg as text)
+                    set msgSubject to my sanitise(subject of msg as text)
                     try
                         set msgBody to content of msg as text
+                        if length of msgBody > 4000 then set msgBody to text 1 thru 4000 of msgBody
+                        set msgBody to my sanitise(msgBody)
                     on error
                         set msgBody to ""
                     end try
                     try
-                        set msgDate to date received of msg as text
+                        set msgDate to my sanitise(date received of msg as text)
                     on error
                         set msgDate to ""
                     end try
 
-                    -- Build a JSON-ish delimited record
-                    set rec to "{{\\"id\\": \\"" & my escapeJSON(msgId) & "\\", \\"sender\\": \\"" & my escapeJSON(msgSender) & "\\", \\"subject\\": \\"" & my escapeJSON(msgSubject) & "\\", \\"body\\": \\"" & my escapeJSON(msgBody) & "\\", \\"date\\": \\"" & my escapeJSON(msgDate) & "\\"}}"
-                    set end of resultList to rec
+                    set end of outputLines to msgId & (ASCII character 9) & msgSender & (ASCII character 9) & msgSubject & (ASCII character 9) & msgBody & (ASCII character 9) & msgDate
                 end if
             end repeat
 
-            set AppleScript's text item delimiters to ","
-            return "[" & (resultList as text) & "]"
+            set AppleScript's text item delimiters to (ASCII character 10)
+            return (outputLines as text)
         end tell
-
-        on escapeJSON(txt)
-            set output to ""
-            repeat with ch in (characters of txt)
-                set charCode to (ASCII number of ch)
-                if ch is "\\"" then
-                    set output to output & "\\\\\\""
-                else if ch is "\\\\" then
-                    set output to output & "\\\\\\\\"
-                else if ch is (ASCII character 10) then
-                    set output to output & "\\\\n"
-                else if ch is (ASCII character 13) then
-                    set output to output & "\\\\n"
-                else if ch is (ASCII character 9) then
-                    set output to output & "\\\\t"
-                else if charCode < 32 and charCode is not 10 and charCode is not 13 and charCode is not 9 then
-                    -- Skip other control characters (ASCII 0-31) by replacing with space
-                    set output to output & " "
-                else
-                    set output to output & ch
-                end if
-            end repeat
-            return output
-        end escapeJSON
         '''
 
         try:
@@ -206,23 +201,9 @@ class AppleMailIngress:
                 logger.warning("AppleScript fetch failed (rc=%s): %s", result.returncode, result.stderr.strip())
                 return []
             output = result.stdout.strip()
-            if not output or output == "[]":
+            if not output:
                 return []
-
-            # Clean control characters from output before parsing JSON
-            # Replace ALL control characters and non-printable characters
-            # Note: JSON doesn't allow literal newlines in strings, only printable ASCII
-            cleaned_output = ''.join(char if (32 <= ord(char) < 127) else ' ' for char in output)
-
-            return json.loads(cleaned_output)
-        except json.JSONDecodeError as exc:
-            # If parsing still fails, log the problematic output for debugging
-            logger.warning("Failed to parse Mail AppleScript output: %s", exc)
-            if output and len(output) >= 169:
-                char_at_168 = output[168]
-                logger.warning("Character at position 168: %r (ord=%d)", char_at_168, ord(char_at_168))
-                logger.debug("Context around error: %r", output[160:180])
-            return []
+            return self._parse_tab_delimited(output)
         except subprocess.TimeoutExpired:
             logger.warning("AppleScript fetch timed out")
             return []
@@ -232,6 +213,23 @@ class AppleMailIngress:
         except Exception as exc:
             logger.warning("Unexpected error fetching mail: %s", exc)
             return []
+
+    @staticmethod
+    def _parse_tab_delimited(output: str) -> list[dict[str, str]]:
+        """Parse tab-delimited mail output into list of dicts."""
+        messages: list[dict[str, str]] = []
+        for line in output.splitlines():
+            parts = line.split("\t")
+            if len(parts) < 5:
+                continue
+            messages.append({
+                "id": parts[0],
+                "sender": parts[1],
+                "subject": parts[2],
+                "body": parts[3],
+                "date": parts[4],
+            })
+        return messages
 
     def _mark_as_read(self, message_ids: list[str]) -> None:
         """Mark processed emails as read so they are not re-polled."""

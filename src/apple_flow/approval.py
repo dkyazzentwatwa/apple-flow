@@ -49,6 +49,7 @@ class ApprovalHandler:
         scheduler: FollowUpScheduler | None,
         log_notes_egress: Any,
         notes_log_folder_name: str,
+        approval_sender_override: str = "",
     ) -> None:
         self.connector = connector
         self.egress = egress
@@ -65,6 +66,7 @@ class ApprovalHandler:
         self.scheduler = scheduler
         self.log_notes_egress = log_notes_egress
         self.notes_log_folder_name = notes_log_folder_name
+        self.approval_sender_override = approval_sender_override
 
     # --- Public API ---
 
@@ -252,13 +254,14 @@ class ApprovalHandler:
         self.store.update_run_state(run_id, RunState.AWAITING_APPROVAL.value)
         request_id = f"req_{uuid4().hex[:8]}"
         expires_at = (datetime.now(UTC) + timedelta(minutes=self.approval_ttl_minutes)).isoformat()
+        approval_sender = self.approval_sender_override or message.sender
         self.store.create_approval(
             request_id=request_id,
             run_id=run_id,
             summary=f"{kind.value} execution requires approval",
             command_preview=plan_output[:800],
             expires_at=expires_at,
-            sender=message.sender,
+            sender=approval_sender,
         )
         self._create_event(
             run_id=run_id,

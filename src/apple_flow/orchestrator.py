@@ -56,6 +56,7 @@ class RelayOrchestrator:
         scheduler: FollowUpScheduler | None = None,
         office_syncer: OfficeSyncer | None = None,
         log_file_path: str | None = None,
+        approval_sender_override: str = "",
     ):
         self.connector = connector
         self.egress = egress
@@ -94,6 +95,7 @@ class RelayOrchestrator:
             scheduler=scheduler,
             log_notes_egress=log_notes_egress,
             notes_log_folder_name=notes_log_folder_name,
+            approval_sender_override=approval_sender_override,
         )
 
     # --- Workspace Resolution ---

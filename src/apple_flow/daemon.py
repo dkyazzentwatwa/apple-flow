@@ -245,6 +245,7 @@ class RelayDaemon:
         self.mail_ingress: AppleMailIngress | None = None
         self.mail_egress: AppleMailEgress | None = None
         self.mail_orchestrator: RelayOrchestrator | None = None
+        self._mail_owner: str = ""
         if settings.enable_mail_polling:
             logger.info(
                 "Apple Mail polling enabled (account=%r, mailbox=%r, allowed_senders=%s)",
@@ -262,9 +263,11 @@ class RelayDaemon:
                 from_address=settings.mail_from_address,
                 signature=settings.mail_signature,
             )
+            self._mail_owner = settings.allowed_senders[0] if settings.allowed_senders else ""
             self.mail_orchestrator = RelayOrchestrator(
                 egress=self.mail_egress,
                 require_chat_prefix=settings.require_chat_prefix,
+                approval_sender_override=self._mail_owner,
                 **orchestrator_kwargs,
             )
 
@@ -612,6 +615,13 @@ class RelayDaemon:
                             result.run_id,
                             duration,
                         )
+                        # Notify owner via iMessage when mail task needs approval
+                        if result.kind.value in ("task", "project") and self._mail_owner:
+                            preview = (result.response or "")[:200]
+                            self.egress.send(
+                                self._mail_owner,
+                                f"📧 Mail from {msg.sender} needs approval.\n\n{preview}",
+                            )
 
                 if dispatchable_mail:
                     await asyncio.gather(
