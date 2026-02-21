@@ -103,7 +103,7 @@ class OfficeSyncer:
             rows.append({
                 "id": row_id,
                 "run_at": run_at,
-                "schedule": schedule_type,
+                "schedule_type": schedule_type,
                 "action": action,
                 "result": result,
                 "notes": notes,
@@ -173,10 +173,10 @@ class OfficeSyncer:
             row["top_priorities"] = _lines("Top 3 Priorities") or _lines("Priorities")
             row["open_loops"] = _lines("Open Loops") or _lines("Open loops")
             row["calendar_items"] = _lines("Calendar") or _lines("Today's calendar") or _lines("Schedule")
-            row["inbox_triage"] = sections.get("Inbox Triage", "").strip() or sections.get("Morning Briefing", "").strip() or None
+            row["morning_briefing"] = sections.get("Morning Briefing", "").strip() or sections.get("Inbox Triage", "").strip() or None
             row["work_log"] = sections.get("Work Log", "").strip() or sections.get("Log", "").strip() or None
             row["memory_delta"] = sections.get("Memory Delta", "").strip() or sections.get("Memory", "").strip() or None
-            row["reflection"] = sections.get("Reflection", "").strip() or sections.get("Wins", "").strip() or None
+            row["wins"] = sections.get("Wins", "").strip() or sections.get("Reflection", "").strip() or None
 
             rows.append(row)
 
@@ -236,14 +236,14 @@ class OfficeSyncer:
             row_id = self._uuid5_id(project_name)
             row: dict[str, Any] = {
                 "id": row_id,
-                "name": project_name,
+                "project_name": project_name,
             }
 
             # Parse common brief fields
             row["status"] = sections.get("Status", "").strip() or None
             row["outcome"] = sections.get("Outcome", "").strip() or sections.get("Success Criteria", "").strip() or None
             row["why_now"] = sections.get("Why Now", "").strip() or sections.get("Motivation", "").strip() or None
-            row["scope_in"] = sections.get("Scope In", "").strip() or sections.get("Scope", "").strip() or None
+            row["scope"] = sections.get("Scope", "").strip() or sections.get("Scope In", "").strip() or None
             row["scope_out"] = sections.get("Scope Out", "").strip() or None
             row["risks"] = sections.get("Risks", "").strip() or sections.get("Blockers", "").strip() or None
 
@@ -273,19 +273,9 @@ class OfficeSyncer:
         succeeded = 0
         for row in rows:
             clean = {k: v for k, v in row.items() if v is not None}
-            try:
-                response = httpx.post(url, json=[clean], headers=headers, timeout=30.0)
-                response.raise_for_status()
-                succeeded += 1
-            except httpx.HTTPStatusError as exc:
-                logger.warning(
-                    "Supabase upsert failed for %s row: %s — %s",
-                    table,
-                    exc.response.status_code,
-                    exc.response.text[:300],
-                )
-            except Exception as exc:
-                logger.warning("Supabase upsert error for %s row: %s", table, exc)
+            response = httpx.post(url, json=[clean], headers=headers, timeout=30.0)
+            response.raise_for_status()
+            succeeded += 1
         return succeeded
 
     @staticmethod

@@ -270,7 +270,10 @@ class ClaudeCliConnector:
             context_text = "\n\n".join(recent_context)
             parts.append(f"Previous conversation context:\n{context_text}")
 
-        parts.append(f"New message:\n{prompt}" if history else prompt)
+        if self.inject_tools_context:
+            parts.append(TOOLS_CONTEXT)
+
+        parts.append(f"New message:\n{prompt}" if history or self.inject_tools_context else prompt)
 
         return "\n\n".join(parts)
 
