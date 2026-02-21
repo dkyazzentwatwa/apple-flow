@@ -84,7 +84,7 @@ Apple Flow is designed with **security-first principles** for local-first AI ass
 
 - **All data stays local** — No telemetry, no cloud uploads
 - **iMessage database** — Read-only access, never modified
-- **SQLite state** — Stored in `~/.codex/relay.db`
+- **SQLite state** — Stored in `~/.apple-flow/relay.db`
 - **Agent office files** — User-editable markdown in `agent-office/` (gitignored except scaffold)
 - **Memory files** — `agent-office/MEMORY.md` and `agent-office/60_memory/*.md` stay on disk
 - **Attachments** — Processed in a temp directory (`/tmp/apple_flow_attachments` by default) and never persisted

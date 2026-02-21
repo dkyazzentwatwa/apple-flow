@@ -168,13 +168,13 @@ apple_flow_connector=cline        # Cline CLI        — supports any model prov
 apple_flow_enable_mail_polling=true
 apple_flow_mail_allowed_senders=you@example.com
 
-# Apple Reminders (create a list called "Codex Tasks" in Reminders.app)
+# Apple Reminders (list "agent-task" is auto-created on first run)
 apple_flow_enable_reminders_polling=true
 
-# Apple Notes (create a folder called "Codex Inbox" in Notes.app)
+# Apple Notes (folder "agent-task" is auto-created on first run)
 apple_flow_enable_notes_polling=true
 
-# Apple Calendar (create a calendar called "Codex Schedule" in Calendar.app)
+# Apple Calendar (calendar "agent-schedule" is auto-created on first run)
 apple_flow_enable_calendar_polling=true
 ```
 
@@ -304,10 +304,10 @@ Include `!!agent` in a note's title or body to have it processed as a task. The 
 
 ```env
 apple_flow_enable_notes_polling=true
-apple_flow_notes_folder_name=Codex Inbox
+apple_flow_notes_folder_name=agent-task
 ```
 
-**Example:** Create a note titled `!!agent draft a project brief` in your "Codex Inbox" folder.
+**Example:** Create a note titled `!!agent draft a project brief` in your "agent-task" folder.
 
 </details>
 

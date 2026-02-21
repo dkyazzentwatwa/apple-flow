@@ -39,7 +39,7 @@ EOF
 | Local directory | `.agents/skills/<name>/SKILL.md` |
 | System-wide | `/etc/codex/skills/` |
 
-Same `SKILL.md` format as Claude Code. To disable a skill without deleting it, add to `~/.codex/config.toml`:
+Same `SKILL.md` format as Claude Code. To disable a skill without deleting it, add to `~/.codex/config.toml` (Codex CLI only):
 
 ```toml
 [[skills.config]]
@@ -91,15 +91,15 @@ Or edit `~/.claude/settings.json` directly:
 
 | Scope | Location |
 |-------|----------|
-| Global (all projects) | `~/.codex/config.toml` |
-| Project-level | `.codex/config.toml` (trusted projects only) |
+| Global (all projects) | `~/.codex/config.toml` (Codex CLI only) |
+| Project-level | `.codex/config.toml` (trusted projects only, Codex CLI only) |
 
 ```bash
 # Add via CLI
 codex mcp add apple-tools
 ```
 
-Or edit `~/.codex/config.toml` directly:
+Or edit `~/.codex/config.toml` directly (Codex CLI only):
 
 ```toml
 [mcp_servers.apple-tools]
@@ -120,8 +120,8 @@ bearer_token_env_var = "MY_TOKEN"
 |---------|----------------|-----------|
 | Global skills | `~/.claude/skills/` | `~/.agents/skills/` |
 | Project skills | `.claude/skills/` | `.agents/skills/` |
-| Global MCP config | `~/.claude/settings.json` | `~/.codex/config.toml` |
-| Project MCP config | `.mcp.json` | `.codex/config.toml` |
+| Global MCP config | `~/.claude/settings.json` | `~/.codex/config.toml` (Codex CLI only) |
+| Project MCP config | `.mcp.json` | `.codex/config.toml` (Codex CLI only) |
 | Add MCP via CLI | `claude mcp add --scope user` | `codex mcp add` |
 | MCP config format | JSON | TOML |
 
@@ -158,7 +158,7 @@ Or add manually to `~/.claude/settings.json`:
 
 ### Install & configure for Codex CLI
 
-Add to `~/.codex/config.toml`:
+Add to `~/.codex/config.toml` (Codex CLI only):
 
 ```toml
 [mcp_servers.apple-tools]

@@ -338,9 +338,9 @@ tests/test_ambient.py             # AmbientScanner: passive context enrichment, 
   - `claude auth login` -- if using `apple_flow_connector=claude-cli`
   - No auth needed for `cline` (uses its own config)
 - For Apple Mail integration: Apple Mail configured and running on this Mac
-- For Apple Reminders integration: Reminders.app on this Mac, a list named per config (default: "Codex Tasks")
-- For Apple Notes integration: Notes.app on this Mac, a folder named per config (default: "Codex Inbox")
-- For Apple Calendar integration: Calendar.app on this Mac, a calendar named per config (default: "Codex Schedule")
+- For Apple Reminders integration: Reminders.app on this Mac, a list named per config (default: "agent-task", auto-created on first run)
+- For Apple Notes integration: Notes.app on this Mac, a folder named per config (default: "agent-task", auto-created on first run)
+- For Apple Calendar integration: Calendar.app on this Mac, a calendar named per config (default: "agent-schedule", auto-created on first run)
 
 ## Service Management (launchd)
 
@@ -415,8 +415,7 @@ A skill is a set of local instructions to follow that is stored in a `SKILL.md` 
 
 ### Available skills
 
-- skill-creator: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends capabilities with specialized knowledge, workflows, or tool integrations. (file: /Users/cypher-server/.codex/skills/.system/skill-creator/SKILL.md)
-- skill-installer: Install skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos). (file: /Users/cypher-server/.codex/skills/.system/skill-installer/SKILL.md)
+Skills are discovered at runtime from the configured skill directories (see Skills section in SKILLS_AND_MCP.md).
 
 ### How to use skills
 

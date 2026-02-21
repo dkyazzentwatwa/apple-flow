@@ -424,9 +424,9 @@ tests/test_ambient.py             # AmbientScanner: passive context enrichment, 
   - `codex login` — if using `apple_flow_connector=codex-cli` (default)
   - `claude auth login` — if using `apple_flow_connector=claude-cli`
 - For Apple Mail integration: Apple Mail configured and running on this Mac
-- For Apple Reminders integration: Reminders.app on this Mac, a list named per config (default: "Codex Tasks")
-- For Apple Notes integration: Notes.app on this Mac, a folder named per config (default: "Codex Inbox")
-- For Apple Calendar integration: Calendar.app on this Mac, a calendar named per config (default: "Codex Schedule")
+- For Apple Reminders integration: Reminders.app on this Mac, a list named per config (default: "agent-task", auto-created on first run)
+- For Apple Notes integration: Notes.app on this Mac, a folder named per config (default: "agent-task", auto-created on first run)
+- For Apple Calendar integration: Calendar.app on this Mac, a calendar named per config (default: "agent-schedule", auto-created on first run)
 
 ## Service Management (launchd)
 
