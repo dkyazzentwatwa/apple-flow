@@ -615,13 +615,14 @@ class RelayDaemon:
                             result.run_id,
                             duration,
                         )
-                        # Notify owner via iMessage when mail task needs approval
-                        if result.kind.value in ("task", "project") and self._mail_owner:
-                            preview = (result.response or "")[:200]
-                            self.egress.send(
-                                self._mail_owner,
-                                f"📧 Mail from {msg.sender} needs approval.\n\n{preview}",
-                            )
+                        # Forward all mail responses to owner via iMessage
+                        if self._mail_owner and result.response:
+                            preview = result.response[:200]
+                            if result.kind.value in ("task", "project"):
+                                imsg = f"📧 Mail from {msg.sender} needs approval.\n\n{preview}"
+                            else:
+                                imsg = f"📧 Mail from {msg.sender}\n\n{preview}"
+                            self.egress.send(self._mail_owner, imsg)
 
                 if dispatchable_mail:
                     await asyncio.gather(
