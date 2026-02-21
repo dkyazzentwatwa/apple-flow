@@ -6,17 +6,6 @@ cd "$ROOT_DIR"
 
 echo "== Apple Flow Beginner Setup =="
 
-# Helper: find a binary by name, checking common macOS install locations
-find_binary() {
-    local name="$1"
-    local found
-    found=$(command -v "$name" 2>/dev/null) && echo "$found" && return
-    for dir in "$HOME/.local/bin" "/opt/homebrew/bin" "/usr/local/bin"; do
-        [ -x "$dir/$name" ] && echo "$dir/$name" && return
-    done
-    echo "$name"  # fallback: bare name
-}
-
 if [[ ! -f ".venv/bin/activate" ]]; then
   echo "Creating virtual environment..."
   python3 -m venv .venv
@@ -41,32 +30,12 @@ echo "Installing dependencies..."
 pip install -e '.[dev]' >/dev/null
 
 if [[ ! -f ".env" ]]; then
-  cp .env.example .env
-  echo "Created .env from .env.example"
-
-  # Auto-detect CLI binary paths and patch .env
-  CLAUDE_BIN=$(find_binary claude)
-  CODEX_BIN=$(find_binary codex)
-  sed -i '' "s|apple_flow_claude_cli_command=claude$|apple_flow_claude_cli_command=$CLAUDE_BIN|" .env
-  sed -i '' "s|apple_flow_codex_cli_command=codex$|apple_flow_codex_cli_command=$CODEX_BIN|" .env
-  echo "Auto-detected: claude → $CLAUDE_BIN"
-  echo "Auto-detected: codex  → $CODEX_BIN"
-fi
-
-if grep -q "REPLACE_WITH_YOUR" .env; then
-  echo
-  echo "Please edit .env with your phone and workspace before first run."
-  echo "Open: $ROOT_DIR/.env"
-  exit 1
-fi
-
-ALLOWED_SENDERS_LINE="$(grep -E '^apple_flow_allowed_senders=' .env || true)"
-ALLOWED_SENDERS_VALUE="${ALLOWED_SENDERS_LINE#apple_flow_allowed_senders=}"
-if [[ -z "${ALLOWED_SENDERS_VALUE//[[:space:]]/}" ]]; then
-  echo
-  echo "Safety stop: apple_flow_allowed_senders is empty in .env"
-  echo "Set your number first, e.g. apple_flow_allowed_senders=+15551234567"
-  exit 1
+  echo "No .env found. Running setup wizard..."
+  .venv/bin/python -m apple_flow setup
+  if [[ ! -f ".env" ]]; then
+    echo "Setup wizard did not create .env. Exiting."
+    exit 1
+  fi
 fi
 
 MESSAGES_DB_LINE="$(grep -E '^apple_flow_messages_db_path=' .env || true)"

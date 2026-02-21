@@ -10,23 +10,11 @@ PLIST_DEST="$HOME/Library/LaunchAgents/local.apple-flow.plist"
 LOGS_DIR="$PROJECT_DIR/logs"
 VENV_DIR="$PROJECT_DIR/.venv"
 ENV_FILE="$PROJECT_DIR/.env"
-ENV_EXAMPLE="$PROJECT_DIR/.env.example"
 
 echo "=========================================="
 echo "  Apple Flow Complete Setup"
 echo "=========================================="
 echo ""
-
-# Helper: find a binary by name, checking common macOS install locations
-find_binary() {
-    local name="$1"
-    local found
-    found=$(command -v "$name" 2>/dev/null) && echo "$found" && return
-    for dir in "$HOME/.local/bin" "/opt/homebrew/bin" "/usr/local/bin"; do
-        [ -x "$dir/$name" ] && echo "$dir/$name" && return
-    done
-    echo "$name"  # fallback: bare name
-}
 
 # Step 1: Create virtual environment if it doesn't exist
 if [ ! -d "$VENV_DIR" ]; then
@@ -46,38 +34,15 @@ echo "✓ Installation complete"
 
 # Step 3: Check/create .env file
 echo ""
-echo "[3/5] Checking configuration..."
 if [ ! -f "$ENV_FILE" ]; then
-    if [ -f "$ENV_EXAMPLE" ]; then
-        echo "⚠️  No .env file found. Creating from .env.example..."
-        cp "$ENV_EXAMPLE" "$ENV_FILE"
-
-        # Auto-detect CLI binary paths and patch .env
-        CLAUDE_BIN=$(find_binary claude)
-        CODEX_BIN=$(find_binary codex)
-        sed -i '' "s|apple_flow_claude_cli_command=claude$|apple_flow_claude_cli_command=$CLAUDE_BIN|" "$ENV_FILE"
-        sed -i '' "s|apple_flow_codex_cli_command=codex$|apple_flow_codex_cli_command=$CODEX_BIN|" "$ENV_FILE"
-        echo "✓ Auto-detected: claude → $CLAUDE_BIN"
-        echo "✓ Auto-detected: codex  → $CODEX_BIN"
-
-        echo ""
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "  IMPORTANT: Edit .env file before starting!"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo ""
-        echo "Required settings:"
-        echo "  - apple_flow_allowed_senders (phone numbers)"
-        echo "  - apple_flow_allowed_workspaces (directories)"
-        echo ""
-        echo "Run: nano .env  (or use your preferred editor)"
-        echo ""
-        read -p "Press Enter after you've edited .env to continue..."
-    else
-        echo "❌ Error: .env.example not found"
+    echo "[3/5] No .env found. Running setup wizard..."
+    "$VENV_DIR/bin/python" -m apple_flow setup
+    if [ ! -f "$ENV_FILE" ]; then
+        echo "Setup wizard did not create .env. Exiting."
         exit 1
     fi
 else
-    echo "✓ .env file exists"
+    echo "[3/5] .env file already exists"
 fi
 
 # Step 4: Find Python binary and generate plist
