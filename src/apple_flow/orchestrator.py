@@ -263,6 +263,31 @@ class RelayOrchestrator:
             except (ValueError, TypeError):
                 pass
 
+        companion_last_check = self.store.get_state("companion_last_check_at")
+        if companion_last_check:
+            try:
+                check_dt = datetime.fromisoformat(companion_last_check)
+                minutes_ago = int((datetime.now() - check_dt).total_seconds() / 60)
+                obs_count = self.store.get_state("companion_last_obs_count") or "?"
+                skip_reason = self.store.get_state("companion_last_skip_reason") or ""
+                sent_at = self.store.get_state("companion_last_sent_at")
+                hour_count = self.store.get_state("companion_proactive_hour_count") or "0"
+                muted = self.store.get_state("companion_muted") == "true"
+
+                status = f"Companion: last check {minutes_ago}m ago | {obs_count} obs found"
+                if skip_reason:
+                    status += f" | skipped ({skip_reason})"
+                if sent_at:
+                    sent_dt = datetime.fromisoformat(sent_at)
+                    sent_min = int((datetime.now() - sent_dt).total_seconds() / 60)
+                    status += f" | last sent {sent_min}m ago"
+                status += f" | {hour_count}/hr sent"
+                if muted:
+                    status += " | MUTED"
+                parts.append(status)
+            except (ValueError, TypeError):
+                parts.append("Companion: enabled (no check recorded yet)")
+
         response = "\n".join(parts)
         self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.HEALTH, response=response)

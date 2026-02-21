@@ -93,6 +93,20 @@ class CompanionLoop:
 
     async def _observation_loop(self, is_shutdown: Callable[[], bool]) -> None:
         logger.info("Companion observation loop started (poll=%.0fs)", self.config.companion_poll_interval_seconds)
+        # One-time startup greeting (skipped if muted; throttled to once per hour)
+        if not self._is_muted():
+            last_greeted = self.store.get_state("companion_greeted_at")
+            current_hour = datetime.now().strftime("%Y-%m-%d-%H")
+            if last_greeted != current_hour:
+                self.store.set_state("companion_greeted_at", current_hour)
+                interval_min = int(self.config.companion_poll_interval_seconds // 60)
+                greeting = (
+                    f"🤖 Companion online — checking every {interval_min}m.\n"
+                    "I'll alert you about stale approvals, upcoming events, "
+                    "overdue reminders, and inbox items.\n"
+                    "Text 'health' for status."
+                )
+                self.egress.send(self.owner, greeting)
         while not is_shutdown():
             try:
                 await asyncio.to_thread(self._check_and_notify)
@@ -102,11 +116,16 @@ class CompanionLoop:
 
     def _check_and_notify(self) -> None:
         """Gather observations, synthesize a message, and send if warranted."""
+        self.store.set_state("companion_last_check_at", datetime.now().isoformat())
+
         if self._is_muted():
+            self.store.set_state("companion_last_skip_reason", "muted")
             return
         if self._is_quiet_hours():
+            self.store.set_state("companion_last_skip_reason", "quiet_hours")
             return
         if self._is_rate_limited():
+            self.store.set_state("companion_last_skip_reason", "rate_limited")
             return
 
         observations = self._gather_observations()
@@ -120,7 +139,10 @@ class CompanionLoop:
                 )
                 self.scheduler.mark_fired(action["action_id"])
 
+        self.store.set_state("companion_last_obs_count", str(len(observations)))
+
         if not observations:
+            self.store.set_state("companion_last_skip_reason", "no_observations")
             return
 
         message = self._synthesize_message(observations)
@@ -128,6 +150,10 @@ class CompanionLoop:
             self.egress.send(self.owner, message)
             self._record_proactive_send()
             self._log_to_office("observation", observations, message)
+            self.store.set_state("companion_last_sent_at", datetime.now().isoformat())
+            self.store.set_state("companion_last_skip_reason", "")
+        else:
+            self.store.set_state("companion_last_skip_reason", "synthesis_empty")
 
     def _gather_observations(self) -> list[str]:
         """Collect notable observations from the user's environment."""

@@ -741,3 +741,101 @@ class TestRunForever:
 
         await asyncio.wait_for(comp.run_forever(is_shutdown), timeout=5.0)
         assert call_count >= 1
+
+
+# ------------------------------------------------------------------
+# Startup greeting
+# ------------------------------------------------------------------
+
+
+class TestStartupGreeting:
+    async def test_startup_greeting_sent(self):
+        """Greeting is sent on first run when companion_greeted_at is unset."""
+        egress = FakeEgress()
+        store = FakeStore()
+        comp = _make_companion(egress=egress, store=store)
+        # is_shutdown=True means the while loop body never runs — only greeting code
+        await comp._observation_loop(lambda: True)
+        assert len(egress.messages) == 1
+        recipient, text = egress.messages[0]
+        assert recipient == comp.owner
+        assert "Companion online" in text
+
+    async def test_startup_greeting_throttled(self):
+        """No greeting sent if companion_greeted_at already equals the current hour."""
+        egress = FakeEgress()
+        store = FakeStore()
+        current_hour = datetime.now().strftime("%Y-%m-%d-%H")
+        store.set_state("companion_greeted_at", current_hour)
+        comp = _make_companion(egress=egress, store=store)
+        await comp._observation_loop(lambda: True)
+        assert len(egress.messages) == 0
+
+    async def test_startup_greeting_skipped_when_muted(self):
+        """Muted companion sends no greeting on startup."""
+        egress = FakeEgress()
+        store = FakeStore()
+        store.set_state("companion_muted", "true")
+        comp = _make_companion(egress=egress, store=store)
+        await comp._observation_loop(lambda: True)
+        assert len(egress.messages) == 0
+
+
+# ------------------------------------------------------------------
+# Telemetry / kv_state writes in _check_and_notify
+# ------------------------------------------------------------------
+
+
+class TestCheckAndNotifyTelemetry:
+    def test_telemetry_written_on_no_observations(self):
+        """With no observations, check_at, obs_count, and skip_reason are written."""
+        store = FakeStore()
+        comp = _make_companion(store=store)
+        with patch.object(comp, "_is_quiet_hours", return_value=False), \
+             patch.object(comp, "_is_rate_limited", return_value=False), \
+             patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
+             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+            comp._check_and_notify()
+        assert store.get_state("companion_last_check_at") is not None
+        assert store.get_state("companion_last_obs_count") == "0"
+        assert store.get_state("companion_last_skip_reason") == "no_observations"
+
+    def test_telemetry_skip_reason_quiet_hours(self):
+        """Quiet hours sets skip reason to 'quiet_hours' and records check_at."""
+        store = FakeStore()
+        comp = _make_companion(store=store)
+        with patch.object(comp, "_is_quiet_hours", return_value=True):
+            comp._check_and_notify()
+        assert store.get_state("companion_last_check_at") is not None
+        assert store.get_state("companion_last_skip_reason") == "quiet_hours"
+
+    def test_telemetry_skip_reason_muted(self):
+        """Muted sets skip reason to 'muted'."""
+        store = FakeStore()
+        store.set_state("companion_muted", "true")
+        comp = _make_companion(store=store)
+        comp._check_and_notify()
+        assert store.get_state("companion_last_skip_reason") == "muted"
+
+    def test_telemetry_last_sent_at_written_on_message(self):
+        """companion_last_sent_at is written when a message is sent."""
+        egress = FakeEgress()
+        connector = FakeConnector()
+        connector.run_turn = lambda tid, prompt: "Hello!"
+        store = FakeStore()
+        # Give it a stale approval to trigger an observation
+        old_time = (datetime.now(timezone.utc) - timedelta(minutes=60)).isoformat()
+        store.approvals["req_1"] = {
+            "request_id": "req_1", "run_id": "r1", "sender": "+1",
+            "summary": "test", "command_preview": "do stuff",
+            "expires_at": "2099-01-01T00:00:00", "status": "pending",
+            "created_at": old_time,
+        }
+        comp = _make_companion(connector=connector, egress=egress, store=store)
+        with patch.object(comp, "_is_quiet_hours", return_value=False), \
+             patch.object(comp, "_is_rate_limited", return_value=False), \
+             patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
+             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+            comp._check_and_notify()
+        assert store.get_state("companion_last_sent_at") is not None
+        assert store.get_state("companion_last_skip_reason") == ""

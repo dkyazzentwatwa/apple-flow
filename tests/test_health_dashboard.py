@@ -73,3 +73,59 @@ def test_health_sends_response_to_sender():
     )
     orch.handle_message(msg)
     assert any("+15551234567" in recipient for recipient, _ in orch.egress.messages)
+
+
+def test_health_shows_companion_status():
+    """When companion kv_state keys are present, health response includes Companion line."""
+    from datetime import datetime, timedelta
+
+    store = FakeStore()
+    # Simulate a companion check 5 minutes ago with no observations
+    check_time = (datetime.now() - timedelta(minutes=5)).isoformat()
+    store.set_state("companion_last_check_at", check_time)
+    store.set_state("companion_last_obs_count", "0")
+    store.set_state("companion_last_skip_reason", "no_observations")
+    store.set_state("companion_proactive_hour_count", "1")
+    orch = _make_orchestrator(store=store)
+
+    msg = InboundMessage(
+        id="m1", sender="+15551234567", text="health",
+        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+    assert "Companion:" in result.response
+    assert "no_observations" in result.response
+    assert "1/hr sent" in result.response
+
+
+def test_health_no_companion_data():
+    """When no companion kv_state keys exist, health response has no Companion line."""
+    store = FakeStore()
+    orch = _make_orchestrator(store=store)
+
+    msg = InboundMessage(
+        id="m1", sender="+15551234567", text="health",
+        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+    assert "Companion:" not in result.response
+
+
+def test_health_companion_muted_flag():
+    """Muted companion shows MUTED in health output."""
+    from datetime import datetime, timedelta
+
+    store = FakeStore()
+    check_time = (datetime.now() - timedelta(minutes=2)).isoformat()
+    store.set_state("companion_last_check_at", check_time)
+    store.set_state("companion_last_obs_count", "0")
+    store.set_state("companion_last_skip_reason", "muted")
+    store.set_state("companion_muted", "true")
+    orch = _make_orchestrator(store=store)
+
+    msg = InboundMessage(
+        id="m1", sender="+15551234567", text="health",
+        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+    assert "MUTED" in result.response
