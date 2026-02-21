@@ -31,7 +31,7 @@ if pgrep -f "apple_flow daemon" >/dev/null 2>&1; then
   sleep 1
 fi
 
-LOCK_PATH="$HOME/.codex/relay.daemon.lock"
+LOCK_PATH="$HOME/.apple-flow/relay.daemon.lock"
 if [[ -f "$LOCK_PATH" ]] && ! pgrep -f "apple_flow daemon" >/dev/null 2>&1; then
   echo "Removing stale daemon lock: $LOCK_PATH"
   rm -f "$LOCK_PATH"
