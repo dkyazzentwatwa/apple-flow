@@ -20,7 +20,7 @@ class RelaySettings(BaseSettings):
     allowed_workspaces: list[str] = Field(default_factory=list)
 
     default_workspace: str = str(Path.home())
-    db_path: Path = Path.home() / ".codex" / "relay.db"
+    db_path: Path = Path.home() / ".apple-flow" / "relay.db"
     poll_interval_seconds: float = 2.0
     approval_ttl_minutes: int = 20
     max_messages_per_minute: int = 30
@@ -34,7 +34,7 @@ class RelaySettings(BaseSettings):
     codex_cli_model: str = ""  # e.g., "gpt-5.3-codex" (empty = use codex default)
 
     # Connector selection (overrides use_codex_cli when set)
-    connector: str = ""  # "codex-cli" | "claude-cli" | "cline" | "codex-app-server"
+    connector: str = "claude-cli"  # "codex-cli" | "claude-cli" | "cline" | "codex-app-server"
 
     # Claude CLI connector settings (used when connector="claude-cli")
     claude_cli_command: str = "claude"

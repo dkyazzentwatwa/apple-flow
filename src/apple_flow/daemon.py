@@ -31,6 +31,7 @@ from .protocols import ConnectorProtocol
 from .reminders_egress import AppleRemindersEgress
 from .reminders_ingress import AppleRemindersIngress
 from .scheduler import FollowUpScheduler
+from .setup_wizard import ensure_reminders_list, ensure_notes_folder, ensure_calendar
 from .store import SQLiteStore
 
 logger = logging.getLogger("apple_flow.daemon")
@@ -358,6 +359,9 @@ class RelayDaemon:
 
         self._concurrency_sem = asyncio.Semaphore(settings.max_concurrent_ai_calls)
 
+        # Auto-create Apple app resources for enabled gateways
+        self._ensure_apple_resources()
+
         persisted_cursor = self.store.get_state("last_rowid")
         self._last_rowid: int | None = int(persisted_cursor) if persisted_cursor is not None else None
         self._last_messages_db_error_at: float = 0.0
@@ -383,6 +387,28 @@ class RelayDaemon:
         # Record daemon start time for health dashboard and startup catch-up window
         self._startup_time = datetime.now(UTC)
         self.store.set_state("daemon_started_at", self._startup_time.isoformat())
+
+    def _ensure_apple_resources(self) -> None:
+        """Auto-create Apple app resources for enabled gateways."""
+        s = self.settings
+        if s.enable_reminders_polling:
+            try:
+                if ensure_reminders_list(s.reminders_list_name):
+                    logger.info("Created Reminders list: %s", s.reminders_list_name)
+            except Exception:
+                logger.warning("Could not auto-create Reminders list '%s'", s.reminders_list_name)
+        if s.enable_notes_polling:
+            try:
+                if ensure_notes_folder(s.notes_folder_name):
+                    logger.info("Created Notes folder: %s", s.notes_folder_name)
+            except Exception:
+                logger.warning("Could not auto-create Notes folder '%s'", s.notes_folder_name)
+        if s.enable_calendar_polling:
+            try:
+                if ensure_calendar(s.calendar_name):
+                    logger.info("Created Calendar: %s", s.calendar_name)
+            except Exception:
+                logger.warning("Could not auto-create Calendar '%s'", s.calendar_name)
 
     def request_shutdown(self) -> None:
         """Request graceful shutdown of the daemon."""

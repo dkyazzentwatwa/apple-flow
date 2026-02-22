@@ -329,7 +329,7 @@ pytest -v
 pkill -f "apple_flow daemon"
 
 # Remove stale lock
-rm -f ~/.codex/relay.daemon.lock
+rm -f ~/.apple-flow/relay.daemon.lock
 
 # Restart
 ./scripts/start_beginner.sh
@@ -382,11 +382,11 @@ Use Reminders.app as a task queue:
 
 ```bash
 apple_flow_enable_reminders_polling=true
-apple_flow_reminders_list_name=Codex Tasks
+apple_flow_reminders_list_name=agent-task
 # apple_flow_reminders_auto_approve=false  # require approval by default
 ```
 
-Create a list called "Codex Tasks" in Reminders.app, then add reminders -- they'll be picked up and executed.
+The "agent-task" list is auto-created on first run. Add reminders to it -- they'll be picked up and executed.
 
 ### Enable Apple Notes Integration (Optional)
 
@@ -394,10 +394,10 @@ Use Notes.app for long-form tasks:
 
 ```bash
 apple_flow_enable_notes_polling=true
-apple_flow_notes_folder_name=Codex Inbox
+apple_flow_notes_folder_name=agent-task
 ```
 
-Create a folder called "Codex Inbox" in Notes.app, then add notes -- results are appended back to the note.
+The "agent-task" folder is auto-created on first run. Add notes to it -- results are appended back to the note.
 
 ### Enable Apple Calendar Integration (Optional)
 
@@ -405,10 +405,10 @@ Use Calendar.app for scheduled tasks:
 
 ```bash
 apple_flow_enable_calendar_polling=true
-apple_flow_calendar_name=Codex Schedule
+apple_flow_calendar_name=agent-schedule
 ```
 
-Create a calendar called "Codex Schedule" in Calendar.app, then add events -- they execute when due.
+The "agent-schedule" calendar is auto-created on first run. Add events to it -- they execute when due.
 
 ### Autonomous Companion (Optional)
 

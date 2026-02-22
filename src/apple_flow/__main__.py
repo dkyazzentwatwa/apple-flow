@@ -211,7 +211,7 @@ def _get_version() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Apple Flow runtime")
-    parser.add_argument("mode", choices=["daemon", "admin", "tools", "version"], nargs="?", default="daemon")
+    parser.add_argument("mode", choices=["daemon", "admin", "tools", "setup", "version"], nargs="?", default="daemon")
     parser.add_argument("--version", "-V", action="store_true", help="Show version and exit")
 
     # Tools-specific flags (only used when mode=tools)
@@ -237,6 +237,12 @@ def main() -> None:
     # Handle --version flag or version mode
     if args.version or args.mode == "version":
         print(f"apple-flow {_get_version()}")
+        return
+
+    if args.mode == "setup":
+        from .setup_wizard import run_wizard
+
+        run_wizard()
         return
 
     if args.mode == "daemon":
