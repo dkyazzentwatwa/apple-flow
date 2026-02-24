@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -439,6 +440,29 @@ class RelayOrchestrator:
 
     # --- System Command ---
 
+    def _restart_launchd_service(self, label: str = "local.apple-flow") -> bool:
+        """Restart a launchd service in-place via kickstart.
+
+        Returns True if launchd accepted the restart request.
+        """
+        target = f"gui/{os.getuid()}/{label}"
+        try:
+            result = subprocess.run(
+                ["launchctl", "kickstart", "-k", target],
+                check=False,
+                timeout=8,
+            )
+            if result.returncode == 0:
+                return True
+            logger.warning(
+                "launchctl kickstart failed for %s (exit=%s)",
+                target,
+                result.returncode,
+            )
+        except Exception as exc:
+            logger.warning("Failed to trigger launchctl kickstart for %s: %s", target, exc)
+        return False
+
     def _handle_system(self, sender: str, subcommand: str) -> OrchestrationResult:
         sub = subcommand.strip().lower()
         if sub == "stop":
@@ -449,11 +473,10 @@ class RelayOrchestrator:
         elif sub == "restart":
             response = "Apple Flow restarting... (text 'health' to confirm it's back)"
             self.egress.send(sender, response)
-            try:
-                subprocess.run(["launchctl", "stop", "local.apple-flow"], check=False, timeout=5)
-            except Exception as exc:
-                logger.warning("Failed to trigger launchctl restart: %s", exc)
-            if self.shutdown_callback is not None:
+            restarted = self._restart_launchd_service()
+            if not restarted and self.shutdown_callback is not None:
+                # Fallback for non-launchd runs: perform a graceful shutdown and let
+                # the external caller/supervisor bring the process back up.
                 self.shutdown_callback()
         elif sub == "mute":
             self.store.set_state("companion_muted", "true")

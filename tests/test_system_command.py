@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -69,19 +70,36 @@ def test_system_stop_calls_shutdown_callback(fake_connector, fake_egress, fake_s
     assert "shutting down" in fake_egress.messages[0][1].lower()
 
 
-def test_system_restart_calls_shutdown_callback(fake_connector, fake_egress, fake_store):
+def test_system_restart_triggers_launchd_kickstart(fake_connector, fake_egress, fake_store):
     called = []
     orchestrator = _make_orchestrator(
         fake_connector, fake_egress, fake_store,
         shutdown_callback=lambda: called.append(True),
     )
     with patch("subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 0
         result = orchestrator.handle_message(_make_message("system: restart"))
         mock_run.assert_called_once_with(
-            ["launchctl", "stop", "local.apple-flow"],
+            ["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/local.apple-flow"],
             check=False,
-            timeout=5,
+            timeout=8,
         )
+
+    assert result.kind is CommandKind.SYSTEM
+    assert called == []
+    assert len(fake_egress.messages) == 1
+    assert "restarting" in fake_egress.messages[0][1].lower()
+
+
+def test_system_restart_falls_back_to_shutdown_when_kickstart_fails(fake_connector, fake_egress, fake_store):
+    called = []
+    orchestrator = _make_orchestrator(
+        fake_connector, fake_egress, fake_store,
+        shutdown_callback=lambda: called.append(True),
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 1
+        result = orchestrator.handle_message(_make_message("system: restart"))
 
     assert result.kind is CommandKind.SYSTEM
     assert called == [True]
