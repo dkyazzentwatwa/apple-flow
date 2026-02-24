@@ -6,7 +6,7 @@ import re
 import subprocess
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .commanding import CommandKind, ParsedCommand
 from .models import InboundMessage

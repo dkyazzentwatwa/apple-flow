@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
-import sqlite3
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from .ambient import AmbientScanner
 from .calendar_egress import AppleCalendarEgress

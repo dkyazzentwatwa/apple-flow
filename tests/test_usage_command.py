@@ -85,7 +85,7 @@ def test_usage_daily_default():
     mock_result = MagicMock()
     mock_result.stdout = _DAILY_JSON
 
-    with patch("apple_flow.orchestrator.subprocess.run", return_value=mock_result) as mock_run:
+    with patch("apple_flow.commands.subprocess.run", return_value=mock_result) as mock_run:
         result = orch.handle_message(_msg("usage"))
 
     assert result.kind is CommandKind.USAGE
@@ -106,7 +106,7 @@ def test_usage_today():
     mock_result = MagicMock()
     mock_result.stdout = _DAILY_JSON
 
-    with patch("apple_flow.orchestrator.subprocess.run", return_value=mock_result) as mock_run:
+    with patch("apple_flow.commands.subprocess.run", return_value=mock_result) as mock_run:
         result = orch.handle_message(_msg("usage: today"))
 
     assert result.kind is CommandKind.USAGE
@@ -134,7 +134,7 @@ def test_usage_monthly():
     mock_result = MagicMock()
     mock_result.stdout = _MONTHLY_JSON
 
-    with patch("apple_flow.orchestrator.subprocess.run", return_value=mock_result) as mock_run:
+    with patch("apple_flow.commands.subprocess.run", return_value=mock_result) as mock_run:
         result = orch.handle_message(_msg("usage: monthly"))
 
     assert result.kind is CommandKind.USAGE
@@ -178,7 +178,7 @@ def test_usage_blocks():
     mock_result = MagicMock()
     mock_result.stdout = _BLOCKS_JSON
 
-    with patch("apple_flow.orchestrator.subprocess.run", return_value=mock_result) as mock_run:
+    with patch("apple_flow.commands.subprocess.run", return_value=mock_result) as mock_run:
         result = orch.handle_message(_msg("usage: blocks"))
 
     assert result.kind is CommandKind.USAGE
@@ -208,7 +208,7 @@ def test_usage_active_block_tagged():
         ]
     })
 
-    with patch("apple_flow.orchestrator.subprocess.run", return_value=mock_result):
+    with patch("apple_flow.commands.subprocess.run", return_value=mock_result):
         result = orch.handle_message(_msg("usage: blocks"))
 
     assert "[ACTIVE]" in result.response
@@ -220,7 +220,7 @@ def test_usage_timeout_graceful():
     import subprocess as _sp
     orch = _make_orchestrator()
 
-    with patch("apple_flow.orchestrator.subprocess.run", side_effect=_sp.TimeoutExpired("npx", 30)):
+    with patch("apple_flow.commands.subprocess.run", side_effect=_sp.TimeoutExpired("npx", 30)):
         result = orch.handle_message(_msg("usage"))
 
     assert result.kind is CommandKind.USAGE
@@ -232,7 +232,7 @@ def test_usage_no_data():
     mock_result = MagicMock()
     mock_result.stdout = json.dumps({"daily": []})
 
-    with patch("apple_flow.orchestrator.subprocess.run", return_value=mock_result):
+    with patch("apple_flow.commands.subprocess.run", return_value=mock_result):
         result = orch.handle_message(_msg("usage"))
 
     assert "No usage data found" in result.response

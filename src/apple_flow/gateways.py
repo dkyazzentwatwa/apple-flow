@@ -5,16 +5,16 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Callable, Coroutine
+from typing import TYPE_CHECKING, Any, Callable
 
 from .models import InboundMessage
 from .orchestrator import RelayOrchestrator
 
 if TYPE_CHECKING:
     from .config import RelaySettings
-    from .ingress import IMessageIngress
     from .egress import IMessageEgress
-    from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
+    from .ingress import IMessageIngress
+    from .protocols import EgressProtocol, StoreProtocol
 
 logger = logging.getLogger("apple_flow.gateways")
 
@@ -161,9 +161,12 @@ class MailGateway(Gateway):
                 messages = self.ingress.fetch_new(sender_allowlist=mail_allowlist, require_sender_filter=bool(mail_allowlist))
                 dispatchable = []
                 for msg in messages:
-                    if should_shutdown(): break
-                    if not msg.text.strip(): continue
-                    if self.egress.was_recent_outbound(msg.sender, msg.text): continue
+                    if should_shutdown():
+                        break
+                    if not msg.text.strip():
+                        continue
+                    if self.egress.was_recent_outbound(msg.sender, msg.text):
+                        continue
                     dispatchable.append(msg)
 
                 if dispatchable:
@@ -197,8 +200,10 @@ class RemindersGateway(Gateway):
                 messages = self.ingress.fetch_new()
                 dispatchable = []
                 for msg in messages:
-                    if should_shutdown(): break
-                    if not msg.text.strip(): continue
+                    if should_shutdown():
+                        break
+                    if not msg.text.strip():
+                        continue
                     self.ingress.mark_processed(msg.context.get("reminder_id", ""))
                     dispatchable.append(msg)
                 if dispatchable:
@@ -235,8 +240,10 @@ class NotesGateway(Gateway):
                 messages = await asyncio.to_thread(self.ingress.fetch_new)
                 dispatchable = []
                 for msg in messages:
-                    if should_shutdown(): break
-                    if not msg.text.strip(): continue
+                    if should_shutdown():
+                        break
+                    if not msg.text.strip():
+                        continue
                     dispatchable.append(msg)
                 if dispatchable:
                     await asyncio.gather(*[self._dispatch(msg, concurrency_sem) for msg in dispatchable], return_exceptions=True)
@@ -257,7 +264,8 @@ class NotesGateway(Gateway):
                     self.egress.move_to_archive(note_id=note_id, result_text=f"\n\n[Apple Flow Result]\n{result.response}",
                                              source_folder_name=msg.context.get("folder_name", self.settings.notes_folder_name),
                                              archive_subfolder_name=self.settings.notes_archive_folder_name)
-            if note_id: self.ingress.mark_processed(note_id)
+            if note_id:
+                self.ingress.mark_processed(note_id)
             logger.info("Handled %s id=%s kind=%s duration=%.2fs", self.name, msg.id, result.kind.value, duration)
 
 class CalendarGateway(Gateway):
@@ -273,8 +281,10 @@ class CalendarGateway(Gateway):
                 messages = self.ingress.fetch_new()
                 dispatchable = []
                 for msg in messages:
-                    if should_shutdown(): break
-                    if not msg.text.strip(): continue
+                    if should_shutdown():
+                        break
+                    if not msg.text.strip():
+                        continue
                     self.ingress.mark_processed(msg.context.get("event_id", ""))
                     dispatchable.append(msg)
                 if dispatchable:

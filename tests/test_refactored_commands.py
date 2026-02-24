@@ -1,9 +1,12 @@
-import pytest
 from unittest.mock import MagicMock
-from apple_flow.orchestrator import RelayOrchestrator
-from apple_flow.models import InboundMessage
+
+import pytest
+
 from apple_flow.commanding import CommandKind, ParsedCommand
 from apple_flow.commands import COMMAND_HANDLERS
+from apple_flow.models import InboundMessage
+from apple_flow.orchestrator import RelayOrchestrator
+
 
 @pytest.fixture
 def mock_orchestrator():
