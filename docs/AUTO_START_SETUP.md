@@ -13,13 +13,14 @@ Just run:
 This single script does **everything**:
 1. ✓ Creates virtual environment
 2. ✓ Installs apple-flow and all dependencies
-3. ✓ Creates .env from template (prompts you to edit it)
+3. ✓ Launches `python -m apple_flow setup` if `.env` is missing
 4. ✓ Generates launchd plist with correct paths
 5. ✓ Installs and starts the service
-6. ✓ Shows you the Python binary path for Full Disk Access
+6. ✓ Pins connector command paths and runs fast readiness checks
+7. ✓ Shows you the Python binary path for Full Disk Access
 
 **Your only tasks:**
-- Edit the .env file when prompted
+- Complete the setup wizard if `.env` is missing
 - Grant Full Disk Access (one-time macOS security requirement)
 
 ## Advanced: Install-Only Script
@@ -86,7 +87,7 @@ The installation script:
 - Follows symlinks to find the **actual** Python binary (not symlinks)
 - Detects your Python version and site-packages location
 - Generates a plist file with **your specific paths**
-- Configures environment variables (PYTHONPATH, VIRTUAL_ENV, PATH)
+- Configures environment variables (PYTHONPATH, VIRTUAL_ENV, PATH including `~/.local/bin`)
 
 This means the setup is **portable** - it works regardless of:
 - Your username or project location

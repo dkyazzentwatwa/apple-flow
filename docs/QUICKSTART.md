@@ -72,16 +72,57 @@ No separate auth needed -- Cline uses its own configuration.
 
 Follow the prompts in your browser (Options A/B). This only needs to be done once per machine.
 
-Then set your connector in `.env` (Step 4):
+Then set your connector in `.env` (Step 6, if you choose manual editing):
 ```bash
 apple_flow_connector=codex-cli   # for Codex (default)
 apple_flow_connector=claude-cli  # for Claude Code
 apple_flow_connector=cline       # for Cline
 ```
 
-## Step 4: Configure Your Settings
+## Step 4: Run the Setup Script
 
-The setup script will create `.env` from `.env.example` automatically. Edit it with your details:
+```bash
+./scripts/setup_autostart.sh
+```
+
+The script will automatically:
+1. Create a Python virtual environment
+2. Install dependencies
+3. Generate `.env` through the setup wizard if missing
+4. Pin the selected connector command to an absolute binary path
+5. Run fast readiness checks (required fields, Messages DB access, connector executable)
+6. Install/start launchd auto-start
+
+**What you'll see:**
+```
+Apple Flow Auto-Start Setup
+...
+✓ Pinned connector command: apple_flow_claude_cli_command=/opt/homebrew/bin/claude
+✓ Readiness checks passed
+✓ Launch agent configured
+✓ Service loaded
+```
+
+## Step 5: Let Your AI Finalize Setup (Recommended)
+
+Open Codex, Claude, or Cline and paste this:
+
+- [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md)
+
+The assistant will:
+1. Run health checks (`wizard doctor --json`)
+2. Ask your full customization checklist (core fields, gateways, custom names, agent-office, token)
+3. Generate full `.env` preview from `.env.example` (`wizard generate-env --json`)
+4. Ask for explicit confirmation before writes/mutations
+5. Apply settings via `config write --json`, validate, ensure gateways, restart service
+6. Verify final health (`service status --json`) and give a completion summary
+
+Optional after this flow: build the standalone SwiftUI control board app:
+- [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md)
+
+## Step 6: Manual `.env` Editing (Optional Fallback)
+
+If you prefer manual config updates, edit `.env` directly any time:
 
 ```bash
 nano .env
@@ -130,33 +171,6 @@ apple_flow_approval_ttl_minutes=20
 ```
 
 See `.env.example` for all 60+ available options.
-
-## Step 5: Run the Setup Script
-
-```bash
-./scripts/start_beginner.sh
-```
-
-The script will automatically:
-1. Create a Python virtual environment
-2. Install all dependencies (including optimizations)
-3. Create `.env` from `.env.example` if missing
-4. Validate your configuration
-5. Run 560+ tests to ensure everything works
-6. Start the Apple Flow daemon
-
-**What you'll see:**
-```
-== Apple Flow Beginner Setup ==
-Creating virtual environment...
-Installing dependencies...
-Running tests...
-===== 562 passed in 0.36s =====
-
-Starting Apple Flow daemon...
-2026-02-19 14:00:00,000 INFO Apple Flow running (foreground)
-2026-02-19 14:00:00,100 INFO Ready. Waiting for inbound iMessages. Press Ctrl+C to stop.
-```
 
 ---
 
@@ -297,20 +311,6 @@ nano .env
 - For Cline: install the `cline` CLI and configure it
 - Make sure `apple_flow_connector` in `.env` matches what you installed
 
-### Tests Failing
-
-**Cause**: Dependency issues or code conflicts.
-
-**Fix**:
-```bash
-# Clean reinstall
-rm -rf .venv
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev]'
-pytest -v
-```
-
 ### No Response from iMessage
 
 **Check**:
@@ -329,7 +329,7 @@ pytest -v
 pkill -f "apple_flow daemon"
 
 # Remove stale lock
-rm -f ~/.codex/relay.daemon.lock
+rm -f ~/.apple-flow/relay.daemon.lock
 
 # Restart
 ./scripts/start_beginner.sh
@@ -356,11 +356,14 @@ Visit `http://localhost:8787` for:
 
 ### Run as Background Service
 
-For always-on operation, see [AUTO_START_SETUP.md](AUTO_START_SETUP.md) for launchd setup.
-
-Or use the one-command setup:
+For always-on operation, use the one-command setup:
 ```bash
 ./scripts/setup_autostart.sh
+```
+
+Need foreground mode instead of launchd (advanced fallback)?
+```bash
+./scripts/start_beginner.sh
 ```
 
 ### Enable Apple Mail Integration (Optional)
@@ -382,11 +385,12 @@ Use Reminders.app as a task queue:
 
 ```bash
 apple_flow_enable_reminders_polling=true
-apple_flow_reminders_list_name=Codex Tasks
+apple_flow_reminders_list_name=agent-task
+apple_flow_reminders_archive_list_name=agent-archive
 # apple_flow_reminders_auto_approve=false  # require approval by default
 ```
 
-Create a list called "Codex Tasks" in Reminders.app, then add reminders -- they'll be picked up and executed.
+Default names are `agent-task` and `agent-archive` (auto-created/verified by setup).
 
 ### Enable Apple Notes Integration (Optional)
 
@@ -394,10 +398,12 @@ Use Notes.app for long-form tasks:
 
 ```bash
 apple_flow_enable_notes_polling=true
-apple_flow_notes_folder_name=Codex Inbox
+apple_flow_notes_folder_name=agent-task
+apple_flow_notes_archive_folder_name=agent-archive
+apple_flow_notes_log_folder_name=agent-logs
 ```
 
-Create a folder called "Codex Inbox" in Notes.app, then add notes -- results are appended back to the note.
+Default folders are `agent-task`, `agent-archive`, and `agent-logs` (auto-created/verified by setup).
 
 ### Enable Apple Calendar Integration (Optional)
 
@@ -405,10 +411,10 @@ Use Calendar.app for scheduled tasks:
 
 ```bash
 apple_flow_enable_calendar_polling=true
-apple_flow_calendar_name=Codex Schedule
+apple_flow_calendar_name=agent-schedule
 ```
 
-Create a calendar called "Codex Schedule" in Calendar.app, then add events -- they execute when due.
+Default calendar is `agent-schedule` (auto-created/verified by setup).
 
 ### Autonomous Companion (Optional)
 

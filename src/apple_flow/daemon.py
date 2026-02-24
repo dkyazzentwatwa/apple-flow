@@ -4,6 +4,7 @@ import asyncio
 import logging
 import signal
 import sqlite3
+import shutil
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -18,6 +19,7 @@ from .codex_connector import CodexAppServerConnector
 from .companion import CompanionLoop
 from .config import RelaySettings
 from .egress import IMessageEgress
+from .gateway_setup import ensure_gateway_resources
 from .ingress import IMessageIngress
 from .mail_egress import AppleMailEgress
 from .mail_ingress import AppleMailIngress
@@ -36,9 +38,57 @@ from .store import SQLiteStore
 logger = logging.getLogger("apple_flow.daemon")
 
 
+def migrate_legacy_db_if_needed(
+    settings: RelaySettings,
+    *,
+    legacy_db_path: Path | None = None,
+    default_db_path: Path | None = None,
+) -> bool:
+    """Move legacy DB path to the new default location when it is safe to do so."""
+    legacy_db_path = legacy_db_path or (Path.home() / ".codex" / "relay.db")
+    default_db_path = default_db_path or (Path.home() / ".apple-flow" / "relay.db")
+    if "db_path" in settings.model_fields_set:
+        return False
+    target_db_path = Path(settings.db_path)
+    if target_db_path != default_db_path:
+        return False
+    if target_db_path.exists() or not legacy_db_path.exists():
+        return False
+
+    target_db_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.move(str(legacy_db_path), str(target_db_path))
+        logger.info("Migrated legacy DB from %s to %s", legacy_db_path, target_db_path)
+        return True
+    except OSError as exc:
+        logger.warning(
+            "Could not migrate legacy DB from %s to %s: %s",
+            legacy_db_path,
+            target_db_path,
+            exc,
+        )
+        return False
+
+
+def gateway_resource_statuses_for_settings(settings: RelaySettings):
+    return ensure_gateway_resources(
+        enable_reminders=settings.enable_reminders_polling,
+        enable_notes=settings.enable_notes_polling,
+        enable_notes_logging=settings.enable_notes_logging,
+        enable_calendar=settings.enable_calendar_polling,
+        reminders_list_name=settings.reminders_list_name,
+        reminders_archive_list_name=settings.reminders_archive_list_name,
+        notes_folder_name=settings.notes_folder_name,
+        notes_archive_folder_name=settings.notes_archive_folder_name,
+        notes_log_folder_name=settings.notes_log_folder_name,
+        calendar_name=settings.calendar_name,
+    )
+
+
 class RelayDaemon:
     def __init__(self, settings: RelaySettings):
         self.settings = settings
+        self._ensure_gateway_resources()
         self.store = SQLiteStore(Path(settings.db_path))
         self.store.bootstrap()
         self.policy = PolicyEngine(settings)
@@ -383,6 +433,27 @@ class RelayDaemon:
         # Record daemon start time for health dashboard and startup catch-up window
         self._startup_time = datetime.now(UTC)
         self.store.set_state("daemon_started_at", self._startup_time.isoformat())
+
+    def _ensure_gateway_resources(self) -> None:
+        statuses = gateway_resource_statuses_for_settings(self.settings)
+        for status in statuses:
+            detail = f" ({status.result.detail})" if status.result.detail else ""
+            if status.result.status == "failed":
+                logger.warning(
+                    "Gateway resource ensure failed: %s '%s': %s%s",
+                    status.label,
+                    status.name,
+                    status.result.status,
+                    detail,
+                )
+                continue
+            logger.info(
+                "Gateway resource ensure: %s '%s': %s%s",
+                status.label,
+                status.name,
+                status.result.status,
+                detail,
+            )
 
     def request_shutdown(self) -> None:
         """Request graceful shutdown of the daemon."""
@@ -907,6 +978,7 @@ class RelayDaemon:
 async def run() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     settings = RelaySettings()
+    migrate_legacy_db_if_needed(settings)
     daemon = RelayDaemon(settings)
 
     # Set up signal handlers for graceful shutdown

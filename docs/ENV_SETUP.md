@@ -4,8 +4,10 @@ All Apple Flow settings are controlled via the `.env` file (or shell environment
 
 **Get started:**
 ```bash
-cp .env.example .env
-nano .env  # or: code .env, vim .env
+./scripts/setup_autostart.sh
+# or manually:
+# cp .env.example .env
+# nano .env
 ```
 
 ---
@@ -19,6 +21,7 @@ These must be set before the daemon will start.
 | `apple_flow_allowed_senders` | `+15551234567` | Comma-separated phone numbers in E.164 format. Only messages from these numbers are processed. Your own number goes here. |
 | `apple_flow_allowed_workspaces` | `/Users/yourname/code` | Comma-separated absolute paths the AI is allowed to read/write. |
 | `apple_flow_default_workspace` | `/Users/yourname/code/my-project` | Default working directory for the AI connector. Must be inside `allowed_workspaces`. |
+| `apple_flow_db_path` | `~/.apple-flow/relay.db` | SQLite state database path. If not explicitly set, Apple Flow auto-migrates legacy `~/.codex/relay.db` to this location when safe. |
 
 **Phone number format:**
 - Correct: `+15551234567`
@@ -32,7 +35,7 @@ Pick one AI backend. The value of `apple_flow_connector` determines which is use
 
 | Variable | Default | Options / Description |
 |---|---|---|
-| `apple_flow_connector` | `codex-cli` | `codex-cli` — uses `codex exec` (requires `codex login`)<br>`claude-cli` — uses `claude -p` (requires `claude auth login`)<br>`codex-app-server` — deprecated stateful connector |
+| `apple_flow_connector` | `codex-cli` | `codex-cli` — uses `codex exec` (requires `codex login`)<br>`claude-cli` — uses `claude -p` (requires `claude auth login`)<br>`cline` — uses `cline -y` (supports multiple model providers)<br>`codex-app-server` — deprecated stateful connector |
 
 ### Codex CLI settings (`connector=codex-cli`)
 
@@ -52,6 +55,16 @@ Pick one AI backend. The value of `apple_flow_connector` determines which is use
 | `apple_flow_claude_cli_dangerously_skip_permissions` | `true` | Pass `--dangerously-skip-permissions` to the claude binary. |
 | `apple_flow_claude_cli_tools` | *(empty)* | Comma-separated values for `--tools` (e.g. `default,WebSearch`). |
 | `apple_flow_claude_cli_allowed_tools` | *(empty)* | Comma-separated values for `--allowedTools` (e.g. `WebSearch`). |
+
+### Cline settings (`connector=cline`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `apple_flow_cline_command` | `cline` | Path to the `cline` binary. |
+| `apple_flow_cline_model` | *(empty)* | Model name for Cline. Empty = Cline default. |
+| `apple_flow_cline_context_window` | `3` | Number of recent exchanges to inject per turn. |
+| `apple_flow_cline_use_json` | `true` | Parse Cline JSON output when available. |
+| `apple_flow_cline_act_mode` | `true` | Enable Cline act mode for faster execution. |
 
 ---
 
@@ -126,7 +139,7 @@ Incomplete reminders in a designated list become tasks for the AI.
 |---|---|---|
 | `apple_flow_enable_reminders_polling` | `false` | Enable Apple Reminders as a task queue. |
 | `apple_flow_reminders_list_name` | `agent-task` | Reminders list to watch for new tasks. |
-| `apple_flow_reminders_archive_list_name` | `Archive` | List to move completed reminders into. |
+| `apple_flow_reminders_archive_list_name` | `agent-archive` | List to move completed reminders into. |
 | `apple_flow_reminders_owner` | *(first allowed_sender)* | Sender identity used for reminder tasks (phone number). |
 | `apple_flow_reminders_auto_approve` | `false` | Skip the approval gate for reminder tasks. |
 | `apple_flow_reminders_poll_interval_seconds` | `5` | How often to poll Reminders (seconds). |

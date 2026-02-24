@@ -64,3 +64,15 @@ def test_trigger_tag_default(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = RelaySettings()
     assert settings.trigger_tag == "!!agent"
+
+
+def test_db_path_default_is_apple_flow(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.db_path == Path.home() / ".apple-flow" / "relay.db"
+
+
+def test_reminders_archive_default_is_agent_archive(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.reminders_archive_list_name == "agent-archive"

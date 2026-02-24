@@ -140,16 +140,35 @@ cd apple-flow
 ./scripts/setup_autostart.sh
 ```
 
-### Step 4 — Configure
+### Step 4 — Let Your AI Finalize Setup (Recommended)
 
-When the setup script pauses, open `.env` in any text editor:
+After the installer finishes, open Codex/Claude/Cline and paste the master prompt:
+
+- [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md)
+
+This AI-led flow safely:
+- checks health (`wizard doctor --json`)
+- collects your full customization preferences
+- generates full `.env` preview from `.env.example`
+- applies settings with explicit confirmation gates
+- ensures gateway resources
+- validates config and restarts service
+
+Optional after install: build the SwiftUI control board from [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md).
+
+### Step 5 — Configure Manually (Optional)
+
+If you already have a `.env`, `setup_autostart.sh` validates it and installs auto-start.
+If `.env` is missing, it launches `python -m apple_flow setup` to generate one, then continues.
+
+To edit settings manually:
 
 ```bash
 nano .env
 # Or: code .env  |  vim .env  |  open -a TextEdit .env
 ```
 
-Set these required fields:
+Verify these required fields:
 
 ```env
 apple_flow_allowed_senders=+15551234567       # your own phone number in +1... format
@@ -168,25 +187,28 @@ apple_flow_connector=cline        # Cline CLI        — supports any model prov
 apple_flow_enable_mail_polling=true
 apple_flow_mail_allowed_senders=you@example.com
 
-# Apple Reminders (create a list called "Codex Tasks" in Reminders.app)
+# Apple Reminders (list names are auto-created/verified by setup)
 apple_flow_enable_reminders_polling=true
 
-# Apple Notes (create a folder called "Codex Inbox" in Notes.app)
+# Apple Notes (folder names are auto-created/verified by setup)
 apple_flow_enable_notes_polling=true
 
-# Apple Calendar (create a calendar called "Codex Schedule" in Calendar.app)
+# Apple Calendar (calendar name is auto-created/verified by setup)
 apple_flow_enable_calendar_polling=true
 ```
 
-Save and press **Enter** in the terminal to continue.
+Default gateway names:
+- Reminders: `agent-task`, `agent-archive`
+- Notes: `agent-task`, `agent-archive`, `agent-logs`
+- Calendar: `agent-schedule`
 
-### Step 5 — Grant Full Disk Access
+### Step 6 — Grant Full Disk Access
 
 1. Open **System Settings → Privacy & Security → Full Disk Access**
 2. Click **+** and add the Python binary path (printed by setup script)
 3. Enable the toggle
 
-### Step 6 — Text Yourself! 🎉
+### Step 7 — Text Yourself! 🎉
 
 ```
 what files are in my home directory?
@@ -304,10 +326,10 @@ Include `!!agent` in a note's title or body to have it processed as a task. The 
 
 ```env
 apple_flow_enable_notes_polling=true
-apple_flow_notes_folder_name=Codex Inbox
+apple_flow_notes_folder_name=agent-task
 ```
 
-**Example:** Create a note titled `!!agent draft a project brief` in your "Codex Inbox" folder.
+**Example:** Create a note titled `!!agent draft a project brief` in your "agent-task" folder.
 
 </details>
 
@@ -384,7 +406,10 @@ See [SECURITY.md](SECURITY.md) for full details.
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 | [CLAUDE.md](CLAUDE.md) | Architecture and development guide |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Quick reference |
+| [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md) | AI-led installer prompt and safety checklist |
+| [docs/AUTO_START_SETUP.md](docs/AUTO_START_SETUP.md) | Beginner auto-start onboarding |
 | [docs/ENV_SETUP.md](docs/ENV_SETUP.md) | Full config reference |
+| [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md) | Optional SwiftUI control-board build/export guide |
 | [docs/SKILLS_AND_MCP.md](docs/SKILLS_AND_MCP.md) | Skills and MCP integration |
 
 ---

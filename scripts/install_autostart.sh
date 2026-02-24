@@ -92,7 +92,7 @@ cat > "$PLIST_DEST" << EOF
     <key>EnvironmentVariables</key>
     <dict>
       <key>PATH</key>
-      <string>$PROJECT_DIR/.venv/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <string>$PROJECT_DIR/.venv/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
       <key>PYTHONPATH</key>
       <string>$SITE_PACKAGES:$PROJECT_DIR/src</string>
       <key>VIRTUAL_ENV</key>

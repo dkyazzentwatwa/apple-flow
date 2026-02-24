@@ -1,114 +1,255 @@
-#!/bin/bash
-set -e
-
-# Apple Flow Complete Setup & Auto-Start Installation
-# One script to set up everything and enable auto-start at boot
+#!/usr/bin/env bash
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PLIST_DEST="$HOME/Library/LaunchAgents/local.apple-flow.plist"
 LOGS_DIR="$PROJECT_DIR/logs"
 VENV_DIR="$PROJECT_DIR/.venv"
+VENV_PYTHON="$VENV_DIR/bin/python"
 ENV_FILE="$PROJECT_DIR/.env"
-ENV_EXAMPLE="$PROJECT_DIR/.env.example"
 
-echo "=========================================="
-echo "  Apple Flow Complete Setup"
-echo "=========================================="
-echo ""
-
-# Helper: find a binary by name, checking common macOS install locations
-find_binary() {
-    local name="$1"
-    local found
-    found=$(command -v "$name" 2>/dev/null) && echo "$found" && return
-    for dir in "$HOME/.local/bin" "/opt/homebrew/bin" "/usr/local/bin"; do
-        [ -x "$dir/$name" ] && echo "$dir/$name" && return
-    done
-    echo "$name"  # fallback: bare name
+resolve_binary() {
+  local name="$1"
+  local found
+  if found="$(command -v "$name" 2>/dev/null)"; then
+    printf '%s\n' "$found"
+    return 0
+  fi
+  for dir in "$HOME/.local/bin" "/opt/homebrew/bin" "/usr/local/bin"; do
+    if [[ -x "$dir/$name" ]]; then
+      printf '%s\n' "$dir/$name"
+      return 0
+    fi
+  done
+  return 1
 }
 
-# Step 1: Create virtual environment if it doesn't exist
-if [ ! -d "$VENV_DIR" ]; then
-    echo "[1/5] Creating virtual environment..."
-    python3 -m venv "$VENV_DIR"
-    echo "✓ Virtual environment created"
+env_get() {
+  local key="$1"
+  local line
+  line="$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n 1 || true)"
+  printf '%s' "${line#*=}"
+}
+
+set_env_value() {
+  local key="$1"
+  local value="$2"
+  local escaped
+  escaped="$(printf '%s' "$value" | sed -e 's/[\\&|]/\\&/g')"
+  if grep -q -E "^${key}=" "$ENV_FILE"; then
+    sed -i '' "s|^${key}=.*|${key}=${escaped}|" "$ENV_FILE"
+  else
+    printf '\n%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+  fi
+}
+
+expand_path() {
+  local value="$1"
+  if [[ "$value" == ~/* ]]; then
+    printf '%s\n' "$HOME/${value#~/}"
+    return 0
+  fi
+  printf '%s\n' "$value"
+}
+
+pin_selected_connector_binary() {
+  local connector
+  local key
+  local default_cmd
+  local current_cmd
+  local binary
+  local resolved
+
+  connector="$(env_get apple_flow_connector)"
+  if [[ -z "${connector//[[:space:]]/}" ]]; then
+    local use_codex_cli
+    use_codex_cli="$(env_get apple_flow_use_codex_cli)"
+    if [[ "${use_codex_cli,,}" == "false" ]]; then
+      connector="codex-app-server"
+    else
+      connector="codex-cli"
+    fi
+  fi
+
+  case "$connector" in
+    claude-cli)
+      key="apple_flow_claude_cli_command"
+      default_cmd="claude"
+      ;;
+    codex-cli)
+      key="apple_flow_codex_cli_command"
+      default_cmd="codex"
+      ;;
+    cline)
+      key="apple_flow_cline_command"
+      default_cmd="cline"
+      ;;
+    codex-app-server)
+      key="apple_flow_codex_app_server_cmd"
+      default_cmd="codex app-server"
+      ;;
+    *)
+      echo "❌ Unsupported connector in .env: $connector"
+      echo "Set apple_flow_connector to one of: codex-cli, claude-cli, cline, codex-app-server"
+      exit 1
+      ;;
+  esac
+
+  current_cmd="$(env_get "$key")"
+  if [[ -z "${current_cmd//[[:space:]]/}" ]]; then
+    current_cmd="$default_cmd"
+  fi
+
+  binary="${current_cmd%% *}"
+  resolved=""
+  if [[ "$binary" = /* && -x "$binary" ]]; then
+    resolved="$binary"
+  elif resolved="$(resolve_binary "$binary" 2>/dev/null || true)"; then
+    :
+  fi
+
+  if [[ -z "$resolved" ]]; then
+    echo "❌ Could not resolve connector binary for '$connector' (expected '$binary')."
+    echo "Install/auth the connector first, then rerun setup:"
+    echo "  - codex-cli: npm install -g @openai/codex && codex login"
+    echo "  - claude-cli: curl -fsSL https://claude.ai/install.sh | bash && claude auth login"
+    echo "  - cline: npm install -g cline && cline auth"
+    exit 1
+  fi
+
+  if [[ "$connector" == "codex-app-server" ]]; then
+    local rest
+    rest="${current_cmd#"$binary"}"
+    set_env_value "$key" "$resolved$rest"
+    SELECTED_CONNECTOR_COMMAND="$resolved$rest"
+  else
+    set_env_value "$key" "$resolved"
+    SELECTED_CONNECTOR_COMMAND="$resolved"
+  fi
+
+  SELECTED_CONNECTOR="$connector"
+  SELECTED_CONNECTOR_KEY="$key"
+  export SELECTED_CONNECTOR SELECTED_CONNECTOR_COMMAND SELECTED_CONNECTOR_KEY
+  echo "✓ Pinned connector command: $key=$SELECTED_CONNECTOR_COMMAND"
+}
+
+run_fast_readiness_checks() {
+  local senders
+  local workspaces
+  local messages_db
+
+  senders="$(env_get apple_flow_allowed_senders)"
+  workspaces="$(env_get apple_flow_allowed_workspaces)"
+  if [[ -z "${senders//[[:space:]]/}" || "$senders" == *"REPLACE_WITH"* ]]; then
+    echo "❌ apple_flow_allowed_senders is missing in .env"
+    echo "Set your phone number in E.164 format, e.g. +15551234567"
+    exit 1
+  fi
+  if [[ -z "${workspaces//[[:space:]]/}" || "$workspaces" == *"REPLACE_WITH"* ]]; then
+    echo "❌ apple_flow_allowed_workspaces is missing in .env"
+    echo "Set at least one workspace path, e.g. /Users/you/code"
+    exit 1
+  fi
+
+  IFS=',' read -r -a workspace_array <<< "$workspaces"
+  for workspace in "${workspace_array[@]}"; do
+    workspace="${workspace## }"
+    workspace="${workspace%% }"
+    [[ -z "$workspace" ]] && continue
+    workspace="$(expand_path "$workspace")"
+    if [[ ! -d "$workspace" ]]; then
+      echo "❌ Workspace path does not exist: $workspace"
+      exit 1
+    fi
+  done
+
+  messages_db="$(env_get apple_flow_messages_db_path)"
+  if [[ -z "${messages_db//[[:space:]]/}" ]]; then
+    messages_db="$HOME/Library/Messages/chat.db"
+  fi
+  messages_db="$(expand_path "$messages_db")"
+
+  if [[ ! -f "$messages_db" ]]; then
+    echo "❌ Messages DB not found at: $messages_db"
+    echo "Update apple_flow_messages_db_path or sign into Messages on this Mac."
+    exit 1
+  fi
+
+  MESSAGES_DB_PATH="$messages_db" "$VENV_PYTHON" - <<'PY'
+import os
+from pathlib import Path
+
+path = Path(os.environ["MESSAGES_DB_PATH"])
+try:
+    with path.open("rb") as handle:
+        handle.read(32)
+except PermissionError:
+    raise SystemExit("❌ Messages DB is not readable. Grant Full Disk Access to your terminal app and relaunch it.")
+except OSError as exc:
+    raise SystemExit(f"❌ Cannot read Messages DB: {exc}")
+PY
+
+  if [[ "$SELECTED_CONNECTOR" != "codex-app-server" ]]; then
+    if [[ ! -x "$SELECTED_CONNECTOR_COMMAND" ]]; then
+      echo "❌ Selected connector command is not executable: $SELECTED_CONNECTOR_COMMAND"
+      exit 1
+    fi
+  fi
+
+  echo "✓ Readiness checks passed"
+}
+
+echo "=========================================="
+echo "  Apple Flow Auto-Start Setup"
+echo "=========================================="
+echo ""
+
+if [[ ! -d "$VENV_DIR" ]]; then
+  echo "[1/6] Creating virtual environment..."
+  python3 -m venv "$VENV_DIR"
+  echo "✓ Virtual environment created"
 else
-    echo "[1/5] Virtual environment already exists"
+  echo "[1/6] Virtual environment already exists"
 fi
 
-# Step 2: Install package and dependencies
 echo ""
-echo "[2/5] Installing apple-flow and dependencies..."
+echo "[2/6] Installing apple-flow and dependencies..."
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
 "$VENV_DIR/bin/pip" install --quiet -e "$PROJECT_DIR[dev]"
 echo "✓ Installation complete"
 
-# Step 3: Check/create .env file
 echo ""
-echo "[3/5] Checking configuration..."
-if [ ! -f "$ENV_FILE" ]; then
-    if [ -f "$ENV_EXAMPLE" ]; then
-        echo "⚠️  No .env file found. Creating from .env.example..."
-        cp "$ENV_EXAMPLE" "$ENV_FILE"
-
-        # Auto-detect CLI binary paths and patch .env
-        CLAUDE_BIN=$(find_binary claude)
-        CODEX_BIN=$(find_binary codex)
-        sed -i '' "s|apple_flow_claude_cli_command=claude$|apple_flow_claude_cli_command=$CLAUDE_BIN|" "$ENV_FILE"
-        sed -i '' "s|apple_flow_codex_cli_command=codex$|apple_flow_codex_cli_command=$CODEX_BIN|" "$ENV_FILE"
-        echo "✓ Auto-detected: claude → $CLAUDE_BIN"
-        echo "✓ Auto-detected: codex  → $CODEX_BIN"
-
-        echo ""
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "  IMPORTANT: Edit .env file before starting!"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo ""
-        echo "Required settings:"
-        echo "  - apple_flow_allowed_senders (phone numbers)"
-        echo "  - apple_flow_allowed_workspaces (directories)"
-        echo ""
-        echo "Run: nano .env  (or use your preferred editor)"
-        echo ""
-        read -p "Press Enter after you've edited .env to continue..."
-    else
-        echo "❌ Error: .env.example not found"
-        exit 1
-    fi
-else
-    echo "✓ .env file exists"
+echo "[3/6] Preparing configuration..."
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "No .env found. Launching setup wizard to generate one..."
+  PYTHONPATH="$PROJECT_DIR/src" "$VENV_PYTHON" -m apple_flow setup --script-safe --non-interactive-safe
 fi
 
-# Step 4: Find Python binary and generate plist
-echo ""
-echo "[4/5] Configuring auto-start service..."
-
-VENV_PYTHON="$VENV_DIR/bin/python"
-if [ ! -f "$VENV_PYTHON" ]; then
-    echo "❌ Error: Python binary not found in venv"
-    exit 1
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "❌ .env file was not created. Aborting setup."
+  exit 1
 fi
 
-# Resolve to the actual Python binary (not symlink)
-ACTUAL_PYTHON=$(python3 -c "import os; print(os.path.realpath('$VENV_PYTHON'))")
-PYTHON_VERSION=$("$VENV_PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+echo ""
+echo "[4/6] Pinning connector command + readiness checks..."
+pin_selected_connector_binary
+run_fast_readiness_checks
+
+echo ""
+echo "[5/6] Installing launchd service..."
+ACTUAL_PYTHON="$($VENV_PYTHON -c "import os; print(os.path.realpath('$VENV_PYTHON'))")"
+PYTHON_VERSION="$($VENV_PYTHON -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")"
 SITE_PACKAGES="$VENV_DIR/lib/python${PYTHON_VERSION}/site-packages"
 
-# Create logs directory
 mkdir -p "$LOGS_DIR"
-
-# Create LaunchAgents directory if it doesn't exist
 mkdir -p "$HOME/Library/LaunchAgents"
 
-# Stop existing service if running
 if launchctl list 2>/dev/null | grep -q "local.apple-flow"; then
-    echo "Stopping existing service..."
-    launchctl unload "$PLIST_DEST" 2>/dev/null || true
+  launchctl unload "$PLIST_DEST" 2>/dev/null || true
 fi
 
-# Generate plist file
-cat > "$PLIST_DEST" << EOF
+cat > "$PLIST_DEST" <<EOF2
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -142,7 +283,7 @@ cat > "$PLIST_DEST" << EOF
     <key>EnvironmentVariables</key>
     <dict>
       <key>PATH</key>
-      <string>$VENV_DIR/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <string>$VENV_DIR/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
       <key>PYTHONPATH</key>
       <string>$SITE_PACKAGES:$PROJECT_DIR/src</string>
       <key>VIRTUAL_ENV</key>
@@ -150,50 +291,28 @@ cat > "$PLIST_DEST" << EOF
     </dict>
   </dict>
 </plist>
-EOF
+EOF2
 
 echo "✓ Launch agent configured"
 
-# Step 5: Load the service
 echo ""
-echo "[5/5] Starting service..."
+echo "[6/6] Starting service..."
 launchctl load "$PLIST_DEST"
 echo "✓ Service loaded"
 
 echo ""
 echo "=========================================="
-echo "  Setup Complete!"
+echo "  Setup Complete"
 echo "=========================================="
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  FINAL STEP: Grant Full Disk Access (Required!)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "The daemon needs permission to read the Messages database."
-echo ""
-echo "1. Open: System Settings > Privacy & Security > Full Disk Access"
-echo ""
-echo "2. Click the '+' button"
-echo ""
-echo "3. Press Cmd+Shift+G and paste this path:"
-echo ""
+echo "Next steps:"
+echo "1. Grant Full Disk Access to this Python binary:"
 echo "   $ACTUAL_PYTHON"
-echo ""
-echo "4. Click 'Open' and enable the toggle"
-echo ""
-echo "5. Restart the service:"
+echo "2. Restart service after granting access:"
 echo "   launchctl stop local.apple-flow"
 echo "   launchctl start local.apple-flow"
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "Useful Commands:"
-echo "  Check status:  launchctl list | grep apple-flow"
-echo "  View logs:     tail -f $LOGS_DIR/apple-flow.log"
-echo "  View errors:   tail -f $LOGS_DIR/apple-flow.err.log"
-echo "  Stop service:  launchctl stop local.apple-flow"
-echo "  Start service: launchctl start local.apple-flow"
-echo "  Uninstall:     ./scripts/uninstall_autostart.sh"
-echo ""
-echo "The daemon will now auto-start on every boot!"
-echo ""
+echo "Useful commands:"
+echo "  launchctl list | grep apple-flow"
+echo "  tail -f $LOGS_DIR/apple-flow.err.log"
+echo "  ./scripts/uninstall_autostart.sh"

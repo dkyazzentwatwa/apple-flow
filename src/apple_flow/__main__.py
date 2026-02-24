@@ -35,8 +35,10 @@ from .apple_tools import (
     reminders_list_lists,
     reminders_search,
 )
+from .cli_control import run_cli_control
 from .config import RelaySettings
 from .daemon import run as run_daemon
+from .setup_wizard import run_wizard
 
 _LOCK_FILE = None
 
@@ -211,8 +213,32 @@ def _get_version() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Apple Flow runtime")
-    parser.add_argument("mode", choices=["daemon", "admin", "tools", "version"], nargs="?", default="daemon")
+    parser.add_argument(
+        "mode",
+        choices=["daemon", "admin", "tools", "setup", "wizard", "config", "service", "version"],
+        nargs="?",
+        default="daemon",
+    )
     parser.add_argument("--version", "-V", action="store_true", help="Show version and exit")
+    parser.add_argument("--json", dest="json_output", action="store_true", help="Emit machine-readable JSON")
+    parser.add_argument(
+        "--start-daemon",
+        dest="start_daemon",
+        action="store_true",
+        help="When used with `setup`, start daemon after generating config.",
+    )
+    parser.add_argument(
+        "--non-interactive-safe",
+        dest="non_interactive_safe",
+        action="store_true",
+        help="When used with `setup`, never overwrite existing .env.",
+    )
+    parser.add_argument(
+        "--script-safe",
+        dest="script_safe",
+        action="store_true",
+        help="When used with `setup`, fail fast if no interactive terminal is attached.",
+    )
 
     # Tools-specific flags (only used when mode=tools)
     parser.add_argument("tool_args", nargs="*", help="Tool name followed by its positional arguments")
@@ -231,6 +257,39 @@ def main() -> None:
     parser.add_argument("--list-tools", dest="list_tools", action="store_true", help="Print available tools")
     # Internal alias used by calendar_list_events/calendar_search
     parser.add_argument("--calendar", dest="calendar_name", metavar="CALENDAR", help=argparse.SUPPRESS)
+
+    # Wizard/config/service machine-mode options
+    parser.add_argument("--env-file", dest="env_file", default=".env", help="Path to .env file")
+    parser.add_argument("--set", dest="set_values", action="append", help="Set key=value pairs in .env")
+    parser.add_argument("--key", dest="keys", action="append", help="Read specific key(s) from .env")
+    parser.add_argument("--stream", dest="stream_name", choices=["stderr", "stdout"], default="stderr")
+    parser.add_argument("--lines", dest="lines", type=int, default=200)
+
+    parser.add_argument("--phone", dest="phone", default="")
+    parser.add_argument("--connector", dest="connector", default="")
+    parser.add_argument("--connector-command", dest="connector_command", default="")
+    parser.add_argument("--workspace", dest="workspace", default="")
+    parser.add_argument("--gateways", dest="gateways", default="")
+    parser.add_argument("--mail-address", dest="mail_address", default="")
+    parser.add_argument("--admin-api-token", dest="admin_api_token", default="")
+    parser.add_argument("--enable-agent-office", dest="enable_agent_office", action="store_true")
+    parser.add_argument("--soul-file", dest="soul_file", default="agent-office/SOUL.md")
+
+    parser.add_argument("--enable-reminders", dest="enable_reminders", action="store_true")
+    parser.add_argument("--enable-notes", dest="enable_notes", action="store_true")
+    parser.add_argument("--enable-notes-logging", dest="enable_notes_logging", action="store_true")
+    parser.add_argument("--enable-calendar", dest="enable_calendar", action="store_true")
+
+    parser.add_argument("--reminders-list-name", dest="reminders_list_name", default="agent-task")
+    parser.add_argument(
+        "--reminders-archive-list-name",
+        dest="reminders_archive_list_name",
+        default="agent-archive",
+    )
+    parser.add_argument("--notes-folder-name", dest="notes_folder_name", default="agent-task")
+    parser.add_argument("--notes-archive-folder-name", dest="notes_archive_folder_name", default="agent-archive")
+    parser.add_argument("--notes-log-folder-name", dest="notes_log_folder_name", default="agent-logs")
+    parser.add_argument("--calendar-name", dest="calendar_name_override", default="agent-schedule")
 
     args = parser.parse_args()
 
@@ -251,6 +310,17 @@ def main() -> None:
     if args.mode == "tools":
         _run_tools_subcommand(args)
         return
+
+    if args.mode == "setup":
+        run_wizard(
+            start_daemon=args.start_daemon,
+            non_interactive_safe=args.non_interactive_safe,
+            script_safe=args.script_safe,
+        )
+        return
+
+    if args.mode in {"wizard", "config", "service"}:
+        raise SystemExit(run_cli_control(args.mode, args))
 
     settings = RelaySettings()
     uvicorn.run("apple_flow.main:app", host=settings.admin_host, port=settings.admin_port, reload=False)

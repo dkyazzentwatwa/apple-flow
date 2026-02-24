@@ -20,7 +20,7 @@ class RelaySettings(BaseSettings):
     allowed_workspaces: list[str] = Field(default_factory=list)
 
     default_workspace: str = str(Path.home())
-    db_path: Path = Path.home() / ".codex" / "relay.db"
+    db_path: Path = Path.home() / ".apple-flow" / "relay.db"
     poll_interval_seconds: float = 2.0
     approval_ttl_minutes: int = 20
     max_messages_per_minute: int = 30
@@ -101,7 +101,7 @@ class RelaySettings(BaseSettings):
     # Apple Reminders integration settings
     enable_reminders_polling: bool = False
     reminders_list_name: str = "agent-task"
-    reminders_archive_list_name: str = "Archive"
+    reminders_archive_list_name: str = "agent-archive"
     reminders_owner: str = ""
     reminders_auto_approve: bool = False
     reminders_poll_interval_seconds: float = 5.0

@@ -2,98 +2,230 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR"
+VENV_DIR="$ROOT_DIR/.venv"
+VENV_PYTHON="$VENV_DIR/bin/python"
+ENV_FILE="$ROOT_DIR/.env"
 
-echo "== Apple Flow Beginner Setup =="
-
-# Helper: find a binary by name, checking common macOS install locations
-find_binary() {
-    local name="$1"
-    local found
-    found=$(command -v "$name" 2>/dev/null) && echo "$found" && return
-    for dir in "$HOME/.local/bin" "/opt/homebrew/bin" "/usr/local/bin"; do
-        [ -x "$dir/$name" ] && echo "$dir/$name" && return
-    done
-    echo "$name"  # fallback: bare name
+resolve_binary() {
+  local name="$1"
+  local found
+  if found="$(command -v "$name" 2>/dev/null)"; then
+    printf '%s\n' "$found"
+    return 0
+  fi
+  for dir in "$HOME/.local/bin" "/opt/homebrew/bin" "/usr/local/bin"; do
+    if [[ -x "$dir/$name" ]]; then
+      printf '%s\n' "$dir/$name"
+      return 0
+    fi
+  done
+  return 1
 }
 
-if [[ ! -f ".venv/bin/activate" ]]; then
+env_get() {
+  local key="$1"
+  local line
+  line="$(grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n 1 || true)"
+  printf '%s' "${line#*=}"
+}
+
+set_env_value() {
+  local key="$1"
+  local value="$2"
+  local escaped
+  escaped="$(printf '%s' "$value" | sed -e 's/[\\&|]/\\&/g')"
+  if grep -q -E "^${key}=" "$ENV_FILE"; then
+    sed -i '' "s|^${key}=.*|${key}=${escaped}|" "$ENV_FILE"
+  else
+    printf '\n%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+  fi
+}
+
+expand_path() {
+  local value="$1"
+  if [[ "$value" == ~/* ]]; then
+    printf '%s\n' "$HOME/${value#~/}"
+    return 0
+  fi
+  printf '%s\n' "$value"
+}
+
+pin_selected_connector_binary() {
+  local connector
+  local key
+  local default_cmd
+  local current_cmd
+  local binary
+  local resolved
+
+  connector="$(env_get apple_flow_connector)"
+  if [[ -z "${connector//[[:space:]]/}" ]]; then
+    local use_codex_cli
+    use_codex_cli="$(env_get apple_flow_use_codex_cli)"
+    if [[ "${use_codex_cli,,}" == "false" ]]; then
+      connector="codex-app-server"
+    else
+      connector="codex-cli"
+    fi
+  fi
+
+  case "$connector" in
+    claude-cli)
+      key="apple_flow_claude_cli_command"
+      default_cmd="claude"
+      ;;
+    codex-cli)
+      key="apple_flow_codex_cli_command"
+      default_cmd="codex"
+      ;;
+    cline)
+      key="apple_flow_cline_command"
+      default_cmd="cline"
+      ;;
+    codex-app-server)
+      key="apple_flow_codex_app_server_cmd"
+      default_cmd="codex app-server"
+      ;;
+    *)
+      echo "❌ Unsupported connector in .env: $connector"
+      exit 1
+      ;;
+  esac
+
+  current_cmd="$(env_get "$key")"
+  if [[ -z "${current_cmd//[[:space:]]/}" ]]; then
+    current_cmd="$default_cmd"
+  fi
+
+  binary="${current_cmd%% *}"
+  resolved=""
+  if [[ "$binary" = /* && -x "$binary" ]]; then
+    resolved="$binary"
+  elif resolved="$(resolve_binary "$binary" 2>/dev/null || true)"; then
+    :
+  fi
+
+  if [[ -z "$resolved" ]]; then
+    echo "❌ Could not resolve connector binary for '$connector' (expected '$binary')."
+    exit 1
+  fi
+
+  if [[ "$connector" == "codex-app-server" ]]; then
+    local rest
+    rest="${current_cmd#"$binary"}"
+    set_env_value "$key" "$resolved$rest"
+    SELECTED_CONNECTOR_COMMAND="$resolved$rest"
+  else
+    set_env_value "$key" "$resolved"
+    SELECTED_CONNECTOR_COMMAND="$resolved"
+  fi
+
+  SELECTED_CONNECTOR="$connector"
+  export SELECTED_CONNECTOR SELECTED_CONNECTOR_COMMAND
+  echo "✓ Pinned connector command ($key)"
+}
+
+run_fast_readiness_checks() {
+  local senders
+  local workspaces
+  local messages_db
+
+  senders="$(env_get apple_flow_allowed_senders)"
+  workspaces="$(env_get apple_flow_allowed_workspaces)"
+  if [[ -z "${senders//[[:space:]]/}" || "$senders" == *"REPLACE_WITH"* ]]; then
+    echo "❌ apple_flow_allowed_senders is missing in .env"
+    exit 1
+  fi
+  if [[ -z "${workspaces//[[:space:]]/}" || "$workspaces" == *"REPLACE_WITH"* ]]; then
+    echo "❌ apple_flow_allowed_workspaces is missing in .env"
+    exit 1
+  fi
+
+  IFS=',' read -r -a workspace_array <<< "$workspaces"
+  for workspace in "${workspace_array[@]}"; do
+    workspace="${workspace## }"
+    workspace="${workspace%% }"
+    [[ -z "$workspace" ]] && continue
+    workspace="$(expand_path "$workspace")"
+    if [[ ! -d "$workspace" ]]; then
+      echo "❌ Workspace path does not exist: $workspace"
+      exit 1
+    fi
+  done
+
+  messages_db="$(env_get apple_flow_messages_db_path)"
+  if [[ -z "${messages_db//[[:space:]]/}" ]]; then
+    messages_db="$HOME/Library/Messages/chat.db"
+  fi
+  messages_db="$(expand_path "$messages_db")"
+
+  if [[ ! -f "$messages_db" ]]; then
+    echo "❌ Messages DB not found at: $messages_db"
+    exit 1
+  fi
+
+  MESSAGES_DB_PATH="$messages_db" "$VENV_PYTHON" - <<'PY'
+import os
+from pathlib import Path
+
+path = Path(os.environ["MESSAGES_DB_PATH"])
+try:
+    with path.open("rb") as handle:
+        handle.read(32)
+except PermissionError:
+    raise SystemExit("❌ Messages DB is not readable. Grant Full Disk Access to your terminal app and relaunch it.")
+except OSError as exc:
+    raise SystemExit(f"❌ Cannot read Messages DB: {exc}")
+PY
+
+  if [[ "$SELECTED_CONNECTOR" != "codex-app-server" && ! -x "$SELECTED_CONNECTOR_COMMAND" ]]; then
+    echo "❌ Selected connector command is not executable: $SELECTED_CONNECTOR_COMMAND"
+    exit 1
+  fi
+
+  echo "✓ Readiness checks passed"
+}
+
+cd "$ROOT_DIR"
+echo "== Apple Flow Foreground Runner =="
+
+if [[ ! -d "$VENV_DIR" ]]; then
   echo "Creating virtual environment..."
-  python3 -m venv .venv
+  python3 -m venv "$VENV_DIR"
 fi
 
-source .venv/bin/activate
+echo "Installing dependencies..."
+"$VENV_DIR/bin/pip" install --quiet --upgrade pip
+"$VENV_DIR/bin/pip" install --quiet -e "$ROOT_DIR[dev]"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "No .env found. Launching setup wizard..."
+  PYTHONPATH="$ROOT_DIR/src" "$VENV_PYTHON" -m apple_flow setup --script-safe --non-interactive-safe
+fi
 
 if pgrep -f "apple_flow daemon" >/dev/null 2>&1; then
-  echo
   echo "Stopping existing Apple Flow daemon process..."
   pkill -f "apple_flow daemon" || true
   sleep 1
 fi
 
-LOCK_PATH="$HOME/.codex/relay.daemon.lock"
+LOCK_PATH="$(PYTHONPATH="$ROOT_DIR/src" "$VENV_PYTHON" - <<'PY'
+from pathlib import Path
+from apple_flow.config import RelaySettings
+settings = RelaySettings()
+print(Path(settings.db_path).with_suffix('.daemon.lock'))
+PY
+)"
+
 if [[ -f "$LOCK_PATH" ]] && ! pgrep -f "apple_flow daemon" >/dev/null 2>&1; then
   echo "Removing stale daemon lock: $LOCK_PATH"
   rm -f "$LOCK_PATH"
 fi
 
-echo "Installing dependencies..."
-pip install -e '.[dev]' >/dev/null
-
-if [[ ! -f ".env" ]]; then
-  cp .env.example .env
-  echo "Created .env from .env.example"
-
-  # Auto-detect CLI binary paths and patch .env
-  CLAUDE_BIN=$(find_binary claude)
-  CODEX_BIN=$(find_binary codex)
-  sed -i '' "s|apple_flow_claude_cli_command=claude$|apple_flow_claude_cli_command=$CLAUDE_BIN|" .env
-  sed -i '' "s|apple_flow_codex_cli_command=codex$|apple_flow_codex_cli_command=$CODEX_BIN|" .env
-  echo "Auto-detected: claude → $CLAUDE_BIN"
-  echo "Auto-detected: codex  → $CODEX_BIN"
-fi
-
-if grep -q "REPLACE_WITH_YOUR" .env; then
-  echo
-  echo "Please edit .env with your phone and workspace before first run."
-  echo "Open: $ROOT_DIR/.env"
-  exit 1
-fi
-
-ALLOWED_SENDERS_LINE="$(grep -E '^apple_flow_allowed_senders=' .env || true)"
-ALLOWED_SENDERS_VALUE="${ALLOWED_SENDERS_LINE#apple_flow_allowed_senders=}"
-if [[ -z "${ALLOWED_SENDERS_VALUE//[[:space:]]/}" ]]; then
-  echo
-  echo "Safety stop: apple_flow_allowed_senders is empty in .env"
-  echo "Set your number first, e.g. apple_flow_allowed_senders=+15551234567"
-  exit 1
-fi
-
-MESSAGES_DB_LINE="$(grep -E '^apple_flow_messages_db_path=' .env || true)"
-MESSAGES_DB_PATH="${MESSAGES_DB_LINE#apple_flow_messages_db_path=}"
-if [[ -z "${MESSAGES_DB_PATH//[[:space:]]/}" ]]; then
-  MESSAGES_DB_PATH="$HOME/Library/Messages/chat.db"
-fi
-if [[ ! -f "$MESSAGES_DB_PATH" ]]; then
-  echo
-  echo "Safety stop: Messages DB not found at: $MESSAGES_DB_PATH"
-  echo "Update apple_flow_messages_db_path in .env"
-  exit 1
-fi
-
-if ! sqlite3 "$MESSAGES_DB_PATH" "select 1;" >/dev/null 2>&1; then
-  echo
-  echo "Safety stop: cannot read Messages DB at: $MESSAGES_DB_PATH"
-  echo "Grant Full Disk Access to the app hosting this shell (Terminal/iTerm/Codex),"
-  echo "then fully quit and reopen that app before retrying."
-  exit 1
-fi
-
-echo "Running tests..."
-pytest -q
+pin_selected_connector_binary
+run_fast_readiness_checks
 
 echo
-
-echo "Starting Apple Flow daemon..."
-echo "Foreground mode: this stays running and waits for iMessages. Press Ctrl+C to stop."
-python -m apple_flow daemon
+echo "Starting Apple Flow daemon in foreground..."
+echo "Press Ctrl+C to stop."
+PYTHONPATH="$ROOT_DIR/src" "$VENV_PYTHON" -m apple_flow daemon
