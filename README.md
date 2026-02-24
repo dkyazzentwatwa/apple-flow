@@ -84,9 +84,9 @@ Your AI companion watches your life and sends proactive iMessage updates:
 ## 🚀 Quick Start (10 minutes)
 
 **Preferred vibe-coding method (recommended):**
-1. Run `./scripts/setup_autostart.sh`
+1. Clone the repo and `cd` into it
 2. Paste [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md) into Codex/Claude/Cline
-3. Let the AI finish full customization + validation safely (with explicit confirmations)
+3. Let the AI run `./scripts/setup_autostart.sh` and finish full customization + validation safely (with explicit confirmations)
 
 ### Prerequisites
 

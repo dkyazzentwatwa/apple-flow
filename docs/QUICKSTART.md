@@ -4,9 +4,9 @@ Get Apple Flow running in 5 steps. This guide assumes you're new to the project.
 
 ## Preferred Vibe-Coding Method (Recommended)
 
-1. Run `./scripts/setup_autostart.sh`
+1. Clone this repo and `cd` into it
 2. Paste [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md) into Codex/Claude/Cline
-3. Let the AI complete full `.env` customization, gateway setup, validation, and service health checks with explicit confirmations
+3. Let the AI run `./scripts/setup_autostart.sh` and complete full `.env` customization, gateway setup, validation, and service health checks with explicit confirmations
 
 ## What You'll Get
 
