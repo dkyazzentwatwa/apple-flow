@@ -22,6 +22,8 @@ from .setup_wizard import (
 
 
 SERVICE_LABEL = "local.apple-flow"
+ADMIN_SERVICE_LABEL = "local.apple-flow-admin"
+SERVICE_LABELS = (SERVICE_LABEL, ADMIN_SERVICE_LABEL)
 
 
 def _response_ok(**payload: Any) -> dict[str, Any]:
@@ -131,6 +133,13 @@ def _daemon_process_detected() -> bool:
     return proc.returncode == 0
 
 
+def _admin_process_detected() -> bool:
+    proc = subprocess.run(
+        ["pgrep", "-f", "apple_flow admin"], capture_output=True, text=True, check=False
+    )
+    return proc.returncode == 0
+
+
 def _admin_health(host: str, port: int, token: str) -> bool:
     if not token.strip():
         return False
@@ -148,8 +157,8 @@ def _admin_health(host: str, port: int, token: str) -> bool:
         return False
 
 
-def _service_plist_path() -> Path:
-    return Path.home() / "Library" / "LaunchAgents" / f"{SERVICE_LABEL}.plist"
+def _service_plist_path(label: str = SERVICE_LABEL) -> Path:
+    return Path.home() / "Library" / "LaunchAgents" / f"{label}.plist"
 
 
 def _log_path(stream_name: str) -> Path:
@@ -184,35 +193,29 @@ def _python_context(project_dir: Path) -> tuple[str, str]:
     return str(resolved_python), str(site_packages)
 
 
-def _install_service(project_dir: Path) -> dict[str, Any]:
-    env_path = project_dir / ".env"
-    if not env_path.exists():
-        return _response_error(
-            "missing_env",
-            ["No .env file found. Run `apple-flow setup` first."],
-        )
-
-    plist_path = _service_plist_path()
-    logs_dir = project_dir / "logs"
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    plist_path.parent.mkdir(parents=True, exist_ok=True)
-
-    python_bin, site_packages = _python_context(project_dir)
-    venv_dir = project_dir / ".venv"
-
-    plist = f"""<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+def _render_service_plist(
+    *,
+    label: str,
+    mode: str,
+    python_bin: str,
+    logs_dir: Path,
+    project_dir: Path,
+    site_packages: str,
+    venv_dir: Path,
+) -> str:
+    return f"""<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
 <plist version=\"1.0\">
   <dict>
     <key>Label</key>
-    <string>{SERVICE_LABEL}</string>
+    <string>{label}</string>
 
     <key>ProgramArguments</key>
     <array>
       <string>{python_bin}</string>
       <string>-m</string>
       <string>apple_flow</string>
-      <string>daemon</string>
+      <string>{mode}</string>
     </array>
 
     <key>RunAtLoad</key>
@@ -222,10 +225,10 @@ def _install_service(project_dir: Path) -> dict[str, Any]:
     <true/>
 
     <key>StandardOutPath</key>
-    <string>{logs_dir / 'apple-flow.log'}</string>
+    <string>{logs_dir / f"apple-flow{'-admin' if mode == 'admin' else ''}.log"}</string>
 
     <key>StandardErrorPath</key>
-    <string>{logs_dir / 'apple-flow.err.log'}</string>
+    <string>{logs_dir / f"apple-flow{'-admin' if mode == 'admin' else ''}.err.log"}</string>
 
     <key>WorkingDirectory</key>
     <string>{project_dir}</string>
@@ -242,60 +245,113 @@ def _install_service(project_dir: Path) -> dict[str, Any]:
   </dict>
 </plist>
 """
-    plist_path.write_text(plist, encoding="utf-8")
 
-    subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True, text=True, check=False)
-    load = subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True, text=True, check=False)
-    if load.returncode != 0:
+
+def _install_service(project_dir: Path) -> dict[str, Any]:
+    env_path = project_dir / ".env"
+    if not env_path.exists():
         return _response_error(
-            "launchctl_load_failed",
-            [load.stderr.strip() or "Failed to load launchd service."],
-            plist_path=str(plist_path),
+            "missing_env",
+            ["No .env file found. Run `apple-flow setup` first."],
         )
 
-    return _response_ok(plist_path=str(plist_path), python_bin=python_bin)
+    logs_dir = project_dir / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    plist_dir = _service_plist_path().parent
+    plist_dir.mkdir(parents=True, exist_ok=True)
+
+    python_bin, site_packages = _python_context(project_dir)
+    venv_dir = project_dir / ".venv"
+
+    service_specs = (
+        (SERVICE_LABEL, "daemon"),
+        (ADMIN_SERVICE_LABEL, "admin"),
+    )
+    plist_paths: dict[str, str] = {}
+
+    for label, mode in service_specs:
+        plist_path = _service_plist_path(label)
+        plist = _render_service_plist(
+            label=label,
+            mode=mode,
+            python_bin=python_bin,
+            logs_dir=logs_dir,
+            project_dir=project_dir,
+            site_packages=site_packages,
+            venv_dir=venv_dir,
+        )
+        plist_path.write_text(plist, encoding="utf-8")
+        plist_paths[label] = str(plist_path)
+
+        subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True, text=True, check=False)
+        load = subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True, text=True, check=False)
+        if load.returncode != 0:
+            return _response_error(
+                "launchctl_load_failed",
+                [f"{label}: {load.stderr.strip() or 'Failed to load launchd service.'}"],
+                plist_path=str(plist_path),
+                plist_paths=plist_paths,
+                labels=list(SERVICE_LABELS),
+            )
+
+    return _response_ok(
+        plist_path=plist_paths[SERVICE_LABEL],
+        plist_paths=plist_paths,
+        python_bin=python_bin,
+        labels=list(SERVICE_LABELS),
+    )
 
 
 def _start_service() -> dict[str, Any]:
-    proc = subprocess.run(
-        ["launchctl", "start", SERVICE_LABEL],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        return _response_error(
-            "launchctl_start_failed",
-            [proc.stderr.strip() or "Failed to start service."],
+    errors: list[str] = []
+    for label in SERVICE_LABELS:
+        proc = subprocess.run(
+            ["launchctl", "start", label],
+            capture_output=True,
+            text=True,
+            check=False,
         )
-    return _response_ok(label=SERVICE_LABEL)
+        if proc.returncode != 0:
+            errors.append(f"{label}: {proc.stderr.strip() or 'Failed to start service.'}")
+    if errors:
+        return _response_error("launchctl_start_failed", errors, labels=list(SERVICE_LABELS))
+    return _response_ok(labels=list(SERVICE_LABELS))
 
 
 def _stop_service() -> dict[str, Any]:
-    proc = subprocess.run(
-        ["launchctl", "stop", SERVICE_LABEL],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        return _response_error(
-            "launchctl_stop_failed",
-            [proc.stderr.strip() or "Failed to stop service."],
+    errors: list[str] = []
+    for label in SERVICE_LABELS:
+        loaded, _pid = _launchctl_service_row(label)
+        if not loaded:
+            continue
+        proc = subprocess.run(
+            ["launchctl", "stop", label],
+            capture_output=True,
+            text=True,
+            check=False,
         )
-    return _response_ok(label=SERVICE_LABEL)
+        if proc.returncode != 0:
+            errors.append(f"{label}: {proc.stderr.strip() or 'Failed to stop service.'}")
+    if errors:
+        return _response_error("launchctl_stop_failed", errors, labels=list(SERVICE_LABELS))
+    return _response_ok(labels=list(SERVICE_LABELS))
 
 
 def _restart_service() -> dict[str, Any]:
-    stop_result = _stop_service()
-    if not stop_result.get("ok"):
-        # If service was not running, try to start anyway.
-        if stop_result.get("code") != "launchctl_stop_failed":
-            return stop_result
-    start_result = _start_service()
-    if not start_result.get("ok"):
-        return start_result
-    return _response_ok(label=SERVICE_LABEL)
+    errors: list[str] = []
+    for label in SERVICE_LABELS:
+        target = f"gui/{os.getuid()}/{label}"
+        proc = subprocess.run(
+            ["launchctl", "kickstart", "-k", target],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            errors.append(f"{label}: {proc.stderr.strip() or 'Failed to restart service.'}")
+    if errors:
+        return _response_error("launchctl_restart_failed", errors, labels=list(SERVICE_LABELS))
+    return _response_ok(labels=list(SERVICE_LABELS))
 
 
 def _wizard_doctor(args: Any) -> dict[str, Any]:
@@ -542,7 +598,9 @@ def _config_read(args: Any) -> dict[str, Any]:
 
 def _service_status(_args: Any) -> dict[str, Any]:
     loaded, pid = _launchctl_service_row(SERVICE_LABEL)
-    plist_path = _service_plist_path()
+    admin_loaded, admin_pid = _launchctl_service_row(ADMIN_SERVICE_LABEL)
+    plist_path = _service_plist_path(SERVICE_LABEL)
+    admin_plist_path = _service_plist_path(ADMIN_SERVICE_LABEL)
 
     settings = RelaySettings()
     healthy = _admin_health(settings.admin_host, settings.admin_port, settings.admin_api_token)
@@ -550,8 +608,12 @@ def _service_status(_args: Any) -> dict[str, Any]:
     return _response_ok(
         launchd_loaded=loaded,
         launchd_pid=pid,
+        admin_launchd_loaded=admin_loaded,
+        admin_launchd_pid=admin_pid,
         daemon_process_detected=_daemon_process_detected(),
+        admin_process_detected=_admin_process_detected(),
         plist_path=str(plist_path),
+        admin_plist_path=str(admin_plist_path),
         healthy=healthy,
     )
 

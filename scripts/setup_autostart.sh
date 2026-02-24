@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PLIST_DEST="$HOME/Library/LaunchAgents/local.apple-flow.plist"
+PLIST_DEST_ADMIN="$HOME/Library/LaunchAgents/local.apple-flow-admin.plist"
 LOGS_DIR="$PROJECT_DIR/logs"
 VENV_DIR="$PROJECT_DIR/.venv"
 VENV_PYTHON="$VENV_DIR/bin/python"
@@ -248,6 +249,9 @@ mkdir -p "$HOME/Library/LaunchAgents"
 if launchctl list 2>/dev/null | grep -q "local.apple-flow"; then
   launchctl unload "$PLIST_DEST" 2>/dev/null || true
 fi
+if launchctl list 2>/dev/null | grep -q "local.apple-flow-admin"; then
+  launchctl unload "$PLIST_DEST_ADMIN" 2>/dev/null || true
+fi
 
 cat > "$PLIST_DEST" <<EOF2
 <?xml version="1.0" encoding="UTF-8"?>
@@ -293,12 +297,57 @@ cat > "$PLIST_DEST" <<EOF2
 </plist>
 EOF2
 
-echo "✓ Launch agent configured"
+cat > "$PLIST_DEST_ADMIN" <<EOF2
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>local.apple-flow-admin</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>$ACTUAL_PYTHON</string>
+      <string>-m</string>
+      <string>apple_flow</string>
+      <string>admin</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>$LOGS_DIR/apple-flow-admin.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>$LOGS_DIR/apple-flow-admin.err.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>$PROJECT_DIR</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>$VENV_DIR/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>PYTHONPATH</key>
+      <string>$SITE_PACKAGES:$PROJECT_DIR/src</string>
+      <key>VIRTUAL_ENV</key>
+      <string>$VENV_DIR</string>
+    </dict>
+  </dict>
+</plist>
+EOF2
+
+echo "✓ Launch agents configured (daemon + admin)"
 
 echo ""
 echo "[6/6] Starting service..."
 launchctl load "$PLIST_DEST"
-echo "✓ Service loaded"
+launchctl load "$PLIST_DEST_ADMIN"
+echo "✓ Services loaded"
 
 echo ""
 echo "=========================================="
@@ -311,8 +360,11 @@ echo "   $ACTUAL_PYTHON"
 echo "2. Restart service after granting access:"
 echo "   launchctl stop local.apple-flow"
 echo "   launchctl start local.apple-flow"
+echo "   launchctl stop local.apple-flow-admin"
+echo "   launchctl start local.apple-flow-admin"
 echo ""
 echo "Useful commands:"
 echo "  launchctl list | grep apple-flow"
 echo "  tail -f $LOGS_DIR/apple-flow.err.log"
+echo "  tail -f $LOGS_DIR/apple-flow-admin.err.log"
 echo "  ./scripts/uninstall_autostart.sh"

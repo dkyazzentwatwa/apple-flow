@@ -28,3 +28,12 @@ def test_launchd_path_includes_local_bin_fallback():
     install_content = _read("scripts/install_autostart.sh")
     assert "$HOME/.local/bin" in setup_content
     assert "$HOME/.local/bin" in install_content
+
+
+def test_autostart_scripts_manage_daemon_and_admin_services():
+    setup_content = _read("scripts/setup_autostart.sh")
+    install_content = _read("scripts/install_autostart.sh")
+    uninstall_content = _read("scripts/uninstall_autostart.sh")
+    assert "local.apple-flow-admin" in setup_content
+    assert "local.apple-flow-admin" in install_content
+    assert "local.apple-flow-admin" in uninstall_content

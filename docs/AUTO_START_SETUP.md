@@ -15,7 +15,7 @@ This single script does **everything**:
 2. ✓ Installs apple-flow and all dependencies
 3. ✓ Launches `python -m apple_flow setup` if `.env` is missing
 4. ✓ Generates launchd plist with correct paths
-5. ✓ Installs and starts the service
+5. ✓ Installs and starts both launchd services (daemon + admin API)
 6. ✓ Pins connector command paths and runs fast readiness checks
 7. ✓ Shows you the Python binary path for Full Disk Access
 
@@ -31,7 +31,7 @@ If you've already set up the project (venv, dependencies, .env), use:
 ./scripts/install_autostart.sh
 ```
 
-This only configures and installs the auto-start service.
+This only configures and installs the auto-start services.
 
 ## Grant Full Disk Access
 
@@ -46,10 +46,12 @@ This only configures and installs the auto-start service.
 
 4. **Click 'Open'** and **enable the toggle**
 
-5. **Restart the service:**
+5. **Restart both services:**
    ```bash
    launchctl stop local.apple-flow
    launchctl start local.apple-flow
+   launchctl stop local.apple-flow-admin
+   launchctl start local.apple-flow-admin
    ```
 
 ## Verify It's Running
@@ -70,9 +72,11 @@ tail -f logs/apple-flow.err.log
 ```bash
 # Start manually
 launchctl start local.apple-flow
+launchctl start local.apple-flow-admin
 
 # Stop manually
 launchctl stop local.apple-flow
+launchctl stop local.apple-flow-admin
 
 # Check status
 launchctl list | grep apple-flow

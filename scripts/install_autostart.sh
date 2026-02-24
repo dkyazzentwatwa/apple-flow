@@ -7,6 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PLIST_DEST="$HOME/Library/LaunchAgents/local.apple-flow.plist"
+PLIST_DEST_ADMIN="$HOME/Library/LaunchAgents/local.apple-flow-admin.plist"
 LOGS_DIR="$PROJECT_DIR/logs"
 
 echo "=== Apple Flow Auto-Start Installation ==="
@@ -50,14 +51,18 @@ mkdir -p "$LOGS_DIR"
 # Create LaunchAgents directory if it doesn't exist
 mkdir -p "$HOME/Library/LaunchAgents"
 
-# Stop existing service if running
+# Stop existing services if running
 if launchctl list | grep -q "local.apple-flow"; then
-    echo "Stopping existing service..."
+    echo "Stopping existing daemon service..."
     launchctl unload "$PLIST_DEST" 2>/dev/null || true
 fi
+if launchctl list | grep -q "local.apple-flow-admin"; then
+    echo "Stopping existing admin service..."
+    launchctl unload "$PLIST_DEST_ADMIN" 2>/dev/null || true
+fi
 
-# Generate plist file dynamically
-echo "Generating launch agent plist..."
+# Generate plist files dynamically
+echo "Generating launch agent plists..."
 cat > "$PLIST_DEST" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -102,9 +107,54 @@ cat > "$PLIST_DEST" << EOF
 </plist>
 EOF
 
-# Load the service
-echo "Loading service..."
+cat > "$PLIST_DEST_ADMIN" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>local.apple-flow-admin</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>$ACTUAL_PYTHON</string>
+      <string>-m</string>
+      <string>apple_flow</string>
+      <string>admin</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>$LOGS_DIR/apple-flow-admin.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>$LOGS_DIR/apple-flow-admin.err.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>$PROJECT_DIR</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>$PROJECT_DIR/.venv/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>PYTHONPATH</key>
+      <string>$SITE_PACKAGES:$PROJECT_DIR/src</string>
+      <key>VIRTUAL_ENV</key>
+      <string>$PROJECT_DIR/.venv</string>
+    </dict>
+  </dict>
+</plist>
+EOF
+
+# Load the services
+echo "Loading services..."
 launchctl load "$PLIST_DEST"
+launchctl load "$PLIST_DEST_ADMIN"
 
 echo ""
 echo "=== Installation Complete ==="
@@ -123,15 +173,20 @@ echo ""
 echo "6. After granting access, restart the service:"
 echo "   launchctl stop local.apple-flow"
 echo "   launchctl start local.apple-flow"
+echo "   launchctl stop local.apple-flow-admin"
+echo "   launchctl start local.apple-flow-admin"
 echo ""
-echo "The apple-flow daemon will start automatically at login."
+echo "The apple-flow daemon and admin API will start automatically at login."
 echo ""
 echo "Useful commands:"
 echo "  Start:   launchctl start local.apple-flow"
+echo "           launchctl start local.apple-flow-admin"
 echo "  Stop:    launchctl stop local.apple-flow"
+echo "           launchctl stop local.apple-flow-admin"
 echo "  Status:  launchctl list | grep apple-flow"
 echo "  Logs:    tail -f $LOGS_DIR/apple-flow.log"
 echo "  Errors:  tail -f $LOGS_DIR/apple-flow.err.log"
+echo "           tail -f $LOGS_DIR/apple-flow-admin.err.log"
 echo ""
 echo "To uninstall:"
 echo "  ./scripts/uninstall_autostart.sh"
