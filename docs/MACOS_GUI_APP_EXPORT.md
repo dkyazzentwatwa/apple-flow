@@ -22,6 +22,10 @@ The app source lives in `apps/macos/AppleFlowApp`.
 |---|---|
 | ![Swift Onboarding Error: Full Disk Access Needed](screenshots/apple-flow-onboarding-error..png) | |
 
+| Setup Configuration + Env Preview | |
+|---|---|
+| ![Swift Onboarding Setup Configuration and Env Preview](screenshots/AppleFlowApp-setup-configuration-screen..png) | |
+
 ## Build and Run
 
 From repo root:

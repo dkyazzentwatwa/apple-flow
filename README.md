@@ -116,6 +116,14 @@ Prefer a desktop UI? Apple Flow includes a native macOS Swift app for guided onb
     <td><img src="docs/screenshots/apple-flow-onboarding-error..png" alt="Swift Onboarding Error: Full Disk Access Needed" width="420"/></td>
     <td></td>
   </tr>
+  <tr>
+    <td align="center"><b>Setup Configuration + Env Preview</b></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/AppleFlowApp-setup-configuration-screen..png" alt="Swift Onboarding Setup Configuration and Env Preview" width="420"/></td>
+    <td></td>
+  </tr>
 </table>
 
 ---
@@ -209,20 +217,18 @@ Optional after install: use the Swift onboarding/dashboard app guide at [docs/MA
 
 ### Step 4b — Optional Swift Onboarding + Dashboard App
 
-If you prefer a local desktop UI for setup and operations:
+If you prefer a local desktop UI for setup and operations, the app is already included under `dashboard-app/`:
 
 ```bash
-# Open project in Xcode
-./apps/macos/AppleFlowApp/scripts/open_in_xcode.sh
-
-# Export standalone app + zip to dist/
-./apps/macos/AppleFlowApp/scripts/export_app.sh
-
-# Launch exported app (builds if missing)
-./apps/macos/AppleFlowApp/scripts/run_standalone.sh
+# Open the bundled app directly
+open ./dashboard-app/AppleFlowApp.app
 ```
 
-Also included in repo: `dashboard-app/AppleFlowApp.app` and `dashboard-app/AppleFlowApp-macOS.zip`.
+After opening, grant permissions when prompted:
+- Full Disk Access for your terminal/app running Apple Flow (System Settings → Privacy & Security → Full Disk Access)
+- Accessibility/Automation prompts (if macOS requests control permissions for Apple apps)
+
+`dashboard-app/AppleFlowApp-macOS.zip` is also included if you want to share/install it elsewhere.
 
 ### Step 5 — Configure Manually (Optional)
 
