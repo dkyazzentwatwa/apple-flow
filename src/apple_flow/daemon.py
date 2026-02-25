@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import signal
 import sqlite3
-import shutil
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,11 +16,11 @@ from .claude_cli_connector import ClaudeCliConnector
 from .cline_connector import ClineConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
-from .gemini_cli_connector import GeminiCliConnector
 from .companion import CompanionLoop
 from .config import RelaySettings
 from .egress import IMessageEgress
 from .gateway_setup import ensure_gateway_resources
+from .gemini_cli_connector import GeminiCliConnector
 from .ingress import IMessageIngress
 from .mail_egress import AppleMailEgress
 from .mail_ingress import AppleMailIngress

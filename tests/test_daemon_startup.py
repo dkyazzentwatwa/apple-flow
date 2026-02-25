@@ -1,14 +1,17 @@
 import asyncio
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from apple_flow.commanding import CommandKind
-from apple_flow.daemon import RelayDaemon, gateway_resource_statuses_for_settings, migrate_legacy_db_if_needed
-from apple_flow.models import InboundMessage
+from apple_flow.daemon import (
+    RelayDaemon,
+    gateway_resource_statuses_for_settings,
+    migrate_legacy_db_if_needed,
+)
 from apple_flow.gateway_setup import EnsureResult, GatewayResourceStatus
+from apple_flow.models import InboundMessage
 
 
 def _settings(**overrides):

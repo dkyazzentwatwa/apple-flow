@@ -20,7 +20,6 @@ from .setup_wizard import (
     validate_workspace_path,
 )
 
-
 SERVICE_LABEL = "local.apple-flow"
 ADMIN_SERVICE_LABEL = "local.apple-flow-admin"
 SERVICE_LABELS = (SERVICE_LABEL, ADMIN_SERVICE_LABEL)

@@ -9,8 +9,8 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import secrets
 import re
+import secrets
 import sys
 from pathlib import Path
 
