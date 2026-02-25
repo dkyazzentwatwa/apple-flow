@@ -72,6 +72,7 @@ class FakeStore:
         self.sessions: dict[str, dict[str, Any]] = {}
         self.events: list[dict[str, Any]] = []
         self.state: dict[str, str] = {}
+        self.run_jobs: dict[str, dict[str, Any]] = {}
 
     def bootstrap(self) -> None:
         pass
@@ -135,7 +136,7 @@ class FakeStore:
     def list_active_runs(self, limit: int = 20) -> list[dict[str, Any]]:
         active = [
             run for run in self.runs.values()
-            if run.get("state") in {"planning", "awaiting_approval", "executing", "verifying"}
+            if run.get("state") in {"planning", "awaiting_approval", "queued", "running", "executing", "verifying"}
         ]
         return active[:limit]
 
@@ -215,6 +216,27 @@ class FakeStore:
 
     def get_state(self, key: str) -> str | None:
         return self.state.get(key)
+
+    def enqueue_run_job(
+        self,
+        *,
+        job_id: str,
+        run_id: str,
+        sender: str,
+        phase: str,
+        attempt: int,
+        payload: dict[str, Any] | None = None,
+        status: str = "queued",
+    ) -> None:
+        self.run_jobs[job_id] = {
+            "job_id": job_id,
+            "run_id": run_id,
+            "sender": sender,
+            "phase": phase,
+            "attempt": attempt,
+            "payload": payload or {},
+            "status": status,
+        }
 
     def get_stats(self) -> dict[str, Any]:
         runs_by_state: dict[str, int] = {}

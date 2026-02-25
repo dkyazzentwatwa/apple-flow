@@ -17,6 +17,7 @@ from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
 from .utils import normalize_sender
 
 if TYPE_CHECKING:
+    from .run_executor import RunExecutor
     from .scheduler import FollowUpScheduler
 
 logger = logging.getLogger("apple_flow.approval")
@@ -43,6 +44,7 @@ class ApprovalHandler:
         progress_update_interval_seconds: float,
         execution_heartbeat_seconds: float,
         checkpoint_on_timeout: bool,
+        auto_resume_on_timeout: bool,
         max_resume_attempts: int,
         enable_verifier: bool,
         reminders_egress: Any,
@@ -53,6 +55,7 @@ class ApprovalHandler:
         scheduler: FollowUpScheduler | None,
         log_notes_egress: Any,
         notes_log_folder_name: str,
+        run_executor: RunExecutor | None = None,
         approval_sender_override: str = "",
     ) -> None:
         self.connector = connector
@@ -63,6 +66,7 @@ class ApprovalHandler:
         self.progress_update_interval_seconds = progress_update_interval_seconds
         self.execution_heartbeat_seconds = max(5.0, execution_heartbeat_seconds)
         self.checkpoint_on_timeout = checkpoint_on_timeout
+        self.auto_resume_on_timeout = auto_resume_on_timeout
         self.max_resume_attempts = max(1, max_resume_attempts)
         self.enable_verifier = enable_verifier
         self.reminders_egress = reminders_egress
@@ -73,6 +77,7 @@ class ApprovalHandler:
         self.scheduler = scheduler
         self.log_notes_egress = log_notes_egress
         self.notes_log_folder_name = notes_log_folder_name
+        self.run_executor = run_executor
         self.approval_sender_override = approval_sender_override
 
     # --- Public API ---
@@ -167,12 +172,13 @@ class ApprovalHandler:
             return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=response)
 
         self.store.resolve_approval(request_id, "approved")
-        self.store.update_run_state(approval["run_id"], RunState.EXECUTING.value)
+        next_state = RunState.QUEUED.value if self.run_executor is not None else RunState.EXECUTING.value
+        self.store.update_run_state(approval["run_id"], next_state)
         self._create_event(
             run_id=approval["run_id"],
             step="approval",
             event_type="approved",
-            payload={"request_id": request_id},
+            payload={"request_id": request_id, "mode": "async" if self.run_executor is not None else "inline"},
         )
         run = self.store.get_run(approval["run_id"])
         if run is None:
@@ -181,23 +187,98 @@ class ApprovalHandler:
             return OrchestrationResult(kind=kind, response=response)
 
         attempt = self._next_attempt(approval["run_id"])
-        self._create_event(
+        if self.run_executor is not None:
+            self.run_executor.enqueue(
+                run_id=approval["run_id"],
+                sender=sender,
+                request_id=request_id,
+                attempt=attempt,
+                extra_instructions=extra_instructions,
+                approval_sender=approval.get("sender", sender),
+                plan_summary=approval.get("command_preview", ""),
+            )
+            queued = (
+                f"✅ Approved {request_id}. Queued execution "
+                f"(attempt {attempt}/{self.max_resume_attempts}). Send `status {approval['run_id']}` for progress."
+            )
+            self._safe_send(sender, queued)
+            self._log(kind.value, sender, run.get("intent", ""), queued)
+            return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=queued)
+
+        return self._execute_run_attempt(
+            kind=kind,
+            sender=sender,
+            run=run,
             run_id=approval["run_id"],
+            request_id=request_id,
+            attempt=attempt,
+            extra_instructions=extra_instructions,
+            plan_summary=approval.get("command_preview", ""),
+            approval_sender=approval.get("sender", sender),
+        )
+
+    def execute_queued_run(
+        self,
+        *,
+        run_id: str,
+        sender: str,
+        request_id: str,
+        attempt: int,
+        extra_instructions: str,
+        plan_summary: str,
+        approval_sender: str,
+    ) -> OrchestrationResult:
+        """Execute a previously approved run in background worker mode."""
+        run = self.store.get_run(run_id)
+        if run is None:
+            response = f"Run `{run_id}` not found."
+            return OrchestrationResult(kind=CommandKind.TASK, run_id=run_id, response=response)
+        kind = CommandKind.PROJECT if run.get("intent") == CommandKind.PROJECT.value else CommandKind.TASK
+        self.store.update_run_state(run_id, RunState.EXECUTING.value)
+        return self._execute_run_attempt(
+            kind=kind,
+            sender=sender,
+            run=run,
+            run_id=run_id,
+            request_id=request_id,
+            attempt=attempt,
+            extra_instructions=extra_instructions,
+            plan_summary=plan_summary,
+            approval_sender=approval_sender,
+            send_started=False,
+        )
+
+    def _execute_run_attempt(
+        self,
+        *,
+        kind: CommandKind,
+        sender: str,
+        run: dict[str, Any],
+        run_id: str,
+        request_id: str,
+        attempt: int,
+        extra_instructions: str,
+        plan_summary: str,
+        approval_sender: str,
+        send_started: bool = True,
+    ) -> OrchestrationResult:
+        self._create_event(
+            run_id=run_id,
             step="executor",
             event_type="execution_started",
             payload={"request_id": request_id, "attempt": attempt},
         )
-        self._safe_send(
-            sender,
-            (
-                f"✅ Approved {request_id}. Starting execution "
-                f"(attempt {attempt}/{self.max_resume_attempts})."
-            ),
-        )
+        if send_started:
+            self._safe_send(
+                sender,
+                (
+                    f"✅ Approved {request_id}. Starting execution "
+                    f"(attempt {attempt}/{self.max_resume_attempts})."
+                ),
+            )
 
         thread_id = self.connector.get_or_create_thread(sender)
 
-        plan_summary = approval.get("command_preview", "")
         exec_prompt_parts = [
             "executor mode: perform the approved plan carefully and provide concise progress + final output.",
             "If blocked on input/credentials/decision, prefix your response with `BLOCKER:` and ask one clear question.",
@@ -213,7 +294,7 @@ class ApprovalHandler:
             sender=sender,
             thread_id=thread_id,
             prompt=exec_prompt,
-            run_id=approval["run_id"],
+            run_id=run_id,
             step="executor",
             phase=f"execution attempt {attempt}",
         )
@@ -223,78 +304,78 @@ class ApprovalHandler:
         if should_checkpoint:
             checkpoint_message, checkpoint_request_id = self._checkpoint_run(
                 sender=sender,
-                run_id=approval["run_id"],
+                run_id=run_id,
                 attempt=attempt,
                 reason=reason,
                 output=execution_output,
-                approval_sender=approval.get("sender", sender),
+                approval_sender=approval_sender,
                 previous_request_id=request_id,
             )
             self._log(kind.value, sender, run.get("intent", ""), checkpoint_message)
             return OrchestrationResult(
                 kind=kind,
-                run_id=approval["run_id"],
+                run_id=run_id,
                 approval_request_id=checkpoint_request_id,
                 response=checkpoint_message,
             )
 
         self._create_event(
-            run_id=approval["run_id"],
+            run_id=run_id,
             step="executor",
             event_type="completed" if outcome == "success" else "execution_failed",
             payload={"reason": reason, "snippet": execution_output[:200]},
         )
 
         if outcome != "success":
-            self.store.update_run_state(approval["run_id"], RunState.FAILED.value)
+            self.store.update_run_state(run_id, RunState.FAILED.value)
             final = f"❌ Execution failed ({reason}).\n\n{execution_output}"
             self._safe_send(sender, final)
             self._log(kind.value, sender, run.get("intent", ""), final)
-            return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=final)
+            return OrchestrationResult(kind=kind, run_id=run_id, response=final)
 
         if self.enable_verifier:
-            self.store.update_run_state(approval["run_id"], RunState.VERIFYING.value)
+            self.store.update_run_state(run_id, RunState.VERIFYING.value)
             verify_prompt = "verifier mode: validate completion evidence and summarize pass/fail with key checks."
             verification_output = self._run_execution(
                 sender=sender,
                 thread_id=thread_id,
                 prompt=verify_prompt,
-                run_id=approval["run_id"],
+                run_id=run_id,
                 step="verifier",
                 phase=f"verification attempt {attempt}",
             )
             verifier_outcome, verifier_reason = self._classify_execution_outcome(verification_output)
             self._create_event(
-                run_id=approval["run_id"],
+                run_id=run_id,
                 step="verifier",
                 event_type="completed" if verifier_outcome == "success" else "execution_failed",
                 payload={"reason": verifier_reason, "snippet": verification_output[:200]},
             )
             if verifier_outcome != "success":
-                self.store.update_run_state(approval["run_id"], RunState.FAILED.value)
+                self.store.update_run_state(run_id, RunState.FAILED.value)
                 final = (
                     f"❌ Verification failed ({verifier_reason}).\n\n"
                     f"Execution:\n{execution_output}\n\nVerification:\n{verification_output}"
                 )
                 self._safe_send(sender, final)
                 self._log(kind.value, sender, run.get("intent", ""), final)
-                return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=final)
+                return OrchestrationResult(kind=kind, run_id=run_id, response=final)
             final = f"Execution:\n{execution_output}\n\nVerification:\n{verification_output}"
         else:
             final = execution_output
 
-        self.store.update_run_state(approval["run_id"], RunState.COMPLETED.value)
+        self.store.update_run_state(run_id, RunState.COMPLETED.value)
         self._safe_send(sender, final)
         self._log(kind.value, sender, run.get("intent", ""), final)
 
-        source_context = self.store.get_run_source_context(approval["run_id"])
+        source_context = self.store.get_run_source_context(run_id)
         if source_context:
             self._handle_post_execution_cleanup(source_context, final)
 
         if self.scheduler:
             try:
                 self.scheduler.schedule(
-                    run_id=approval["run_id"],
+                    run_id=run_id,
                     sender=sender,
                     action_type="follow_up",
                     payload={"summary": f"Follow up on approved task {request_id}"},
@@ -302,7 +383,7 @@ class ApprovalHandler:
             except Exception as exc:
                 logger.debug("Failed to schedule follow-up: %s", exc)
 
-        return OrchestrationResult(kind=kind, run_id=approval["run_id"], response=final)
+        return OrchestrationResult(kind=kind, run_id=run_id, response=final)
 
     def handle_approval_required(
         self,
@@ -574,7 +655,7 @@ class ApprovalHandler:
             return False
         if outcome == "blocked":
             return True
-        if outcome == "timeout" and self.checkpoint_on_timeout:
+        if outcome == "timeout" and (self.checkpoint_on_timeout and not self.auto_resume_on_timeout):
             return True
         return False
 

@@ -145,6 +145,11 @@ class RelaySettings(BaseSettings):
     execution_heartbeat_seconds: float = 120.0
     checkpoint_on_timeout: bool = True
     max_resume_attempts: int = 5
+    auto_resume_on_timeout: bool = False
+    run_worker_count: int = 4
+    run_job_lease_seconds: int = 180
+    run_recovery_scan_seconds: float = 30.0
+    max_run_wall_clock_seconds: int = 14_400
 
     # Executor / verifier behaviour
     enable_verifier: bool = False  # run a verification turn after execution (adds latency)

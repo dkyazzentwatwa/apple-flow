@@ -23,6 +23,7 @@ logger = logging.getLogger("apple_flow.orchestrator")
 if TYPE_CHECKING:
     from .memory import FileMemory
     from .office_sync import OfficeSyncer
+    from .run_executor import RunExecutor
     from .scheduler import FollowUpScheduler
 
 _SEP = "━" * 30
@@ -46,6 +47,7 @@ class RelayOrchestrator:
         progress_update_interval_seconds: float = 30.0,
         execution_heartbeat_seconds: float = 120.0,
         checkpoint_on_timeout: bool = True,
+        auto_resume_on_timeout: bool = False,
         max_resume_attempts: int = 5,
         enable_verifier: bool = False,
         enable_attachments: bool = False,
@@ -60,6 +62,7 @@ class RelayOrchestrator:
         notes_log_folder_name: str = "agent-logs",
         memory: FileMemory | None = None,
         scheduler: FollowUpScheduler | None = None,
+        run_executor: RunExecutor | None = None,
         office_syncer: OfficeSyncer | None = None,
         log_file_path: str | None = None,
         approval_sender_override: str = "",
@@ -94,6 +97,7 @@ class RelayOrchestrator:
             progress_update_interval_seconds=progress_update_interval_seconds,
             execution_heartbeat_seconds=execution_heartbeat_seconds,
             checkpoint_on_timeout=checkpoint_on_timeout,
+            auto_resume_on_timeout=auto_resume_on_timeout,
             max_resume_attempts=max_resume_attempts,
             enable_verifier=enable_verifier,
             reminders_egress=reminders_egress,
@@ -102,10 +106,15 @@ class RelayOrchestrator:
             notes_archive_folder_name=notes_archive_folder_name,
             calendar_egress=calendar_egress,
             scheduler=scheduler,
+            run_executor=run_executor,
             log_notes_egress=log_notes_egress,
             notes_log_folder_name=notes_log_folder_name,
             approval_sender_override=approval_sender_override,
         )
+
+    def set_run_executor(self, run_executor: Any) -> None:
+        """Attach a background run executor after orchestrator construction."""
+        self._approval.run_executor = run_executor
 
     # --- Workspace Resolution ---
 
@@ -260,7 +269,7 @@ class RelayOrchestrator:
             runs_by_state = self.store.get_stats().get("runs_by_state", {})
             active_count = sum(
                 runs_by_state.get(state, 0)
-                for state in ["planning", "executing", "verifying", "awaiting_approval"]
+                for state in ["planning", "queued", "running", "executing", "verifying", "awaiting_approval"]
             )
             if active_count:
                 lines.append(f"\nActive runs: {active_count} (details unavailable in this store)")

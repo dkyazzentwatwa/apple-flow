@@ -13,7 +13,7 @@
 
 **[apple-flow-site.vercel.app](https://apple-flow-site.vercel.app/)**
 
-*A local-first macOS daemon that bridges iMessage, Mail, Reminders, Notes, and Calendar to your favorite AI assistant. No apps. No cloud. Just your Apple Apps.*
+*A local-first macOS daemon that bridges iMessage, Mail, Reminders, Notes, and Calendar to your favorite AI assistant. No cloud. Optional local Swift app. Just your Apple Apps.*
 
 </div>
 
@@ -52,9 +52,19 @@ Your AI companion watches your life and sends proactive iMessage updates:
 
 **The best part?** It's 100% local-first. Your data never leaves your Mac.
 
+### 🖥️ Optional Swift Onboarding + Dashboard App
+Prefer a desktop UI? Apple Flow includes a native macOS Swift app for guided onboarding plus runtime operations:
+- Intro + system checks (Python, connector, iMessage DB, token)
+- Full `.env` preview and apply flow
+- Gateway setup (Mail, Reminders, Notes, Calendar)
+- Runtime control panel tabs (Overview, Approvals, Sessions, Events, Logs, Config)
+- Exportable standalone app bundle/zip (`AppleFlowApp.app`, `AppleFlowApp-macOS.zip`)
+
 ---
 
 ## 📸 Screenshots
+
+### Dashboard + Operations
 
 <table>
   <tr>
@@ -75,6 +85,35 @@ Your AI companion watches your life and sends proactive iMessage updates:
   <tr>
     <td><img src="docs/screenshots/calendar-event.png" alt="Calendar" width="250"/></td>
     <td><img src="docs/screenshots/office-brainstorm.png" alt="Brainstorm" width="250"/></td>
+    <td></td>
+  </tr>
+</table>
+
+### Swift Onboarding Flow
+
+<table>
+  <tr>
+    <td align="center"><b>Audit Events Timeline</b></td>
+    <td align="center"><b>Log Stream Viewer</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/onboarding-apple-flow1.png" alt="Swift Dashboard Events Tab" width="420"/></td>
+    <td><img src="docs/screenshots/onboarding-apple-flow2.png" alt="Swift Dashboard Logs Tab" width="420"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Control Panel Overview</b></td>
+    <td align="center"><b>Config Editor</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/onboarding-apple-flow3.png" alt="Swift Dashboard Overview Tab" width="420"/></td>
+    <td><img src="docs/screenshots/onboarding-apple-flow4.png" alt="Swift Dashboard Config Tab" width="420"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Onboarding Error (Doctor Checks)</b></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/apple-flow-onboarding-error..png" alt="Swift Onboarding Error: Full Disk Access Needed" width="420"/></td>
     <td></td>
   </tr>
 </table>
@@ -166,7 +205,24 @@ This AI-led flow safely:
 - ensures gateway resources
 - validates config and restarts service
 
-Optional after install: build the SwiftUI control board from [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md).
+Optional after install: use the Swift onboarding/dashboard app guide at [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md).
+
+### Step 4b — Optional Swift Onboarding + Dashboard App
+
+If you prefer a local desktop UI for setup and operations:
+
+```bash
+# Open project in Xcode
+./apps/macos/AppleFlowApp/scripts/open_in_xcode.sh
+
+# Export standalone app + zip to dist/
+./apps/macos/AppleFlowApp/scripts/export_app.sh
+
+# Launch exported app (builds if missing)
+./apps/macos/AppleFlowApp/scripts/run_standalone.sh
+```
+
+Also included in repo: `dashboard-app/AppleFlowApp.app` and `dashboard-app/AppleFlowApp-macOS.zip`.
 
 ### Step 5 — Configure Manually (Optional)
 

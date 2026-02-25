@@ -74,6 +74,37 @@ class FailOnSubstringEgress(FakeEgress):
             raise RuntimeError("egress failure")
 
 
+@dataclass
+class CapturingRunExecutor:
+    queued: list[dict[str, str]] = field(default_factory=list)
+
+    def enqueue(
+        self,
+        *,
+        run_id: str,
+        sender: str,
+        request_id: str,
+        attempt: int,
+        extra_instructions: str,
+        approval_sender: str,
+        plan_summary: str,
+        phase: str = "executor",
+    ) -> str:
+        self.queued.append(
+            {
+                "run_id": run_id,
+                "sender": sender,
+                "request_id": request_id,
+                "attempt": str(attempt),
+                "extra_instructions": extra_instructions,
+                "approval_sender": approval_sender,
+                "plan_summary": plan_summary,
+                "phase": phase,
+            }
+        )
+        return "job_123"
+
+
 def _make_orchestrator(
     connector,
     egress=None,
@@ -269,3 +300,32 @@ def test_repeated_timeout_honors_max_resume_attempts_and_fails():
     assert store.count_run_events(run_id, "checkpoint_created") == 1
     assert store.count_run_events(run_id, "execution_started") == 2
     assert store.list_pending_approvals() == []
+
+
+def test_approve_enqueues_background_execution_when_executor_attached():
+    connector = SequenceConnector(executor_outputs=["should-not-run-inline"])
+    store = FakeStore()
+    egress = FakeEgress()
+    orch = _make_orchestrator(connector=connector, egress=egress, store=store)
+    run_executor = CapturingRunExecutor()
+    orch.set_run_executor(run_executor)
+
+    run_id, request_id = _create_task_and_request_id(orch)
+    approve_msg = InboundMessage(
+        id="approve_async_1",
+        sender="+15551234567",
+        text=f"approve {request_id} with extra detail",
+        received_at="2026-02-17T12:01:00Z",
+        is_from_me=False,
+    )
+    result = orch.handle_message(approve_msg)
+
+    assert result.run_id == run_id
+    assert "Queued execution" in (result.response or "")
+    assert store.get_run(run_id)["state"] == "queued"
+    assert len(run_executor.queued) == 1
+    queued = run_executor.queued[0]
+    assert queued["request_id"] == request_id
+    assert queued["extra_instructions"] == "with extra detail"
+    # No inline executor turns should happen in the approve path.
+    assert connector.executor_attempts == 0
