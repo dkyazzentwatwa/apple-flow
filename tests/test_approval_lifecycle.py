@@ -322,6 +322,7 @@ def test_approve_enqueues_background_execution_when_executor_attached():
 
     assert result.run_id == run_id
     assert "Queued execution" in (result.response or "")
+    assert f"run `{run_id}`" in (result.response or "")
     assert store.get_run(run_id)["state"] == "queued"
     assert len(run_executor.queued) == 1
     queued = run_executor.queued[0]

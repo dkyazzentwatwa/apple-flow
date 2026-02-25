@@ -199,7 +199,8 @@ class ApprovalHandler:
             )
             queued = (
                 f"✅ Approved {request_id}. Queued execution "
-                f"(attempt {attempt}/{self.max_resume_attempts}). Send `status {approval['run_id']}` for progress."
+                f"(run `{approval['run_id']}`, attempt {attempt}/{self.max_resume_attempts}). "
+                f"Send `status {approval['run_id']}` for progress."
             )
             self._safe_send(sender, queued)
             self._log(kind.value, sender, run.get("intent", ""), queued)
@@ -273,7 +274,7 @@ class ApprovalHandler:
                 sender,
                 (
                     f"✅ Approved {request_id}. Starting execution "
-                    f"(attempt {attempt}/{self.max_resume_attempts})."
+                    f"(run `{run_id}`, attempt {attempt}/{self.max_resume_attempts})."
                 ),
             )
 

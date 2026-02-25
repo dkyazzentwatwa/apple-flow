@@ -18,6 +18,7 @@ from .cline_connector import ClineConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
 from .companion import CompanionLoop
+from .commanding import CommandKind, parse_command
 from .config import RelaySettings
 from .egress import IMessageEgress
 from .gateway_setup import ensure_gateway_resources
@@ -39,6 +40,18 @@ from .run_executor import RunExecutor
 from .store import SQLiteStore
 
 logger = logging.getLogger("apple_flow.daemon")
+
+_FASTLANE_COMMANDS = {
+    CommandKind.STATUS,
+    CommandKind.HEALTH,
+    CommandKind.HISTORY,
+    CommandKind.USAGE,
+    CommandKind.LOGS,
+    CommandKind.DENY,
+    CommandKind.DENY_ALL,
+    CommandKind.CLEAR_CONTEXT,
+    CommandKind.SYSTEM,
+}
 
 
 def migrate_legacy_db_if_needed(
@@ -672,7 +685,10 @@ class RelayDaemon:
                         )
 
                 async def _dispatch_imessage(msg):
-                    async with self._concurrency_sem:
+                    parsed = parse_command((msg.text or "").strip())
+                    use_fastlane = parsed.kind in _FASTLANE_COMMANDS
+
+                    async def _run_dispatch() -> None:
                         try:
                             started_at = time.monotonic()
                             result = await asyncio.to_thread(self.orchestrator.handle_message, msg)
@@ -712,6 +728,12 @@ class RelayDaemon:
                                     msg.id,
                                     msg.sender,
                                 )
+
+                    if use_fastlane:
+                        await _run_dispatch()
+                        return
+                    async with self._concurrency_sem:
+                        await _run_dispatch()
 
                 if dispatchable:
                     for msg in dispatchable:

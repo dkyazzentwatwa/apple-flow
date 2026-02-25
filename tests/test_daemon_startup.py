@@ -237,3 +237,60 @@ async def test_imessage_poll_loop_worker_exception_sends_fallback_notice(caplog,
     assert len(sent) == 1
     assert sent[0][0] == "+15551234567"
     assert "internal error" in sent[0][1].lower()
+
+
+@pytest.mark.asyncio
+async def test_status_command_fastlane_bypasses_busy_concurrency_semaphore(tmp_path):
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    daemon._shutdown_requested = False
+    daemon._concurrency_sem = asyncio.Semaphore(1)
+    await daemon._concurrency_sem.acquire()  # Simulate a long task occupying the worker slot.
+    daemon._last_rowid = None
+    daemon._startup_time = datetime.now(UTC)
+    daemon._last_messages_db_error_at = 0.0
+    daemon._last_state_db_error_at = 0.0
+
+    chat_db = tmp_path / "chat.db"
+    chat_db.write_text("", encoding="utf-8")
+
+    daemon.settings = SimpleNamespace(
+        allowed_senders=["+15551234567"],
+        only_poll_allowed_senders=True,
+        poll_interval_seconds=0,
+        messages_db_path=chat_db,
+        startup_catchup_window_seconds=0,
+        notify_blocked_senders=False,
+        notify_rate_limited_senders=False,
+    )
+    daemon.ingress = SimpleNamespace(
+        fetch_new=lambda **kwargs: [
+            InboundMessage(
+                id="2",
+                sender="+15551234567",
+                text="status",
+                received_at="2026-02-17T12:00:01Z",
+                is_from_me=False,
+            )
+        ]
+    )
+    daemon.policy = SimpleNamespace(
+        is_sender_allowed=lambda sender: True,
+        is_under_rate_limit=lambda sender, now: True,
+    )
+    daemon.store = SimpleNamespace(set_state=lambda key, value: None)
+    sent: list[tuple[str, str]] = []
+    daemon.egress = SimpleNamespace(
+        was_recent_outbound=lambda sender, text: False,
+        send=lambda recipient, text: sent.append((recipient, text)),
+    )
+
+    class _StatusOrchestrator:
+        def handle_message(self, msg):
+            daemon._shutdown_requested = True
+            daemon.egress.send(msg.sender, "No pending approvals.")
+            return SimpleNamespace(kind=CommandKind.STATUS, response="No pending approvals.", run_id=None)
+
+    daemon.orchestrator = _StatusOrchestrator()
+
+    await asyncio.wait_for(daemon._poll_imessage_loop(), timeout=0.5)
+    assert any("No pending approvals." in body for _, body in sent)
