@@ -58,3 +58,8 @@ agent-office/*
 # Swift GUI app source (keep private/local), publish only dist artifacts.
 /app/
 /apps/
+
+# AppleFlowApp local build artifacts
+apps/macos/AppleFlowApp/.build/
+apps/macos/AppleFlowApp/.swiftpm/
+apps/macos/AppleFlowApp/DerivedData/
