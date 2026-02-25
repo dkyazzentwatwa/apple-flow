@@ -16,6 +16,7 @@ import logging
 import sqlite3
 import subprocess
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger("apple_flow.apple_tools")
 
@@ -31,7 +32,8 @@ NOTES:  notes_search "q" [--folder X] [--limit N]  |  notes_list [--folder X]  |
         notes_get_content "Title" [--folder X]  |  notes_create "Title" "Body" [--folder X]
         notes_append "Title" "Text" [--folder X]
 MAIL:   mail_list_unread [--limit N]  |  mail_search "q" [--days N]  |  mail_get_content "id"
-        mail_send "to@x.com" "Subject" "Body"
+        mail_send "to@x.com" "Subject" "Body"  |  mail_list_mailboxes [--account X] [--include-system true|false]
+        mail_move_to_label --message-id <id> [--message-id <id> ...] --label <name> [--account X] [--mailbox X]
 REMINDERS: reminders_list_lists  |  reminders_list [--list X] [--filter incomplete|complete|all]
            reminders_search "q" [--list X]  |  reminders_create "name" [--list X] [--due YYYY-MM-DD]
            reminders_complete "id" --list "List"
@@ -116,6 +118,11 @@ def _format_output(
     # Default: join first-field values
     first_key = list(data[0].keys())[0] if data else "id"
     return "\n".join(str(item.get(first_key, item)) for item in data)
+
+
+def _normalize_text_key(value: str) -> str:
+    """Normalize a value for case-insensitive matching."""
+    return " ".join((value or "").strip().lower().split())
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +586,252 @@ def mail_send(to_address: str, subject: str, body: str, account: str = "") -> bo
         return True
     logger.warning("mail_send failed: %s", result)
     return False
+
+
+def _mail_is_system_mailbox(name: str) -> bool:
+    """Return True when mailbox name appears to be a system mailbox."""
+    normalized = _normalize_text_key(name)
+    canonical = {
+        "inbox",
+        "sent",
+        "sent messages",
+        "sent mail",
+        "drafts",
+        "trash",
+        "deleted messages",
+        "junk",
+        "junk e-mail",
+        "spam",
+        "archive",
+        "all mail",
+        "important",
+        "starred",
+        "outbox",
+    }
+    return normalized in canonical
+
+
+def mail_list_mailboxes(
+    account: str = "",
+    include_system: bool = False,
+    as_text: bool = False,
+) -> list | str:
+    """List mailboxes for an account or default Mail context."""
+
+    if account:
+        esc_account = account.replace('"', '\\"')
+        fetch_block = f'''
+            try
+                set targetAccount to account "{esc_account}"
+            on error
+                return ""
+            end try
+            set allMailboxes to every mailbox of targetAccount
+        '''
+    else:
+        fetch_block = "set allMailboxes to every mailbox"
+
+    script = f'''
+    on sanitise(txt)
+        set AppleScript's text item delimiters to (ASCII character 9)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to (ASCII character 10)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to (ASCII character 13)
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to ""
+        return txt
+    end sanitise
+
+    tell application "Mail"
+        set outputLines to {{}}
+        {fetch_block}
+        repeat with mb in allMailboxes
+            set mbName to my sanitise(name of mb as text)
+            try
+                set accName to my sanitise(name of account of mb as text)
+            on error
+                set accName to ""
+            end try
+            set end of outputLines to mbName & (ASCII character 9) & accName
+        end repeat
+        set AppleScript's text item delimiters to (ASCII character 10)
+        return outputLines as text
+    end tell
+    '''
+
+    raw = _run_script(script, timeout=60.0)
+    parsed = _parse_delimited_output(raw, ["mailbox", "account"])
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in parsed:
+        mailbox = (row.get("mailbox") or "").strip()
+        account_name = (row.get("account") or "").strip()
+        if not mailbox:
+            continue
+        key = (_normalize_text_key(mailbox), _normalize_text_key(account_name))
+        if key in seen:
+            continue
+        seen.add(key)
+        is_system = _mail_is_system_mailbox(mailbox)
+        if not include_system and is_system:
+            continue
+        deduped.append(
+            {
+                "mailbox": mailbox,
+                "account": account_name,
+                "is_system_mailbox": is_system,
+            }
+        )
+
+    deduped.sort(key=lambda item: (_normalize_text_key(item.get("account", "")), _normalize_text_key(item["mailbox"])))
+    return _format_output(
+        deduped,
+        as_text=as_text,
+        format_fn=lambda x: (
+            f"{x.get('mailbox', '')}"
+            if not x.get("account")
+            else f"{x.get('mailbox', '')}  [{x.get('account', '')}]"
+        ),
+    )
+
+
+def _resolve_mail_label(
+    label: str,
+    mailboxes: list[dict[str, Any]],
+) -> tuple[str | None, list[str], str | None]:
+    """Resolve a label string to a mailbox name."""
+    candidates = [str(item.get("mailbox", "")).strip() for item in mailboxes if item.get("mailbox")]
+    if not candidates:
+        return None, [], "no mailboxes discovered"
+
+    normalized_candidates = {_normalize_text_key(name): name for name in candidates}
+    query = _normalize_text_key(label)
+    if query in normalized_candidates:
+        return normalized_candidates[query], [], None
+
+    alias = {
+        "action": "Action",
+        "focus": "Focus",
+        "noise": "Noise",
+        "delete": "Delete",
+    }.get(query)
+    if alias:
+        alias_norm = _normalize_text_key(alias)
+        if alias_norm in normalized_candidates:
+            return normalized_candidates[alias_norm], [], None
+
+    partial_matches = [
+        name for name in candidates
+        if query and (
+            query in _normalize_text_key(name)
+            or _normalize_text_key(name).startswith(query)
+        )
+    ]
+    # Keep deterministic, case-insensitive ordering for suggestions.
+    partial_matches = sorted(set(partial_matches), key=_normalize_text_key)
+    if len(partial_matches) == 1:
+        return partial_matches[0], [], None
+
+    suggestions = partial_matches[:5] if partial_matches else sorted(set(candidates), key=_normalize_text_key)[:5]
+    if not partial_matches:
+        return None, suggestions, f"no mailbox matches label '{label}'"
+    return None, suggestions, f"label '{label}' is ambiguous"
+
+
+def mail_move_to_label(
+    message_ids: list[str],
+    label: str,
+    account: str = "",
+    source_mailbox: str = "INBOX",
+) -> dict[str, Any]:
+    """Move messages to a destination mailbox resolved from a label."""
+    cleaned_ids = [str(mid).strip() for mid in (message_ids or []) if str(mid).strip()]
+    attempted = len(cleaned_ids)
+    if attempted == 0:
+        return {
+            "attempted": 0,
+            "moved": 0,
+            "failed": 0,
+            "destination_mailbox": None,
+            "results": [],
+            "error": "no message IDs provided",
+        }
+
+    mailbox_rows = mail_list_mailboxes(account=account, include_system=True, as_text=False)
+    if not isinstance(mailbox_rows, list):
+        mailbox_rows = []
+    destination, suggestions, resolution_error = _resolve_mail_label(label, mailbox_rows)
+    if not destination:
+        return {
+            "attempted": attempted,
+            "moved": 0,
+            "failed": attempted,
+            "destination_mailbox": None,
+            "results": [
+                {
+                    "message_id": mid,
+                    "status": "failed",
+                    "error": resolution_error or "destination label could not be resolved",
+                }
+                for mid in cleaned_ids
+            ],
+            "suggestions": suggestions,
+        }
+
+    esc_source = source_mailbox.replace('"', '\\"')
+    esc_dest = destination.replace('"', '\\"')
+    if account:
+        esc_account = account.replace('"', '\\"')
+        source_ref = f'mailbox "{esc_source}" of account "{esc_account}"'
+        dest_ref = f'mailbox "{esc_dest}" of account "{esc_account}"'
+    else:
+        source_ref = f'mailbox "{esc_source}"'
+        dest_ref = f'mailbox "{esc_dest}"'
+
+    moved = 0
+    results: list[dict[str, str]] = []
+    for message_id in cleaned_ids:
+        esc_id = message_id.replace('"', '\\"')
+        script = f'''
+        tell application "Mail"
+            try
+                set sourceBox to {source_ref}
+                set destinationBox to {dest_ref}
+                set matchedMsg to first message of sourceBox whose id as text is "{esc_id}"
+                move matchedMsg to destinationBox
+                return "ok"
+            on error errMsg
+                return "error: " & errMsg
+            end try
+        end tell
+        '''
+        result = _run_script(script, timeout=30.0)
+        if result == "ok":
+            moved += 1
+            results.append({"message_id": message_id, "status": "moved"})
+        else:
+            results.append(
+                {
+                    "message_id": message_id,
+                    "status": "failed",
+                    "error": result or "unknown error",
+                }
+            )
+
+    return {
+        "attempted": attempted,
+        "moved": moved,
+        "failed": attempted - moved,
+        "destination_mailbox": destination,
+        "results": results,
+    }
 
 
 # ---------------------------------------------------------------------------

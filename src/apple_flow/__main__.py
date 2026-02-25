@@ -18,7 +18,9 @@ from .apple_tools import (
     calendar_list_events,
     calendar_search,
     mail_get_content,
+    mail_list_mailboxes,
     mail_list_unread,
+    mail_move_to_label,
     mail_search,
     mail_send,
     messages_list_recent_chats,
@@ -81,6 +83,44 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
     as_text: bool = args.text
     limit: int = args.limit
 
+    def _boolish(value: str | None, default: bool = False) -> bool:
+        if value is None:
+            return default
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+        return default
+
+    def _message_ids_from_args() -> list[str]:
+        ids = [m.strip() for m in (args.message_ids or []) if m and m.strip()]
+        if args.input_file:
+            path = Path(args.input_file)
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(payload, list):
+                    for item in payload:
+                        if isinstance(item, str):
+                            value = item.strip()
+                            if value:
+                                ids.append(value)
+                        elif isinstance(item, dict):
+                            value = str(item.get("message_id", "")).strip()
+                            if value:
+                                ids.append(value)
+            except Exception as exc:
+                print(f"Failed to read --input-file: {exc}", file=sys.stderr)
+                raise SystemExit(1) from exc
+        # Keep stable ordering and uniqueness.
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for item in ids:
+            if item not in seen:
+                seen.add(item)
+                deduped.append(item)
+        return deduped
+
     def _output(result) -> None:
         if isinstance(result, str):
             print(result)
@@ -128,6 +168,10 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
             raise SystemExit(1)
         _output(mail_search(positional[0], account=args.account or "", mailbox=args.mailbox or "INBOX", limit=limit, max_age_days=args.days or 30, as_text=as_text))
 
+    elif command == "mail_list_mailboxes":
+        include_system = _boolish(args.include_system, default=False)
+        _output(mail_list_mailboxes(account=args.account or "", include_system=include_system, as_text=as_text))
+
     elif command == "mail_get_content":
         if not positional:
             print("Usage: apple-flow tools mail_get_content <message_id>", file=sys.stderr)
@@ -139,6 +183,23 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
             print("Usage: apple-flow tools mail_send <to> <subject> <body>", file=sys.stderr)
             raise SystemExit(1)
         _output(mail_send(positional[0], positional[1], positional[2], account=args.account or ""))
+
+    elif command == "mail_move_to_label":
+        message_ids = _message_ids_from_args()
+        if not args.label or not message_ids:
+            print(
+                "Usage: apple-flow tools mail_move_to_label --label <name> --message-id <id> [--message-id <id> ...] [--input-file ids.json] [--account X] [--mailbox X]",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        _output(
+            mail_move_to_label(
+                message_ids=message_ids,
+                label=args.label,
+                account=args.account or "",
+                source_mailbox=args.mailbox or "INBOX",
+            )
+        )
 
     # ── Reminders ──────────────────────────────────────────────────────────
     elif command == "reminders_list_lists":
@@ -247,6 +308,10 @@ def main() -> None:
     parser.add_argument("--cal", dest="cal", metavar="CALENDAR", help="Calendar name")
     parser.add_argument("--account", dest="account", metavar="ACCOUNT", help="Mail account name")
     parser.add_argument("--mailbox", dest="mailbox", metavar="MAILBOX", help="Mail mailbox name")
+    parser.add_argument("--include-system", dest="include_system", metavar="BOOL", help="Include system mailboxes (true|false)")
+    parser.add_argument("--label", dest="label", metavar="LABEL", help="Destination label/mailbox name")
+    parser.add_argument("--message-id", dest="message_ids", action="append", help="Mail message ID (repeatable)")
+    parser.add_argument("--input-file", dest="input_file", metavar="PATH", help="JSON file containing message IDs")
     parser.add_argument("--limit", dest="limit", type=int, default=20, metavar="N", help="Maximum results")
     parser.add_argument("--days", dest="days", type=int, default=None, metavar="N", help="Day range")
     parser.add_argument("--filter", dest="filter", metavar="FILTER", help="incomplete|complete|all")

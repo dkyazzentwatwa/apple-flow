@@ -17,7 +17,9 @@ from apple_flow.apple_tools import (
     calendar_list_events,
     calendar_search,
     mail_get_content,
+    mail_list_mailboxes,
     mail_list_unread,
+    mail_move_to_label,
     mail_search,
     mail_send,
     messages_list_recent_chats,
@@ -442,6 +444,103 @@ class TestMailSearch:
     def test_returns_empty_on_failure(self):
         with patch("subprocess.run", return_value=_err_result()):
             assert mail_search("q") == []
+
+
+class TestMailListMailboxes:
+    def test_returns_mailboxes_without_system_by_default(self):
+        raw = "Action\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai\nFocus\tdavid@techtiff.ai"
+        with patch("subprocess.run", return_value=_ok_result(raw)):
+            result = mail_list_mailboxes(account="david@techtiff.ai")
+            assert isinstance(result, list)
+            assert [row["mailbox"] for row in result] == ["Action", "Focus"]
+
+    def test_include_system_true_keeps_system_mailboxes(self):
+        raw = "Action\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
+        with patch("subprocess.run", return_value=_ok_result(raw)):
+            result = mail_list_mailboxes(account="david@techtiff.ai", include_system=True)
+            assert isinstance(result, list)
+            assert [row["mailbox"] for row in result] == ["Action", "INBOX"]
+            assert result[1]["is_system_mailbox"] is True
+
+    def test_as_text_returns_string(self):
+        raw = "Action\tdavid@techtiff.ai"
+        with patch("subprocess.run", return_value=_ok_result(raw)):
+            result = mail_list_mailboxes(account="david@techtiff.ai", as_text=True)
+            assert isinstance(result, str)
+            assert "Action" in result
+
+    def test_returns_empty_on_failure(self):
+        with patch("subprocess.run", return_value=_err_result()):
+            assert mail_list_mailboxes() == []
+
+    def test_returns_empty_on_timeout(self):
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("osascript", 30)):
+            assert mail_list_mailboxes() == []
+
+    def test_returns_empty_on_file_not_found(self):
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            assert mail_list_mailboxes() == []
+
+
+class TestMailMoveToLabel:
+    def test_moves_message_with_exact_label(self):
+        raw_mailboxes = "Action\tdavid@techtiff.ai\nFocus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok")]):
+            result = mail_move_to_label(["123"], label="Focus", account="david@techtiff.ai", source_mailbox="INBOX")
+            assert result["attempted"] == 1
+            assert result["moved"] == 1
+            assert result["destination_mailbox"] == "Focus"
+            assert result["results"][0]["status"] == "moved"
+
+    def test_resolves_alias_label(self):
+        raw_mailboxes = "Action\tdavid@techtiff.ai\nFocus\tdavid@techtiff.ai"
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok")]):
+            result = mail_move_to_label(["123"], label="focus", account="david@techtiff.ai")
+            assert result["moved"] == 1
+            assert result["destination_mailbox"] == "Focus"
+
+    def test_resolves_unambiguous_partial_label(self):
+        raw_mailboxes = "Focus\tdavid@techtiff.ai\nAction\tdavid@techtiff.ai"
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok")]):
+            result = mail_move_to_label(["123"], label="foc", account="david@techtiff.ai")
+            assert result["moved"] == 1
+            assert result["destination_mailbox"] == "Focus"
+
+    def test_returns_error_for_ambiguous_label(self):
+        raw_mailboxes = "Focus\tdavid@techtiff.ai\nFollow Ups\tdavid@techtiff.ai"
+        with patch("subprocess.run", return_value=_ok_result(raw_mailboxes)):
+            result = mail_move_to_label(["123"], label="fo", account="david@techtiff.ai")
+            assert result["moved"] == 0
+            assert result["failed"] == 1
+            assert result["destination_mailbox"] is None
+            assert "suggestions" in result
+
+    def test_returns_error_for_no_match_with_suggestions(self):
+        raw_mailboxes = "Action\tdavid@techtiff.ai\nFocus\tdavid@techtiff.ai\nNoise\tdavid@techtiff.ai"
+        with patch("subprocess.run", return_value=_ok_result(raw_mailboxes)):
+            result = mail_move_to_label(["123"], label="urgent", account="david@techtiff.ai")
+            assert result["moved"] == 0
+            assert result["failed"] == 1
+            assert result["destination_mailbox"] is None
+            assert "Action" in result.get("suggestions", [])
+
+    def test_handles_missing_message(self):
+        raw_mailboxes = "Focus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("error: not found")]):
+            result = mail_move_to_label(["missing-id"], label="focus", account="david@techtiff.ai")
+            assert result["attempted"] == 1
+            assert result["moved"] == 0
+            assert result["failed"] == 1
+            assert result["results"][0]["status"] == "failed"
+
+    def test_handles_timeout_without_raising(self):
+        raw_mailboxes = "Focus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), subprocess.TimeoutExpired("osascript", 30)]):
+            result = mail_move_to_label(["123"], label="focus", account="david@techtiff.ai")
+            assert result["attempted"] == 1
+            assert result["moved"] == 0
+            assert result["failed"] == 1
+            assert result["results"][0]["status"] == "failed"
 
 
 class TestMailGetContent:
