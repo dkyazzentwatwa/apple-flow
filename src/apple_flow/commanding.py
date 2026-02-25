@@ -97,6 +97,9 @@ def parse_command(raw_text: str) -> ParsedCommand:
     if lowered == "status":
         return ParsedCommand(kind=CommandKind.STATUS, payload="")
 
+    if lowered.startswith("status "):
+        return ParsedCommand(kind=CommandKind.STATUS, payload=text.split(" ", 1)[1].strip())
+
     if lowered in {"clear context", "new chat", "reset context"}:
         return ParsedCommand(kind=CommandKind.CLEAR_CONTEXT, payload="")
 

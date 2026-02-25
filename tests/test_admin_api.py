@@ -24,11 +24,21 @@ class InMemoryStore:
 
 
 def test_admin_endpoints_expose_state():
-    app = build_app(store=InMemoryStore())
-    client = TestClient(app)
+    import os
 
-    assert client.get("/health").status_code == 200
-    assert client.get("/sessions").status_code == 200
-    assert client.get("/approvals/pending").status_code == 200
-    assert client.get("/runs/run1").status_code == 200
-    assert client.post("/approvals/req1/override", json={"status": "approved"}).status_code == 200
+    old_token = os.environ.get("apple_flow_admin_api_token")
+    os.environ["apple_flow_admin_api_token"] = ""
+    try:
+        app = build_app(store=InMemoryStore())
+        client = TestClient(app)
+
+        assert client.get("/health").status_code == 200
+        assert client.get("/sessions").status_code == 200
+        assert client.get("/approvals/pending").status_code == 200
+        assert client.get("/runs/run1").status_code == 200
+        assert client.post("/approvals/req1/override", json={"status": "approved"}).status_code == 200
+    finally:
+        if old_token is not None:
+            os.environ["apple_flow_admin_api_token"] = old_token
+        else:
+            os.environ.pop("apple_flow_admin_api_token", None)

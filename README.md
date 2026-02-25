@@ -235,7 +235,8 @@ You should get a reply within seconds.
 | `approve <id>` | ✅ Execute a queued task |
 | `deny <id>` | ❌ Cancel a queued task |
 | `deny all` | 🗑️ Cancel all pending approvals |
-| `status` | 📊 Show pending approvals |
+| `status` | 📊 Show pending approvals + active runs |
+| `status <run_id|request_id>` | 🔎 Show timeline/details for one run/request |
 | `health:` | 🏥 Daemon health check |
 | `history: [query]` | 🔍 Message history |
 | `usage` | 📈 Token usage stats |
@@ -251,6 +252,15 @@ Prefix any command with `@alias` to target a specific workspace:
 task: @web-app deploy to staging
 @api show recent errors
 ```
+
+### Approval Lifecycle Guarantees
+
+- Every approved run now attempts to send a terminal outcome: completed, failed, or checkpoint/re-approval needed.
+- Long-running work sends milestone and heartbeat updates by default (bounded to avoid spam).
+- Timeout or blocker output creates a checkpoint approval on the same run (`awaiting_approval`) so you can resume with:
+  - `approve <new_request_id>`
+  - `approve <new_request_id> <extra instructions>`
+- Use `status` to see what is currently running, and `status <run_id|request_id>` to inspect recent timeline events.
 
 ---
 

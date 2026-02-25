@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from apple_flow.mail_ingress import AppleMailIngress
 
 
@@ -192,3 +194,23 @@ def test_trigger_tag_only_marks_processed_emails_as_read(monkeypatch):
     assert len(marked_ids) == 1
     assert "10" in marked_ids[0]
     assert "11" not in marked_ids[0]
+
+
+def test_mark_as_read_targets_ids_directly(monkeypatch):
+    ingress = AppleMailIngress()
+    captured: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("apple_flow.mail_ingress.subprocess.run", fake_run)
+
+    ingress._mark_as_read(["42", "43"])
+
+    script = captured["cmd"][2]
+    assert 'first message of inbox whose id as text is "42"' in script
+    assert 'first message of inbox whose id as text is "43"' in script
+    assert "every message of inbox whose read status is false" not in script
+    assert captured["kwargs"]["timeout"] == 30

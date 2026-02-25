@@ -19,6 +19,12 @@ def test_parse_approval_commands():
     assert deny.payload == "req-9"
 
 
+def test_parse_status_with_target():
+    parsed = parse_command("status req_1234")
+    assert parsed.kind is CommandKind.STATUS
+    assert parsed.payload == "req_1234"
+
+
 def test_parse_fallback_to_chat():
     parsed = parse_command("hello there")
     assert parsed.kind is CommandKind.CHAT

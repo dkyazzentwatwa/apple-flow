@@ -197,6 +197,27 @@ class SQLiteStore:
             row = conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
             return self._row_to_dict(row)
 
+    def list_active_runs(self, limit: int = 20) -> list[dict[str, Any]]:
+        """List active (non-terminal) runs sorted by most recently updated."""
+        conn = self._connect()
+        active_states = (
+            RunState.PLANNING.value,
+            RunState.AWAITING_APPROVAL.value,
+            RunState.EXECUTING.value,
+            RunState.VERIFYING.value,
+        )
+        with self._lock:
+            rows = conn.execute(
+                """
+                SELECT * FROM runs
+                WHERE state IN (?, ?, ?, ?)
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (*active_states, limit),
+            ).fetchall()
+            return [self._row_to_dict(row) for row in rows if row is not None]
+
     def get_run_source_context(self, run_id: str) -> dict[str, Any] | None:
         """Get the source context for a run (reminder_id, note_id, etc.)"""
         run = self.get_run(run_id)
@@ -288,6 +309,10 @@ class SQLiteStore:
                 """,
                 (event_id, run_id, step, event_type, json.dumps(payload)),
             )
+            conn.execute(
+                "UPDATE runs SET updated_at = CURRENT_TIMESTAMP WHERE run_id = ?",
+                (run_id,),
+            )
             conn.commit()
 
     def list_events(self, limit: int = 200) -> list[dict[str, Any]]:
@@ -297,7 +322,62 @@ class SQLiteStore:
                 "SELECT * FROM events ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
-            return [self._row_to_dict(row) for row in rows if row is not None]
+            events = []
+            for row in rows:
+                data = self._row_to_dict(row)
+                if data is None:
+                    continue
+                try:
+                    data["payload"] = json.loads(data.pop("payload_json", "{}"))
+                except json.JSONDecodeError:
+                    data["payload"] = {}
+                events.append(data)
+            return events
+
+    def list_events_for_run(self, run_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        conn = self._connect()
+        with self._lock:
+            rows = conn.execute(
+                """
+                SELECT * FROM events
+                WHERE run_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (run_id, limit),
+            ).fetchall()
+            events = []
+            for row in rows:
+                data = self._row_to_dict(row)
+                if data is None:
+                    continue
+                try:
+                    data["payload"] = json.loads(data.pop("payload_json", "{}"))
+                except json.JSONDecodeError:
+                    data["payload"] = {}
+                events.append(data)
+            return events
+
+    def get_latest_event_for_run(self, run_id: str) -> dict[str, Any] | None:
+        events = self.list_events_for_run(run_id, limit=1)
+        if not events:
+            return None
+        return events[0]
+
+    def count_run_events(self, run_id: str, event_type: str | None = None) -> int:
+        conn = self._connect()
+        with self._lock:
+            if event_type:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM events WHERE run_id = ? AND event_type = ?",
+                    (run_id, event_type),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM events WHERE run_id = ?",
+                    (run_id,),
+                ).fetchone()
+            return int(row[0]) if row is not None else 0
 
     def set_state(self, key: str, value: str) -> None:
         conn = self._connect()

@@ -268,6 +268,9 @@ class RelayDaemon:
             auto_context_messages=settings.auto_context_messages,
             enable_progress_streaming=settings.enable_progress_streaming,
             progress_update_interval_seconds=settings.progress_update_interval_seconds,
+            execution_heartbeat_seconds=settings.execution_heartbeat_seconds,
+            checkpoint_on_timeout=settings.checkpoint_on_timeout,
+            max_resume_attempts=settings.max_resume_attempts,
             enable_verifier=settings.enable_verifier,
             enable_attachments=settings.enable_attachments,
             personality_prompt=settings.personality_prompt,
@@ -593,30 +596,49 @@ class RelayDaemon:
 
                 async def _dispatch_imessage(msg):
                     async with self._concurrency_sem:
-                        started_at = time.monotonic()
-                        result = await asyncio.to_thread(self.orchestrator.handle_message, msg)
-                        duration = time.monotonic() - started_at
-                        if result.response in {"ignored_empty", "ignored_missing_chat_prefix"}:
+                        try:
+                            started_at = time.monotonic()
+                            result = await asyncio.to_thread(self.orchestrator.handle_message, msg)
+                            duration = time.monotonic() - started_at
+                            if result.response in {"ignored_empty", "ignored_missing_chat_prefix"}:
+                                logger.info(
+                                    "Ignored rowid=%s sender=%s reason=%s",
+                                    msg.id,
+                                    msg.sender,
+                                    result.response,
+                                )
+                                return
                             logger.info(
-                                "Ignored rowid=%s sender=%s reason=%s",
+                                "Handled rowid=%s sender=%s kind=%s run_id=%s duration=%.2fs",
                                 msg.id,
                                 msg.sender,
-                                result.response,
+                                result.kind.value,
+                                result.run_id,
+                                duration,
                             )
-                            return
-                        logger.info(
-                            "Handled rowid=%s sender=%s kind=%s run_id=%s duration=%.2fs",
-                            msg.id,
-                            msg.sender,
-                            result.kind.value,
-                            result.run_id,
-                            duration,
-                        )
+                        except Exception as exc:
+                            logger.exception(
+                                "Unhandled iMessage dispatch failure rowid=%s sender=%s: %s",
+                                msg.id,
+                                msg.sender,
+                                exc,
+                            )
+                            try:
+                                self.egress.send(
+                                    msg.sender,
+                                    "⚠️ I hit an internal error while handling that request. "
+                                    "Please send `status` and retry if needed.",
+                                )
+                            except Exception:
+                                logger.exception(
+                                    "Failed to send fallback iMessage error rowid=%s sender=%s",
+                                    msg.id,
+                                    msg.sender,
+                                )
 
                 if dispatchable:
                     await asyncio.gather(
-                        *[asyncio.create_task(_dispatch_imessage(msg)) for msg in dispatchable],
-                        return_exceptions=True,
+                        *[asyncio.create_task(_dispatch_imessage(msg)) for msg in dispatchable]
                     )
             except sqlite3.OperationalError as exc:
                 if "unable to open database file" in str(exc).lower():
@@ -667,38 +689,58 @@ class RelayDaemon:
 
                 async def _dispatch_mail(msg):
                     async with self._concurrency_sem:
-                        started_at = time.monotonic()
-                        result = await asyncio.to_thread(self.mail_orchestrator.handle_message, msg)
-                        duration = time.monotonic() - started_at
-                        if result.response in {"ignored_empty", "ignored_missing_chat_prefix"}:
+                        try:
+                            started_at = time.monotonic()
+                            result = await asyncio.to_thread(self.mail_orchestrator.handle_message, msg)
+                            duration = time.monotonic() - started_at
+                            if result.response in {"ignored_empty", "ignored_missing_chat_prefix", "duplicate"}:
+                                if result.response == "duplicate":
+                                    logger.info(
+                                        "Ignoring duplicate inbound email id=%s sender=%s",
+                                        msg.id,
+                                        msg.sender,
+                                    )
+                                else:
+                                    logger.info(
+                                        "Ignored email id=%s sender=%s reason=%s",
+                                        msg.id,
+                                        msg.sender,
+                                        result.response,
+                                    )
+                                return
                             logger.info(
-                                "Ignored email id=%s sender=%s reason=%s",
+                                "Handled email id=%s sender=%s kind=%s run_id=%s duration=%.2fs",
                                 msg.id,
                                 msg.sender,
-                                result.response,
+                                result.kind.value,
+                                result.run_id,
+                                duration,
                             )
-                            return
-                        logger.info(
-                            "Handled email id=%s sender=%s kind=%s run_id=%s duration=%.2fs",
-                            msg.id,
-                            msg.sender,
-                            result.kind.value,
-                            result.run_id,
-                            duration,
-                        )
-                        # Forward all mail responses to owner via iMessage
-                        if self._mail_owner and result.response:
-                            preview = result.response[:200]
-                            if result.kind.value in ("task", "project"):
-                                imsg = f"📧 Mail from {msg.sender} needs approval.\n\n{preview}"
-                            else:
-                                imsg = f"📧 Mail from {msg.sender}\n\n{preview}"
-                            self.egress.send(self._mail_owner, imsg)
+                            # Forward actionable mail responses to owner via iMessage.
+                            if self._mail_owner and result.response:
+                                logger.info(
+                                    "Forwarding mail response to owner sender=%s kind=%s chars=%s",
+                                    msg.sender,
+                                    result.kind.value,
+                                    len(result.response),
+                                )
+                                preview = result.response[:200]
+                                if result.kind.value in ("task", "project"):
+                                    imsg = f"📧 Mail from {msg.sender} needs approval.\n\n{preview}"
+                                else:
+                                    imsg = f"📧 Mail from {msg.sender}\n\n{preview}"
+                                self.egress.send(self._mail_owner, imsg)
+                        except Exception as exc:
+                            logger.exception(
+                                "Unhandled mail dispatch failure id=%s sender=%s: %s",
+                                msg.id,
+                                msg.sender,
+                                exc,
+                            )
 
                 if dispatchable_mail:
                     await asyncio.gather(
-                        *[asyncio.create_task(_dispatch_mail(msg)) for msg in dispatchable_mail],
-                        return_exceptions=True,
+                        *[asyncio.create_task(_dispatch_mail(msg)) for msg in dispatchable_mail]
                     )
             except Exception as exc:
                 logger.exception("Mail polling loop error: %s", exc)
@@ -738,36 +780,43 @@ class RelayDaemon:
 
                 async def _dispatch_reminder(msg):
                     async with self._concurrency_sem:
-                        started_at = time.monotonic()
-                        result = await asyncio.to_thread(self.reminders_orchestrator.handle_message, msg)
-                        duration = time.monotonic() - started_at
-                        reminder_id = msg.context.get("reminder_id", "")
-                        logger.info(
-                            "Handled reminder id=%s kind=%s run_id=%s duration=%.2fs",
-                            msg.id,
-                            result.kind.value,
-                            result.run_id,
-                            duration,
-                        )
-                        if result.response and reminder_id:
-                            if result.kind.value in ("task", "project"):
-                                self.reminders_egress.annotate_reminder(
-                                    reminder_id,
-                                    f"[Apple Flow] Awaiting approval — check iMessage.\n\n{result.response[:500]}",
-                                )
-                            else:
-                                list_name = msg.context.get("list_name", self.settings.reminders_list_name)
-                                self.reminders_egress.move_to_archive(
-                                    reminder_id=reminder_id,
-                                    result_text=f"[Apple Flow Result]\n\n{result.response}",
-                                    source_list_name=list_name,
-                                    archive_list_name=self.settings.reminders_archive_list_name,
-                                )
+                        try:
+                            started_at = time.monotonic()
+                            result = await asyncio.to_thread(self.reminders_orchestrator.handle_message, msg)
+                            duration = time.monotonic() - started_at
+                            reminder_id = msg.context.get("reminder_id", "")
+                            logger.info(
+                                "Handled reminder id=%s kind=%s run_id=%s duration=%.2fs",
+                                msg.id,
+                                result.kind.value,
+                                result.run_id,
+                                duration,
+                            )
+                            if result.response and reminder_id:
+                                if result.kind.value in ("task", "project"):
+                                    self.reminders_egress.annotate_reminder(
+                                        reminder_id,
+                                        f"[Apple Flow] Awaiting approval — check iMessage.\n\n{result.response[:500]}",
+                                    )
+                                else:
+                                    list_name = msg.context.get("list_name", self.settings.reminders_list_name)
+                                    self.reminders_egress.move_to_archive(
+                                        reminder_id=reminder_id,
+                                        result_text=f"[Apple Flow Result]\n\n{result.response}",
+                                        source_list_name=list_name,
+                                        archive_list_name=self.settings.reminders_archive_list_name,
+                                    )
+                        except Exception as exc:
+                            logger.exception(
+                                "Unhandled reminders dispatch failure id=%s sender=%s: %s",
+                                msg.id,
+                                msg.sender,
+                                exc,
+                            )
 
                 if dispatchable_reminders:
                     await asyncio.gather(
-                        *[asyncio.create_task(_dispatch_reminder(msg)) for msg in dispatchable_reminders],
-                        return_exceptions=True,
+                        *[asyncio.create_task(_dispatch_reminder(msg)) for msg in dispatchable_reminders]
                     )
             except Exception as exc:
                 logger.exception("Reminders polling loop error: %s", exc)
@@ -797,33 +846,40 @@ class RelayDaemon:
 
                 async def _dispatch_note(msg):
                     async with self._concurrency_sem:
-                        started_at = time.monotonic()
-                        result = await asyncio.to_thread(self.notes_orchestrator.handle_message, msg)
-                        duration = time.monotonic() - started_at
-                        note_id = msg.context.get("note_id", "")
-                        logger.info("Handled note id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
-                        if result.response and note_id:
-                            folder_name = msg.context.get("folder_name", self.settings.notes_folder_name)
-                            if result.kind.value in ("task", "project"):
-                                self.notes_egress.append_result(
-                                    note_id,
-                                    "[Apple Flow] Awaiting approval — check iMessage to approve/deny.",
-                                )
-                            else:
-                                self.notes_egress.move_to_archive(
-                                    note_id=note_id,
-                                    result_text=f"\n\n[Apple Flow Result]\n{result.response}",
-                                    source_folder_name=folder_name,
-                                    archive_subfolder_name=self.settings.notes_archive_folder_name,
-                                )
-                        # Mark processed only after the run path completes so failed runs can be retried.
-                        if note_id:
-                            self.notes_ingress.mark_processed(note_id)
+                        try:
+                            started_at = time.monotonic()
+                            result = await asyncio.to_thread(self.notes_orchestrator.handle_message, msg)
+                            duration = time.monotonic() - started_at
+                            note_id = msg.context.get("note_id", "")
+                            logger.info("Handled note id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
+                            if result.response and note_id:
+                                folder_name = msg.context.get("folder_name", self.settings.notes_folder_name)
+                                if result.kind.value in ("task", "project"):
+                                    self.notes_egress.append_result(
+                                        note_id,
+                                        "[Apple Flow] Awaiting approval — check iMessage to approve/deny.",
+                                    )
+                                else:
+                                    self.notes_egress.move_to_archive(
+                                        note_id=note_id,
+                                        result_text=f"\n\n[Apple Flow Result]\n{result.response}",
+                                        source_folder_name=folder_name,
+                                        archive_subfolder_name=self.settings.notes_archive_folder_name,
+                                    )
+                            # Mark processed only after the run path completes so failed runs can be retried.
+                            if note_id:
+                                self.notes_ingress.mark_processed(note_id)
+                        except Exception as exc:
+                            logger.exception(
+                                "Unhandled notes dispatch failure id=%s sender=%s: %s",
+                                msg.id,
+                                msg.sender,
+                                exc,
+                            )
 
                 if dispatchable_notes:
                     await asyncio.gather(
-                        *[asyncio.create_task(_dispatch_note(msg)) for msg in dispatchable_notes],
-                        return_exceptions=True,
+                        *[asyncio.create_task(_dispatch_note(msg)) for msg in dispatchable_notes]
                     )
             except Exception as exc:
                 logger.exception("Notes polling loop error: %s", exc)
@@ -856,24 +912,31 @@ class RelayDaemon:
 
                 async def _dispatch_calendar(msg):
                     async with self._concurrency_sem:
-                        started_at = time.monotonic()
-                        result = await asyncio.to_thread(self.calendar_orchestrator.handle_message, msg)
-                        duration = time.monotonic() - started_at
-                        event_id = msg.context.get("event_id", "")
-                        logger.info("Handled calendar event id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
-                        if result.response and event_id:
-                            if result.kind.value in ("task", "project"):
-                                self.calendar_egress.annotate_event(
-                                    event_id,
-                                    "[Apple Flow] Awaiting approval — check iMessage to approve/deny.",
-                                )
-                            else:
-                                self.calendar_egress.annotate_event(event_id, result.response)
+                        try:
+                            started_at = time.monotonic()
+                            result = await asyncio.to_thread(self.calendar_orchestrator.handle_message, msg)
+                            duration = time.monotonic() - started_at
+                            event_id = msg.context.get("event_id", "")
+                            logger.info("Handled calendar event id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
+                            if result.response and event_id:
+                                if result.kind.value in ("task", "project"):
+                                    self.calendar_egress.annotate_event(
+                                        event_id,
+                                        "[Apple Flow] Awaiting approval — check iMessage to approve/deny.",
+                                    )
+                                else:
+                                    self.calendar_egress.annotate_event(event_id, result.response)
+                        except Exception as exc:
+                            logger.exception(
+                                "Unhandled calendar dispatch failure id=%s sender=%s: %s",
+                                msg.id,
+                                msg.sender,
+                                exc,
+                            )
 
                 if dispatchable_calendar:
                     await asyncio.gather(
-                        *[asyncio.create_task(_dispatch_calendar(msg)) for msg in dispatchable_calendar],
-                        return_exceptions=True,
+                        *[asyncio.create_task(_dispatch_calendar(msg)) for msg in dispatchable_calendar]
                     )
             except Exception as exc:
                 logger.exception("Calendar polling loop error: %s", exc)

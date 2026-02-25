@@ -76,3 +76,31 @@ def test_reminders_archive_default_is_agent_archive(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = RelaySettings()
     assert settings.reminders_archive_list_name == "agent-archive"
+
+
+def test_liveness_and_checkpoint_defaults(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.enable_progress_streaming is True
+    assert settings.execution_heartbeat_seconds == 120.0
+    assert settings.checkpoint_on_timeout is True
+    assert settings.max_resume_attempts == 5
+
+
+def test_empty_admin_port_and_memory_fall_back_to_defaults(monkeypatch, tmp_path):
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(
+        "\n".join(
+            [
+                "apple_flow_admin_port=",
+                "apple_flow_enable_memory=",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    settings = RelaySettings()
+
+    assert settings.admin_port == 8787
+    assert settings.enable_memory is False

@@ -35,19 +35,31 @@ class TaskStore:
 
 
 def test_task_endpoint_returns_503_without_orchestrator():
-    app = build_app(store=TaskStore())
-    client = TestClient(app)
+    import os
 
-    resp = client.post("/task", json={"sender": "+15551234567", "text": "idea: test"})
-    assert resp.status_code == 503
-    assert "Orchestrator not available" in resp.json()["detail"]
+    old_token = os.environ.get("apple_flow_admin_api_token")
+    os.environ["apple_flow_admin_api_token"] = ""
+    try:
+        app = build_app(store=TaskStore())
+        client = TestClient(app)
+
+        resp = client.post("/task", json={"sender": "+15551234567", "text": "idea: test"})
+        assert resp.status_code == 503
+        assert "Orchestrator not available" in resp.json()["detail"]
+    finally:
+        if old_token is not None:
+            os.environ["apple_flow_admin_api_token"] = old_token
+        else:
+            os.environ.pop("apple_flow_admin_api_token", None)
 
 
 def test_task_endpoint_processes_message():
     import os
     # Temporarily clear allowed_senders so no sender check blocks us
     old_val = os.environ.get("apple_flow_allowed_senders")
+    old_token = os.environ.get("apple_flow_admin_api_token")
     os.environ["apple_flow_allowed_senders"] = ""
+    os.environ["apple_flow_admin_api_token"] = ""
     try:
         app = build_app(store=TaskStore())
         mock_orch = MagicMock()
@@ -71,13 +83,19 @@ def test_task_endpoint_processes_message():
             os.environ["apple_flow_allowed_senders"] = old_val
         else:
             os.environ.pop("apple_flow_allowed_senders", None)
+        if old_token is not None:
+            os.environ["apple_flow_admin_api_token"] = old_token
+        else:
+            os.environ.pop("apple_flow_admin_api_token", None)
 
 
 def test_task_endpoint_validates_sender():
     """When allowed_senders is set, non-allowlisted senders get 403."""
     import os
     old_val = os.environ.get("apple_flow_allowed_senders")
+    old_token = os.environ.get("apple_flow_admin_api_token")
     os.environ["apple_flow_allowed_senders"] = "+15551234567"
+    os.environ["apple_flow_admin_api_token"] = ""
     try:
         app = build_app(store=TaskStore())
         mock_orch = MagicMock()
@@ -91,21 +109,35 @@ def test_task_endpoint_validates_sender():
             os.environ["apple_flow_allowed_senders"] = old_val
         else:
             os.environ.pop("apple_flow_allowed_senders", None)
+        if old_token is not None:
+            os.environ["apple_flow_admin_api_token"] = old_token
+        else:
+            os.environ.pop("apple_flow_admin_api_token", None)
 
 
 def test_task_endpoint_requires_fields():
-    app = build_app(store=TaskStore())
-    app.state.orchestrator = MagicMock()
-    client = TestClient(app)
+    import os
 
-    # Missing text
-    resp = client.post("/task", json={"sender": "+15551234567"})
-    assert resp.status_code == 422
+    old_token = os.environ.get("apple_flow_admin_api_token")
+    os.environ["apple_flow_admin_api_token"] = ""
+    try:
+        app = build_app(store=TaskStore())
+        app.state.orchestrator = MagicMock()
+        client = TestClient(app)
 
-    # Missing sender
-    resp = client.post("/task", json={"text": "hello"})
-    assert resp.status_code == 422
+        # Missing text
+        resp = client.post("/task", json={"sender": "+15551234567"})
+        assert resp.status_code == 422
 
-    # Empty sender
-    resp = client.post("/task", json={"sender": "", "text": "hello"})
-    assert resp.status_code == 422
+        # Missing sender
+        resp = client.post("/task", json={"text": "hello"})
+        assert resp.status_code == 422
+
+        # Empty sender
+        resp = client.post("/task", json={"sender": "", "text": "hello"})
+        assert resp.status_code == 422
+    finally:
+        if old_token is not None:
+            os.environ["apple_flow_admin_api_token"] = old_token
+        else:
+            os.environ.pop("apple_flow_admin_api_token", None)

@@ -221,8 +221,19 @@ Send periodic iMessage updates during long-running tasks.
 
 | Variable | Default | Description |
 |---|---|---|
-| `apple_flow_enable_progress_streaming` | `false` | Enable intermediate progress messages. |
+| `apple_flow_enable_progress_streaming` | `true` | Enable intermediate milestone/progress messages. |
 | `apple_flow_progress_update_interval_seconds` | `30` | Minimum seconds between progress updates. |
+| `apple_flow_execution_heartbeat_seconds` | `120` | Heartbeat interval for long-running execution attempts. |
+| `apple_flow_checkpoint_on_timeout` | `true` | Convert timeout outcomes into checkpoint + re-approval instead of immediate failure (until max attempts). |
+| `apple_flow_max_resume_attempts` | `5` | Max execution attempts for one run before final failure. |
+
+When a run pauses at a checkpoint, continue it with:
+
+```bash
+approve <new_request_id>
+# or with additional guidance:
+approve <new_request_id> <extra instructions>
+```
 
 ---
 

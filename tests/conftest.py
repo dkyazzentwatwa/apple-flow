@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -110,6 +111,7 @@ class FakeStore:
         risk_level: str,
         source_context: dict[str, Any] | None = None,
     ) -> None:
+        now = datetime.now(UTC).isoformat()
         self.runs[run_id] = {
             "run_id": run_id,
             "state": state,
@@ -118,14 +120,24 @@ class FakeStore:
             "cwd": cwd,
             "risk_level": risk_level,
             "source_context": source_context,
+            "created_at": now,
+            "updated_at": now,
         }
 
     def update_run_state(self, run_id: str, state: str) -> None:
         if run_id in self.runs:
             self.runs[run_id]["state"] = state
+            self.runs[run_id]["updated_at"] = datetime.now(UTC).isoformat()
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         return self.runs.get(run_id)
+
+    def list_active_runs(self, limit: int = 20) -> list[dict[str, Any]]:
+        active = [
+            run for run in self.runs.values()
+            if run.get("state") in {"planning", "awaiting_approval", "executing", "verifying"}
+        ]
+        return active[:limit]
 
     def get_run_source_context(self, run_id: str) -> dict[str, Any] | None:
         """Get the source context for a run (reminder_id, note_id, etc.)"""
@@ -175,11 +187,28 @@ class FakeStore:
                 "step": step,
                 "event_type": event_type,
                 "payload": payload,
+                "created_at": datetime.now(UTC).isoformat(),
             }
         )
 
     def list_events(self, limit: int = 200) -> list[dict[str, Any]]:
         return self.events[:limit]
+
+    def list_events_for_run(self, run_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        events = [event for event in self.events if event.get("run_id") == run_id]
+        return list(reversed(events))[:limit]
+
+    def get_latest_event_for_run(self, run_id: str) -> dict[str, Any] | None:
+        events = self.list_events_for_run(run_id, limit=1)
+        if not events:
+            return None
+        return events[0]
+
+    def count_run_events(self, run_id: str, event_type: str | None = None) -> int:
+        events = self.list_events_for_run(run_id, limit=500)
+        if event_type:
+            events = [event for event in events if event.get("event_type") == event_type]
+        return len(events)
 
     def set_state(self, key: str, value: str) -> None:
         self.state[key] = value

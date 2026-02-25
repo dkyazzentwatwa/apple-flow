@@ -241,19 +241,27 @@ class AppleMailIngress:
         else:
             mailbox_ref = "inbox"
 
-        # Build AppleScript to mark specific messages as read
-        id_checks = " or ".join([f'(id of msg as text) is "{mid.replace(chr(34), "")}"' for mid in message_ids if mid])
-        if not id_checks:
+        sanitized_ids = [mid.replace(chr(34), "") for mid in message_ids if mid]
+        if not sanitized_ids:
             return
+
+        id_lines = "\n".join(
+            [
+                f'''
+                try
+                    set matchedMsg to first message of {mailbox_ref} whose id as text is "{mid}"
+                    set read status of matchedMsg to true
+                on error
+                    -- Skip messages that can no longer be found.
+                end try
+                '''
+                for mid in sanitized_ids
+            ]
+        )
 
         script = f'''
         tell application "Mail"
-            set msgs to every message of {mailbox_ref} whose read status is false
-            repeat with msg in msgs
-                if ({id_checks}) then
-                    set read status of msg to true
-                end if
-            end repeat
+{id_lines}
         end tell
         '''
 
@@ -262,10 +270,10 @@ class AppleMailIngress:
                 ["osascript", "-e", script],
                 capture_output=True,
                 text=True,
-                timeout=15,
+                timeout=30,
             )
         except Exception as exc:
-            logger.warning("Failed to mark emails as read: %s", exc)
+            logger.warning("Failed to mark %s email(s) as read: %s", len(sanitized_ids), exc)
 
     @staticmethod
     def _extract_email_address(sender_raw: str) -> str:

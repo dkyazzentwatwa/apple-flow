@@ -42,6 +42,9 @@ class RelayOrchestrator:
         auto_context_messages: int = 0,
         enable_progress_streaming: bool = False,
         progress_update_interval_seconds: float = 30.0,
+        execution_heartbeat_seconds: float = 120.0,
+        checkpoint_on_timeout: bool = True,
+        max_resume_attempts: int = 5,
         enable_verifier: bool = False,
         enable_attachments: bool = False,
         personality_prompt: str = "",
@@ -87,6 +90,9 @@ class RelayOrchestrator:
             approval_ttl_minutes=approval_ttl_minutes,
             enable_progress_streaming=enable_progress_streaming,
             progress_update_interval_seconds=progress_update_interval_seconds,
+            execution_heartbeat_seconds=execution_heartbeat_seconds,
+            checkpoint_on_timeout=checkpoint_on_timeout,
+            max_resume_attempts=max_resume_attempts,
             enable_verifier=enable_verifier,
             reminders_egress=reminders_egress,
             reminders_archive_list_name=reminders_archive_list_name,
@@ -162,21 +168,7 @@ class RelayOrchestrator:
             return self._handle_logs(message.sender, command.payload)
 
         if command.kind is CommandKind.STATUS:
-            pending = self.store.list_pending_approvals()
-            if not pending:
-                response = "No pending approvals."
-            else:
-                lines = [f"Pending approvals ({len(pending)}):"]
-                for req in pending:
-                    req_id = req.get("request_id", "?")
-                    preview = req.get("command_preview", "")[:80].replace("\n", " ")
-                    lines.append(f"\n{req_id}")
-                    lines.append(f"  {preview}")
-                lines.append("\nReply `approve <id>` or `deny <id>` to act on one.")
-                lines.append("Reply `deny all` to cancel all.")
-                response = "\n".join(lines)
-            self.egress.send(message.sender, response)
-            return OrchestrationResult(kind=command.kind, response=response)
+            return self._handle_status(message.sender, command.payload)
 
         if command.kind is CommandKind.DENY_ALL:
             if not hasattr(self.store, "deny_all_approvals"):
@@ -234,6 +226,126 @@ class RelayOrchestrator:
         return OrchestrationResult(kind=command.kind, response=response)
 
     # --- Health Dashboard ---
+
+    def _handle_status(self, sender: str, payload: str) -> OrchestrationResult:
+        if payload:
+            response = self._status_for_target(payload)
+        else:
+            response = self._status_overview()
+        self.egress.send(sender, response)
+        return OrchestrationResult(kind=CommandKind.STATUS, response=response)
+
+    def _status_overview(self) -> str:
+        pending = self.store.list_pending_approvals()
+        lines: list[str] = []
+
+        if not pending:
+            lines.append("No pending approvals.")
+        else:
+            lines.append(f"Pending approvals ({len(pending)}):")
+            for req in pending:
+                req_id = req.get("request_id", "?")
+                preview = (req.get("command_preview", "") or "")[:80].replace("\n", " ")
+                lines.append(f"\n{req_id}")
+                lines.append(f"  {preview}")
+            lines.append("\nReply `approve <id>` or `deny <id>` to act on one.")
+            lines.append("Reply `deny all` to cancel all.")
+
+        active_runs: list[dict[str, Any]] = []
+        if hasattr(self.store, "list_active_runs"):
+            active_runs = self.store.list_active_runs(limit=10)
+        elif hasattr(self.store, "get_stats"):
+            runs_by_state = self.store.get_stats().get("runs_by_state", {})
+            active_count = sum(
+                runs_by_state.get(state, 0)
+                for state in ["planning", "executing", "verifying", "awaiting_approval"]
+            )
+            if active_count:
+                lines.append(f"\nActive runs: {active_count} (details unavailable in this store)")
+
+        if active_runs:
+            lines.append(f"\nActive runs ({len(active_runs)}):")
+            for run in active_runs:
+                run_id = run.get("run_id", "?")
+                state = run.get("state", "?")
+                intent = run.get("intent", "?")
+                updated = run.get("updated_at", "?")
+                snippet = ""
+                if hasattr(self.store, "get_latest_event_for_run"):
+                    latest_event = self.store.get_latest_event_for_run(run_id)
+                    if latest_event:
+                        event_type = latest_event.get("event_type", "")
+                        payload = latest_event.get("payload", {})
+                        if isinstance(payload, dict):
+                            raw_snippet = payload.get("snippet") or payload.get("reason", "")
+                            if raw_snippet:
+                                snippet = f" | {event_type}: {str(raw_snippet)[:60]}"
+                lines.append(f"  {run_id} [{intent}] {state} (updated: {updated}){snippet}")
+
+            lines.append("\nUse `status <run_id>` or `status <request_id>` for details.")
+
+        return "\n".join(lines)
+
+    def _status_for_target(self, target: str) -> str:
+        target = target.strip()
+        if not target:
+            return self._status_overview()
+
+        approval = self.store.get_approval(target)
+        run_id = None
+        if approval:
+            run_id = approval.get("run_id")
+        elif target.startswith("run_"):
+            run_id = target
+        else:
+            maybe_run = self.store.get_run(target)
+            if maybe_run:
+                run_id = target
+
+        if not run_id:
+            return f"No run or approval found for `{target}`."
+
+        run = self.store.get_run(run_id)
+        if not run:
+            return f"Run `{run_id}` not found."
+
+        lines = [
+            f"Run: {run_id}",
+            f"State: {run.get('state', '?')}",
+            f"Intent: {run.get('intent', '?')}",
+            f"Workspace: {run.get('cwd', '?')}",
+            f"Created: {run.get('created_at', '?')}",
+            f"Updated: {run.get('updated_at', '?')}",
+        ]
+
+        if approval:
+            lines.append(
+                f"Approval: {approval.get('request_id', '?')} ({approval.get('status', '?')}, "
+                f"expires {approval.get('expires_at', '?')})"
+            )
+
+        events: list[dict[str, Any]] = []
+        if hasattr(self.store, "list_events_for_run"):
+            events = self.store.list_events_for_run(run_id, limit=8)
+        elif hasattr(self.store, "list_events"):
+            all_events = self.store.list_events(limit=200)
+            events = [event for event in all_events if event.get("run_id") == run_id][:8]
+
+        if events:
+            lines.append("Recent events:")
+            for event in events:
+                payload = event.get("payload", {})
+                snippet = ""
+                if isinstance(payload, dict):
+                    snippet = payload.get("snippet") or payload.get("reason") or payload.get("request_id") or ""
+                lines.append(
+                    f"  - {event.get('created_at', '?')} {event.get('step', '?')}:"
+                    f"{event.get('event_type', '?')} {str(snippet)[:80]}"
+                )
+        else:
+            lines.append("Recent events: none")
+
+        return "\n".join(lines)
 
     def _handle_health(self, sender: str) -> OrchestrationResult:
         parts = ["Apple Flow Health"]

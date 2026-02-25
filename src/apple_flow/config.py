@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -134,8 +134,11 @@ class RelaySettings(BaseSettings):
     calendar_lookahead_minutes: int = 5
 
     # Progress streaming for long tasks
-    enable_progress_streaming: bool = False
+    enable_progress_streaming: bool = True
     progress_update_interval_seconds: float = 30.0
+    execution_heartbeat_seconds: float = 120.0
+    checkpoint_on_timeout: bool = True
+    max_resume_attempts: int = 5
 
     # Executor / verifier behaviour
     enable_verifier: bool = False  # run a verification turn after execution (adds latency)
@@ -226,6 +229,15 @@ class RelaySettings(BaseSettings):
             if stripped.startswith("["):
                 return json.loads(stripped)
             return [part.strip() for part in stripped.split(" ") if part.strip()]
+        return value
+
+    @field_validator("admin_port", "enable_memory", mode="before")
+    @classmethod
+    def _empty_string_uses_default(cls, value: Any, info: ValidationInfo) -> Any:
+        if value == "":
+            field = cls.model_fields.get(info.field_name)
+            if field is not None:
+                return field.default
         return value
 
     @field_validator("allowed_workspaces", mode="after")
