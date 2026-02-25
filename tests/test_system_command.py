@@ -119,6 +119,41 @@ def test_system_unknown_subcommand(fake_connector, fake_egress, fake_store):
     assert called == [], "Callback must NOT be called for unknown subcommand"
     assert len(fake_egress.messages) == 1
     assert "unknown system command" in fake_egress.messages[0][1].lower()
+    assert "kill provider" in fake_egress.messages[0][1].lower()
+
+
+def test_system_kill_provider_invokes_killswitch(fake_connector, fake_egress, fake_store):
+    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
+
+    with patch.object(
+        orchestrator,
+        "_kill_provider_processes",
+        return_value="Killed 2 active Gemini provider process(es).",
+    ) as mock_kill:
+        result = orchestrator.handle_message(_make_message("system: kill provider"))
+
+    assert result.kind is CommandKind.SYSTEM
+    mock_kill.assert_called_once_with()
+    assert len(fake_egress.messages) == 1
+    assert "killed 2 active gemini provider process(es)." in fake_egress.messages[0][1].lower()
+
+
+def test_mark_inflight_runs_failed_marks_only_running_states(fake_connector, fake_egress, fake_store):
+    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
+
+    fake_store.create_run("run_plan", "+15550000001", "task", "planning", "/tmp", "execute")
+    fake_store.create_run("run_exec", "+15550000001", "task", "executing", "/tmp", "execute")
+    fake_store.create_run("run_verify", "+15550000001", "task", "verifying", "/tmp", "execute")
+    fake_store.create_run("run_wait", "+15550000001", "task", "awaiting_approval", "/tmp", "execute")
+    fake_store.create_run("run_done", "+15550000001", "task", "completed", "/tmp", "execute")
+
+    updated = orchestrator._mark_inflight_runs_failed("test reason")
+    assert updated == 3
+    assert fake_store.get_run("run_plan")["state"] == "failed"
+    assert fake_store.get_run("run_exec")["state"] == "failed"
+    assert fake_store.get_run("run_verify")["state"] == "failed"
+    assert fake_store.get_run("run_wait")["state"] == "awaiting_approval"
+    assert fake_store.get_run("run_done")["state"] == "completed"
 
 
 def test_system_no_callback_is_safe(fake_connector, fake_egress, fake_store):

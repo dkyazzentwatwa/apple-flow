@@ -57,8 +57,15 @@ def test_run_turn_success():
         response = connector.run_turn("+15551234567", "test prompt")
 
         args, kwargs = mock_run.call_args
-        assert args[0][:4] == ["gemini", "--model", "gemini-3-flash-preview", "-p"]
-        assert args[0][4].endswith("test prompt")
+        assert args[0][:6] == [
+            "gemini",
+            "--model",
+            "gemini-3-flash-preview",
+            "--approval-mode",
+            "yolo",
+            "-p",
+        ]
+        assert args[0][6].endswith("test prompt")
         assert kwargs["cwd"] == "/tmp"
         assert kwargs["timeout"] == 30.0
         assert kwargs["capture_output"] is True
@@ -91,6 +98,17 @@ def test_run_turn_no_model_flag_when_empty():
         connector.run_turn("+15551234567", "test prompt")
         args, _ = mock_run.call_args
         assert "--model" not in args[0]
+        assert "--approval-mode" in args[0]
+
+
+def test_run_turn_no_approval_mode_when_empty():
+    connector = GeminiCliConnector(model="", approval_mode="", inject_tools_context=False)
+    mock_result = Mock(returncode=0, stdout="response", stderr="")
+
+    with patch("subprocess.run", return_value=mock_result) as mock_run:
+        connector.run_turn("+15551234567", "test prompt")
+        args, _ = mock_run.call_args
+        assert "--approval-mode" not in args[0]
 
 
 def test_run_turn_with_context():

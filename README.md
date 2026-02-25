@@ -250,7 +250,7 @@ You should get a reply within seconds.
 | `usage` | 📈 Token usage stats |
 | `clear context` | 🔄 Reset conversation |
 | `system: mute/unmute` | 🔇 Control companion messages |
-| `system: stop/restart` | ⏹️ Daemon controls |
+| `system: stop/restart/kill provider` | ⏹️ Daemon/provider controls |
 
 ### Multi-Workspace Routing
 
@@ -301,10 +301,12 @@ apple_flow_codex_cli_model=  # uses Codex default
 ```env
 apple_flow_connector=gemini-cli
 apple_flow_gemini_cli_model=gemini-3-flash-preview  # default
+apple_flow_gemini_cli_approval_mode=yolo            # default
 ```
 
 - Uses `gemini -p` for stateless execution
 - Default model: `gemini-3-flash-preview`
+- Default approval mode: `yolo` (auto-approve tool actions)
 - Requires Google Gemini account
 
 ### Cline CLI (Multi-Provider)

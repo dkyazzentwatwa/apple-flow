@@ -110,3 +110,9 @@ def test_gemini_cli_model_default(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = RelaySettings()
     assert settings.gemini_cli_model == "gemini-3-flash-preview"
+
+
+def test_gemini_cli_approval_mode_default(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.gemini_cli_approval_mode == "yolo"

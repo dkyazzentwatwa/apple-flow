@@ -163,6 +163,7 @@ class RelayDaemon:
                 timeout=settings.codex_turn_timeout_seconds,
                 context_window=settings.gemini_cli_context_window,
                 model=settings.gemini_cli_model,
+                approval_mode=settings.gemini_cli_approval_mode,
                 inject_tools_context=settings.inject_tools_context,
                 system_prompt=settings.personality_prompt.replace(
                     "{workspace}", settings.default_workspace
@@ -1001,7 +1002,7 @@ class RelayDaemon:
             f"ℹ️  {mode_hint}",
             "✅ approve <id>  |  ❌ deny <id>  |  ❌❌ deny all  |  📊 status",
             "🏥 health  |  🔍 history: [query]  |  📈 usage  |  📋 logs  |  🔄 clear context",
-            "🔧 system: stop  |  system: restart",
+            "🔧 system: stop  |  restart  |  kill provider",
             "",
             "Power users:",
             "⚡ task: <cmd>        execute  (needs ✅)",

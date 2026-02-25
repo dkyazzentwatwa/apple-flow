@@ -55,6 +55,7 @@ class RelaySettings(BaseSettings):
     gemini_cli_command: str = "gemini"
     gemini_cli_context_window: int = 10
     gemini_cli_model: str = "gemini-3-flash-preview"
+    gemini_cli_approval_mode: str = "yolo"  # default | auto_edit | yolo | plan
 
     admin_host: str = "127.0.0.1"
     admin_port: int = 8787

@@ -4,7 +4,9 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -12,7 +14,7 @@ from uuid import uuid4
 
 from .approval import ApprovalHandler, OrchestrationResult
 from .commanding import CommandKind, ParsedCommand, is_likely_mutating, parse_command
-from .models import InboundMessage
+from .models import InboundMessage, RunState
 from .notes_logging import log_to_notes
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
 
@@ -575,6 +577,208 @@ class RelayOrchestrator:
             logger.warning("Failed to trigger launchctl kickstart for %s: %s", target, exc)
         return False
 
+    def _provider_label(self) -> str:
+        name = self.connector.__class__.__name__.lower()
+        if "gemini" in name:
+            return "Gemini"
+        if "claude" in name:
+            return "Claude"
+        if "cline" in name:
+            return "Cline"
+        if "codex" in name:
+            return "Codex"
+        return self.connector.__class__.__name__
+
+    def _provider_command_patterns(self) -> list[str]:
+        patterns: list[str] = []
+        for attr in ("gemini_command", "claude_command", "codex_command", "cline_command"):
+            raw = getattr(self.connector, attr, "")
+            if not isinstance(raw, str):
+                continue
+            value = raw.strip().lower()
+            if not value:
+                continue
+            patterns.append(value)
+            patterns.append(Path(value).name)
+        provider = self._provider_label().lower()
+        if provider:
+            patterns.append(provider)
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for pattern in patterns:
+            if pattern and pattern not in seen:
+                seen.add(pattern)
+                deduped.append(pattern)
+        return deduped
+
+    @staticmethod
+    def _load_process_table() -> dict[int, tuple[int, str]]:
+        """Return process table as {pid: (ppid, command)}."""
+        table: dict[int, tuple[int, str]] = {}
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,ppid=,command="],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=8,
+        )
+        if result.returncode != 0:
+            return table
+        for line in result.stdout.splitlines():
+            parts = line.strip().split(None, 2)
+            if len(parts) < 3:
+                continue
+            try:
+                pid = int(parts[0])
+                ppid = int(parts[1])
+            except ValueError:
+                continue
+            table[pid] = (ppid, parts[2])
+        return table
+
+    @staticmethod
+    def _collect_descendants(table: dict[int, tuple[int, str]], root_pid: int) -> set[int]:
+        descendants: set[int] = set()
+        frontier = [root_pid]
+        while frontier:
+            parent = frontier.pop()
+            for pid, (ppid, _) in table.items():
+                if ppid == parent and pid not in descendants:
+                    descendants.add(pid)
+                    frontier.append(pid)
+        return descendants
+
+    @staticmethod
+    def _pid_alive(pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    def _mark_inflight_runs_failed(self, reason: str) -> int:
+        if not hasattr(self.store, "list_active_runs") or not hasattr(self.store, "update_run_state"):
+            return 0
+        runs = self.store.list_active_runs(limit=200)
+        if not runs:
+            return 0
+        inflight_states = {
+            RunState.PLANNING.value,
+            RunState.EXECUTING.value,
+            RunState.VERIFYING.value,
+        }
+        updated = 0
+        for run in runs:
+            run_id = run.get("run_id")
+            state = str(run.get("state", ""))
+            if not run_id or state not in inflight_states:
+                continue
+            self.store.update_run_state(run_id, RunState.FAILED.value)
+            self._create_event(
+                run_id=run_id,
+                step="executor",
+                event_type="execution_failed",
+                payload={"reason": reason, "source": "system_kill_provider"},
+            )
+            updated += 1
+        return updated
+
+    def _kill_provider_processes(self) -> str:
+        provider = self._provider_label()
+        patterns = self._provider_command_patterns()
+        table = self._load_process_table()
+        if not patterns or not table:
+            reconciled = self._mark_inflight_runs_failed("provider kill requested (process inspection unavailable)")
+            if reconciled:
+                return (
+                    f"Could not inspect running {provider} processes. "
+                    f"Marked {reconciled} in-flight run(s) as failed."
+                )
+            return f"Could not inspect running {provider} processes."
+
+        daemon_pid = os.getpid()
+        descendants = self._collect_descendants(table, daemon_pid)
+        if not descendants:
+            reconciled = self._mark_inflight_runs_failed("provider kill requested (no subprocess descendants)")
+            if reconciled:
+                return (
+                    f"No active {provider} provider subprocesses found. "
+                    f"Marked {reconciled} in-flight run(s) as failed."
+                )
+            return f"No active {provider} provider subprocesses found."
+
+        matching_roots = {
+            pid
+            for pid in descendants
+            if any(pattern in table[pid][1].lower() for pattern in patterns)
+        }
+        if not matching_roots:
+            reconciled = self._mark_inflight_runs_failed("provider kill requested (no matching subprocesses)")
+            if reconciled:
+                return (
+                    f"No active {provider} provider subprocesses found. "
+                    f"Marked {reconciled} in-flight run(s) as failed."
+                )
+            return f"No active {provider} provider subprocesses found."
+
+        # Kill matching provider processes and any descendants they spawned.
+        to_kill = set(matching_roots)
+        frontier = list(matching_roots)
+        while frontier:
+            parent = frontier.pop()
+            for pid, (ppid, _) in table.items():
+                if ppid == parent and pid not in to_kill:
+                    to_kill.add(pid)
+                    frontier.append(pid)
+
+        terminated = 0
+        for pid in sorted(to_kill, reverse=True):
+            try:
+                os.kill(pid, signal.SIGTERM)
+                terminated += 1
+            except ProcessLookupError:
+                continue
+            except PermissionError:
+                logger.warning("Permission denied sending SIGTERM to pid=%s", pid)
+
+        time.sleep(0.2)
+
+        force_killed = 0
+        for pid in sorted(to_kill, reverse=True):
+            if not self._pid_alive(pid):
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                force_killed += 1
+            except ProcessLookupError:
+                continue
+            except PermissionError:
+                logger.warning("Permission denied sending SIGKILL to pid=%s", pid)
+
+        reconciled = self._mark_inflight_runs_failed("provider process killed by system command")
+        if terminated == 0 and force_killed == 0:
+            if reconciled:
+                return (
+                    f"No active {provider} provider subprocesses found. "
+                    f"Marked {reconciled} in-flight run(s) as failed."
+                )
+            return f"No active {provider} provider subprocesses found."
+        if force_killed:
+            base = (
+                f"Killed {terminated + force_killed} active {provider} provider process(es) "
+                f"({force_killed} required SIGKILL)."
+            )
+            if reconciled:
+                return f"{base} Marked {reconciled} in-flight run(s) as failed."
+            return base
+        base = f"Killed {terminated} active {provider} provider process(es)."
+        if reconciled:
+            return f"{base} Marked {reconciled} in-flight run(s) as failed."
+        return base
+
     def _handle_system(self, sender: str, subcommand: str) -> OrchestrationResult:
         sub = subcommand.strip().lower()
         if sub == "stop":
@@ -590,6 +794,9 @@ class RelayOrchestrator:
                 # Fallback for non-launchd runs: perform a graceful shutdown and let
                 # the external caller/supervisor bring the process back up.
                 self.shutdown_callback()
+        elif sub in {"kill provider", "killswitch", "kill ai"}:
+            response = self._kill_provider_processes()
+            self.egress.send(sender, response)
         elif sub == "mute":
             self.store.set_state("companion_muted", "true")
             response = "Companion muted. Send 'system: unmute' to re-enable proactive messages."
@@ -609,7 +816,10 @@ class RelayOrchestrator:
                 response = "Office sync not enabled. Set apple_flow_enable_office_sync=true and apple_flow_supabase_service_key."
             self.egress.send(sender, response)
         else:
-            response = "Unknown system command. Use: system: stop | restart | mute | unmute | sync office"
+            response = (
+                "Unknown system command. Use: "
+                "system: stop | restart | kill provider | mute | unmute | sync office"
+            )
             self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.SYSTEM, response=sub)
 

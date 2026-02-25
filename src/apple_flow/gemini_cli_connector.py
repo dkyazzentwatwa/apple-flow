@@ -20,6 +20,7 @@ class GeminiCliConnector:
         timeout: float = 300.0,
         context_window: int = 10,
         model: str = "gemini-3-flash-preview",
+        approval_mode: str = "yolo",
         inject_tools_context: bool = True,
         system_prompt: str = "",
     ):
@@ -28,6 +29,7 @@ class GeminiCliConnector:
         self.timeout = timeout
         self.context_window = context_window
         self.model = model.strip()
+        self.approval_mode = approval_mode.strip().lower()
         self.inject_tools_context = inject_tools_context
         self.system_prompt = system_prompt.strip()
         self.soul_prompt: str = ""
@@ -60,6 +62,8 @@ class GeminiCliConnector:
         cmd = [self.gemini_command]
         if self.model:
             cmd.extend(["--model", self.model])
+        if self.approval_mode:
+            cmd.extend(["--approval-mode", self.approval_mode])
         cmd.extend(["-p", full_prompt])
         return cmd
 
