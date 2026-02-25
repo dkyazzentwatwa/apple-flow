@@ -70,16 +70,25 @@ class RunExecutor:
 
     async def run_forever(self, is_shutdown: Any) -> None:
         tasks = [asyncio.create_task(self._worker_loop(worker_id, is_shutdown)) for worker_id in self._worker_ids]
-        await asyncio.gather(*tasks)
+        try:
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            return
 
     async def _worker_loop(self, worker_id: str, is_shutdown: Any) -> None:
-        while not is_shutdown():
-            await self._maybe_recover_expired_jobs()
-            job = self.store.claim_next_run_job(worker_id=worker_id, lease_seconds=self.lease_seconds)
-            if not job:
-                await asyncio.sleep(0.25)
-                continue
-            await self._execute_job(worker_id=worker_id, job=job)
+        try:
+            while not is_shutdown():
+                await self._maybe_recover_expired_jobs()
+                job = self.store.claim_next_run_job(worker_id=worker_id, lease_seconds=self.lease_seconds)
+                if not job:
+                    await asyncio.sleep(0.25)
+                    continue
+                await self._execute_job(worker_id=worker_id, job=job)
+        except asyncio.CancelledError:
+            return
 
     async def _maybe_recover_expired_jobs(self) -> None:
         now = time.monotonic()
@@ -144,7 +153,7 @@ class RunExecutor:
             logger.exception("Run job failed job_id=%s run_id=%s: %s", job_id, run_id, exc)
         finally:
             keepalive.cancel()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(asyncio.CancelledError):
                 await keepalive
 
     async def _lease_keepalive(self, *, job_id: str, worker_id: str) -> None:

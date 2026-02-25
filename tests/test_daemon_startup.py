@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import apple_flow.daemon as daemon_module
 from apple_flow.commanding import CommandKind
 from apple_flow.daemon import (
     RelayDaemon,
@@ -294,3 +295,84 @@ async def test_status_command_fastlane_bypasses_busy_concurrency_semaphore(tmp_p
 
     await asyncio.wait_for(daemon._poll_imessage_loop(), timeout=0.5)
     assert any("No pending approvals." in body for _, body in sent)
+
+
+@pytest.mark.asyncio
+async def test_run_executor_loop_cancelled_is_not_logged_as_error(caplog):
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    daemon.run_executor = SimpleNamespace(
+        run_forever=lambda _is_shutdown: (_ for _ in ()).throw(asyncio.CancelledError())
+    )
+    daemon._shutdown_requested = True
+
+    caplog.set_level("INFO")
+    await daemon._run_executor_loop()
+
+    assert "Run executor loop cancelled during shutdown" in caplog.text
+    assert "Run executor loop error" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_run_forever_shutdown_does_not_raise_cancellederror():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    daemon._inflight_dispatch_tasks = set()
+    daemon._shutdown_requested = False
+    daemon.mail_ingress = None
+    daemon.reminders_ingress = None
+    daemon.notes_ingress = None
+    daemon.calendar_ingress = None
+    daemon.companion = None
+    daemon.ambient = None
+
+    async def _loop():
+        await asyncio.sleep(60)
+
+    daemon._poll_imessage_loop = _loop
+    daemon._run_executor_loop = _loop
+
+    task = asyncio.create_task(daemon.run_forever())
+    await asyncio.sleep(0)
+    task.cancel()
+    await task
+
+    assert task.done()
+    assert not task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_top_level_run_handles_cancellederror_gracefully(monkeypatch):
+    shutdown_called = {"value": False}
+
+    class _FakeDaemon:
+        def __init__(self, _settings):
+            self.settings = _settings
+
+        async def run_forever(self):
+            raise asyncio.CancelledError()
+
+        def shutdown(self):
+            shutdown_called["value"] = True
+
+        def request_shutdown(self):
+            pass
+
+        def send_startup_intro(self):
+            pass
+
+    settings = SimpleNamespace(
+        allowed_senders=[],
+        only_poll_allowed_senders=True,
+        enable_mail_polling=False,
+        enable_reminders_polling=False,
+        enable_notes_polling=False,
+        enable_calendar_polling=False,
+        enable_companion=False,
+        send_startup_intro=False,
+    )
+
+    monkeypatch.setattr(daemon_module, "RelaySettings", lambda: settings)
+    monkeypatch.setattr(daemon_module, "migrate_legacy_db_if_needed", lambda _settings: False)
+    monkeypatch.setattr(daemon_module, "RelayDaemon", _FakeDaemon)
+
+    await daemon_module.run()
+    assert shutdown_called["value"] is True

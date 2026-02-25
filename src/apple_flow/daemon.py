@@ -556,20 +556,26 @@ class RelayDaemon:
         logger.info("Shutdown complete")
 
     async def run_forever(self) -> None:
-        tasks = [self._poll_imessage_loop(), self._run_executor_loop()]
+        tasks = [asyncio.create_task(self._poll_imessage_loop()), asyncio.create_task(self._run_executor_loop())]
         if self.mail_ingress is not None:
-            tasks.append(self._poll_mail_loop())
+            tasks.append(asyncio.create_task(self._poll_mail_loop()))
         if self.reminders_ingress is not None:
-            tasks.append(self._poll_reminders_loop())
+            tasks.append(asyncio.create_task(self._poll_reminders_loop()))
         if self.notes_ingress is not None:
-            tasks.append(self._poll_notes_loop())
+            tasks.append(asyncio.create_task(self._poll_notes_loop()))
         if self.calendar_ingress is not None:
-            tasks.append(self._poll_calendar_loop())
+            tasks.append(asyncio.create_task(self._poll_calendar_loop()))
         if self.companion is not None:
-            tasks.append(self._companion_loop())
+            tasks.append(asyncio.create_task(self._companion_loop()))
         if self.ambient is not None:
-            tasks.append(self._ambient_loop())
-        await asyncio.gather(*tasks)
+            tasks.append(asyncio.create_task(self._ambient_loop()))
+        try:
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            return
         if self._inflight_dispatch_tasks:
             done, pending = await asyncio.wait(self._inflight_dispatch_tasks, timeout=5.0)
             if pending:
@@ -579,6 +585,9 @@ class RelayDaemon:
         """Background worker loop for durable run jobs."""
         try:
             await self.run_executor.run_forever(lambda: self._shutdown_requested)
+        except asyncio.CancelledError:
+            logger.info("Run executor loop cancelled during shutdown")
+            return
         except Exception as exc:
             logger.exception("Run executor loop error: %s", exc)
 
@@ -1182,6 +1191,8 @@ async def run() -> None:
 
     try:
         await daemon.run_forever()
+    except asyncio.CancelledError:
+        logger.info("Daemon run loop cancelled during shutdown")
     finally:
         daemon.shutdown()
 
