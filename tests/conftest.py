@@ -238,6 +238,17 @@ class FakeStore:
             "status": status,
         }
 
+    def cancel_run_jobs(self, run_id: str) -> int:
+        count = 0
+        for job in self.run_jobs.values():
+            if job.get("run_id") != run_id:
+                continue
+            if job.get("status") not in {"queued", "running"}:
+                continue
+            job["status"] = "cancelled"
+            count += 1
+        return count
+
     def get_stats(self) -> dict[str, Any]:
         runs_by_state: dict[str, int] = {}
         for run in self.runs.values():

@@ -5,6 +5,8 @@ import logging
 import subprocess
 from typing import Any
 
+from .process_registry import ManagedProcessRegistry
+
 logger = logging.getLogger("apple_flow.cline_connector")
 
 
@@ -47,6 +49,7 @@ class ClineConnector:
         self.model = model.strip()
         self.use_json = use_json
         self.act_mode = act_mode
+        self._processes = ManagedProcessRegistry("cline-cli")
 
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
@@ -163,25 +166,29 @@ class ClineConnector:
                 max_attempts,
             )
 
+            proc: subprocess.Popen[str] | None = None
             try:
-                result = subprocess.run(
+                proc = subprocess.Popen(
                     cmd,
                     cwd=self.workspace,
-                    capture_output=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     text=True,
-                    timeout=self.timeout,
-                    check=False,
+                    start_new_session=True,
                 )
+                self._processes.register(sender, proc)
+                stdout, stderr = proc.communicate(timeout=self.timeout)
+                returncode = int(proc.returncode or 0)
 
-                if result.returncode != 0:
-                    error_detail = self._extract_error(result)
+                if returncode != 0:
+                    error_detail = self._extract_error(stdout, stderr)
                     logger.error(
                         "Cline exec failed (attempt %d/%d): returncode=%d error=%r stdout_len=%d",
                         attempt,
                         max_attempts,
-                        result.returncode,
+                        returncode,
                         error_detail[:300],
-                        len(result.stdout or ""),
+                        len(stdout or ""),
                     )
                     last_error = error_detail
                     if attempt < max_attempts:
@@ -189,13 +196,13 @@ class ClineConnector:
                         _time.sleep(2)
                         continue
                     short_detail = (last_error[:200] + "...") if len(last_error) > 200 else last_error
-                    return f"Error: Cline execution failed (exit code {result.returncode}): {short_detail}"
+                    return f"Error: Cline execution failed (exit code {returncode}): {short_detail}"
 
                 # Parse response based on output mode
                 if self.use_json:
-                    response = self._parse_json_output(result.stdout)
+                    response = self._parse_json_output(stdout)
                 else:
-                    response = result.stdout.strip()
+                    response = stdout.strip()
 
                 if not response:
                     logger.warning("Cline exec returned empty response")
@@ -212,6 +219,8 @@ class ClineConnector:
                 return response
 
             except subprocess.TimeoutExpired:
+                if proc is not None:
+                    self._processes.terminate(proc)
                 logger.error(
                     "Cline exec timed out after %.1fs for sender=%s",
                     self.timeout,
@@ -224,16 +233,19 @@ class ClineConnector:
             except Exception as exc:
                 logger.exception("Unexpected error during Cline exec: %s", exc)
                 return f"Error: {type(exc).__name__}: {exc}"
+            finally:
+                if proc is not None:
+                    self._processes.unregister(proc)
 
         # Should not reach here, but safety net
         return f"Error: Cline execution failed after {max_attempts} attempts: {last_error[:200]}"
 
-    def _extract_error(self, result: subprocess.CompletedProcess[str]) -> str:
+    def _extract_error(self, stdout: str, stderr: str) -> str:
         """Extract a meaningful error message from a failed cline run."""
-        stderr_msg = result.stderr.strip() if result.stderr else ""
+        stderr_msg = stderr.strip() if stderr else ""
         stdout_error = ""
-        if result.stdout:
-            for line in result.stdout.splitlines():
+        if stdout:
+            for line in stdout.splitlines():
                 line = line.strip()
                 if not line:
                     continue
@@ -259,6 +271,7 @@ class ClineConnector:
 
         logger.info("Executing Cline CLI (streaming): sender=%s", sender)
 
+        proc: subprocess.Popen[str] | None = None
         try:
             proc = subprocess.Popen(
                 cmd,
@@ -266,7 +279,9 @@ class ClineConnector:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                start_new_session=True,
             )
+            self._processes.register(sender, proc)
 
             output_lines: list[str] = []
             assert proc.stdout is not None
@@ -304,17 +319,25 @@ class ClineConnector:
             return response
 
         except subprocess.TimeoutExpired:
-            proc.kill()
+            if proc is not None:
+                self._processes.terminate(proc)
             logger.error("Cline exec (streaming) timed out after %.1fs", self.timeout)
             return f"Error: Request timed out after {int(self.timeout)}s."
         except Exception as exc:
             logger.exception("Streaming exec error: %s", exc)
             # Fall back to regular execution
             return self.run_turn(thread_id, prompt)
+        finally:
+            if proc is not None:
+                self._processes.unregister(proc)
 
     def shutdown(self) -> None:
         """No-op: no persistent process to shut down."""
         logger.info("Cline CLI connector shutdown (no-op)")
+
+    def cancel_active_processes(self, thread_id: str | None = None) -> int:
+        """Cancel active Cline subprocesses for one sender or globally."""
+        return self._processes.cancel(thread_id)
 
     def _build_prompt_with_context(self, sender: str, prompt: str) -> str:
         """Build a prompt that includes recent conversation context.

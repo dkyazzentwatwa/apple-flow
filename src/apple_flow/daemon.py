@@ -1123,7 +1123,7 @@ class RelayDaemon:
             f"ℹ️  {mode_hint}",
             "✅ approve <id>  |  ❌ deny <id>  |  ❌❌ deny all  |  📊 status",
             "🏥 health  |  🔍 history: [query]  |  📈 usage  |  📋 logs  |  🔄 clear context",
-            "🔧 system: stop  |  restart  |  kill provider",
+            "🔧 system: stop  |  restart  |  kill provider  |  cancel run <run_id>",
             "",
             "Power users:",
             "⚡ task: <cmd>        execute  (needs ✅)",

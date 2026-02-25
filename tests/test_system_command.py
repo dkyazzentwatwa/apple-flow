@@ -141,20 +141,24 @@ def test_system_kill_provider_invokes_killswitch(fake_connector, fake_egress, fa
     assert "killed 2 active gemini provider process(es)." in fake_egress.messages[0][1].lower()
 
 
-def test_mark_inflight_runs_failed_marks_only_running_states(fake_connector, fake_egress, fake_store):
+def test_mark_inflight_runs_cancelled_marks_only_running_states(fake_connector, fake_egress, fake_store):
     orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
 
     fake_store.create_run("run_plan", "+15550000001", "task", "planning", "/tmp", "execute")
+    fake_store.create_run("run_queue", "+15550000001", "task", "queued", "/tmp", "execute")
+    fake_store.create_run("run_running", "+15550000001", "task", "running", "/tmp", "execute")
     fake_store.create_run("run_exec", "+15550000001", "task", "executing", "/tmp", "execute")
     fake_store.create_run("run_verify", "+15550000001", "task", "verifying", "/tmp", "execute")
     fake_store.create_run("run_wait", "+15550000001", "task", "awaiting_approval", "/tmp", "execute")
     fake_store.create_run("run_done", "+15550000001", "task", "completed", "/tmp", "execute")
 
-    updated = orchestrator._mark_inflight_runs_failed("test reason")
-    assert updated == 3
-    assert fake_store.get_run("run_plan")["state"] == "failed"
-    assert fake_store.get_run("run_exec")["state"] == "failed"
-    assert fake_store.get_run("run_verify")["state"] == "failed"
+    updated = orchestrator._mark_inflight_runs_cancelled("test reason")
+    assert updated == 5
+    assert fake_store.get_run("run_plan")["state"] == "cancelled"
+    assert fake_store.get_run("run_queue")["state"] == "cancelled"
+    assert fake_store.get_run("run_running")["state"] == "cancelled"
+    assert fake_store.get_run("run_exec")["state"] == "cancelled"
+    assert fake_store.get_run("run_verify")["state"] == "cancelled"
     assert fake_store.get_run("run_wait")["state"] == "awaiting_approval"
     assert fake_store.get_run("run_done")["state"] == "completed"
 

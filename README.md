@@ -313,6 +313,8 @@ You should get a reply within seconds.
 | `clear context` | 🔄 Reset conversation |
 | `system: mute/unmute` | 🔇 Control companion messages |
 | `system: stop/restart/kill provider` | ⏹️ Daemon/provider controls |
+| `system: cancel run <run_id>` | 🧨 Cancel one active run and kill its CLI process |
+| `system: killswitch` | 🚨 Emergency stop for all active provider CLI processes |
 
 ### Multi-Workspace Routing
 

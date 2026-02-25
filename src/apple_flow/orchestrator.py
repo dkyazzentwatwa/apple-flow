@@ -625,13 +625,16 @@ class RelayOrchestrator:
     def _load_process_table() -> dict[int, tuple[int, str]]:
         """Return process table as {pid: (ppid, command)}."""
         table: dict[int, tuple[int, str]] = {}
-        result = subprocess.run(
-            ["ps", "-axo", "pid=,ppid=,command="],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=8,
-        )
+        try:
+            result = subprocess.run(
+                ["ps", "-axo", "pid=,ppid=,command="],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=8,
+            )
+        except Exception:
+            return table
         if result.returncode != 0:
             return table
         for line in result.stdout.splitlines():
@@ -668,7 +671,7 @@ class RelayOrchestrator:
         except PermissionError:
             return True
 
-    def _mark_inflight_runs_failed(self, reason: str) -> int:
+    def _mark_inflight_runs_cancelled(self, reason: str) -> int:
         if not hasattr(self.store, "list_active_runs") or not hasattr(self.store, "update_run_state"):
             return 0
         runs = self.store.list_active_runs(limit=200)
@@ -676,6 +679,8 @@ class RelayOrchestrator:
             return 0
         inflight_states = {
             RunState.PLANNING.value,
+            RunState.QUEUED.value,
+            RunState.RUNNING.value,
             RunState.EXECUTING.value,
             RunState.VERIFYING.value,
         }
@@ -685,37 +690,51 @@ class RelayOrchestrator:
             state = str(run.get("state", ""))
             if not run_id or state not in inflight_states:
                 continue
-            self.store.update_run_state(run_id, RunState.FAILED.value)
+            if hasattr(self.store, "cancel_run_jobs"):
+                self.store.cancel_run_jobs(run_id)
+            self.store.update_run_state(run_id, RunState.CANCELLED.value)
             self._create_event(
                 run_id=run_id,
                 step="executor",
-                event_type="execution_failed",
-                payload={"reason": reason, "source": "system_kill_provider"},
+                event_type="execution_cancelled",
+                payload={"reason": reason, "source": "system_killswitch"},
             )
             updated += 1
         return updated
 
     def _kill_provider_processes(self) -> str:
         provider = self._provider_label()
+        killed_tracked = 0
+        if hasattr(self.connector, "cancel_active_processes"):
+            try:
+                killed_tracked = int(self.connector.cancel_active_processes())
+            except Exception:
+                logger.exception("Connector cancel_active_processes failed")
+
         patterns = self._provider_command_patterns()
         table = self._load_process_table()
         if not patterns or not table:
-            reconciled = self._mark_inflight_runs_failed("provider kill requested (process inspection unavailable)")
+            reconciled = self._mark_inflight_runs_cancelled("killswitch requested (process inspection unavailable)")
+            if killed_tracked:
+                base = f"Killed {killed_tracked} tracked {provider} process(es)."
+                if reconciled:
+                    return f"{base} Cancelled {reconciled} in-flight run(s)."
+                return base
             if reconciled:
                 return (
                     f"Could not inspect running {provider} processes. "
-                    f"Marked {reconciled} in-flight run(s) as failed."
+                    f"Cancelled {reconciled} in-flight run(s)."
                 )
             return f"Could not inspect running {provider} processes."
 
         daemon_pid = os.getpid()
         descendants = self._collect_descendants(table, daemon_pid)
         if not descendants:
-            reconciled = self._mark_inflight_runs_failed("provider kill requested (no subprocess descendants)")
-            if reconciled:
+            reconciled = self._mark_inflight_runs_cancelled("killswitch requested (no subprocess descendants)")
+            if killed_tracked or reconciled:
                 return (
-                    f"No active {provider} provider subprocesses found. "
-                    f"Marked {reconciled} in-flight run(s) as failed."
+                    f"Killed {killed_tracked} tracked {provider} process(es). "
+                    f"Cancelled {reconciled} in-flight run(s)."
                 )
             return f"No active {provider} provider subprocesses found."
 
@@ -725,11 +744,11 @@ class RelayOrchestrator:
             if any(pattern in table[pid][1].lower() for pattern in patterns)
         }
         if not matching_roots:
-            reconciled = self._mark_inflight_runs_failed("provider kill requested (no matching subprocesses)")
-            if reconciled:
+            reconciled = self._mark_inflight_runs_cancelled("killswitch requested (no matching subprocesses)")
+            if killed_tracked or reconciled:
                 return (
-                    f"No active {provider} provider subprocesses found. "
-                    f"Marked {reconciled} in-flight run(s) as failed."
+                    f"Killed {killed_tracked} tracked {provider} process(es). "
+                    f"Cancelled {reconciled} in-flight run(s)."
                 )
             return f"No active {provider} provider subprocesses found."
 
@@ -767,26 +786,72 @@ class RelayOrchestrator:
             except PermissionError:
                 logger.warning("Permission denied sending SIGKILL to pid=%s", pid)
 
-        reconciled = self._mark_inflight_runs_failed("provider process killed by system command")
-        if terminated == 0 and force_killed == 0:
+        reconciled = self._mark_inflight_runs_cancelled("provider process killed by system command")
+        total_killed = killed_tracked + terminated + force_killed
+        if total_killed == 0:
             if reconciled:
-                return (
-                    f"No active {provider} provider subprocesses found. "
-                    f"Marked {reconciled} in-flight run(s) as failed."
-                )
+                return f"No active {provider} provider subprocesses found. Cancelled {reconciled} in-flight run(s)."
             return f"No active {provider} provider subprocesses found."
         if force_killed:
             base = (
-                f"Killed {terminated + force_killed} active {provider} provider process(es) "
+                f"Killed {total_killed} active {provider} provider process(es) "
                 f"({force_killed} required SIGKILL)."
             )
             if reconciled:
-                return f"{base} Marked {reconciled} in-flight run(s) as failed."
+                return f"{base} Cancelled {reconciled} in-flight run(s)."
             return base
-        base = f"Killed {terminated} active {provider} provider process(es)."
+        base = f"Killed {total_killed} active {provider} provider process(es)."
         if reconciled:
-            return f"{base} Marked {reconciled} in-flight run(s) as failed."
+            return f"{base} Cancelled {reconciled} in-flight run(s)."
         return base
+
+    def _cancel_run_by_id(self, run_id: str) -> str:
+        run_id = run_id.strip()
+        if not run_id:
+            return "Usage: `system: cancel run <run_id>`"
+        run = self.store.get_run(run_id) if hasattr(self.store, "get_run") else None
+        if not run:
+            return f"Run `{run_id}` not found."
+
+        state = str(run.get("state", ""))
+        terminal_states = {
+            RunState.COMPLETED.value,
+            RunState.FAILED.value,
+            RunState.DENIED.value,
+            RunState.CANCELLED.value,
+        }
+        if state in terminal_states:
+            return f"Run `{run_id}` is already `{state}`."
+
+        sender = str(run.get("sender", "")).strip()
+        killed = 0
+        if hasattr(self.connector, "cancel_active_processes"):
+            try:
+                killed = int(self.connector.cancel_active_processes(sender or None))
+            except Exception:
+                logger.exception("Connector cancel_active_processes failed for run_id=%s", run_id)
+
+        cancelled_jobs = 0
+        if hasattr(self.store, "cancel_run_jobs"):
+            cancelled_jobs = int(self.store.cancel_run_jobs(run_id))
+
+        if hasattr(self.store, "update_run_state"):
+            self.store.update_run_state(run_id, RunState.CANCELLED.value)
+        self._create_event(
+            run_id=run_id,
+            step="executor",
+            event_type="execution_cancelled",
+            payload={
+                "reason": "cancel run requested by system command",
+                "source": "system_cancel_run",
+                "killed_processes": killed,
+                "cancelled_jobs": cancelled_jobs,
+            },
+        )
+        return (
+            f"Cancelled run `{run_id}`. "
+            f"Killed {killed} process(es), cancelled {cancelled_jobs} queued/running job(s)."
+        )
 
     def _handle_system(self, sender: str, subcommand: str) -> OrchestrationResult:
         sub = subcommand.strip().lower()
@@ -806,6 +871,12 @@ class RelayOrchestrator:
                 self.shutdown_callback()
         elif sub in {"kill provider", "killswitch", "kill ai"}:
             response = self._kill_provider_processes()
+            self.egress.send(sender, response)
+        elif sub.startswith("cancel run "):
+            response = self._cancel_run_by_id(sub.split(" ", 2)[2])
+            self.egress.send(sender, response)
+        elif sub.startswith("cancel "):
+            response = self._cancel_run_by_id(sub.split(" ", 1)[1])
             self.egress.send(sender, response)
         elif sub == "mute":
             self.store.set_state("companion_muted", "true")
@@ -828,7 +899,7 @@ class RelayOrchestrator:
         else:
             response = (
                 "Unknown system command. Use: "
-                "system: stop | restart | kill provider | mute | unmute | sync office"
+                "system: stop | restart | kill provider | cancel run <run_id> | mute | unmute | sync office"
             )
             self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.SYSTEM, response=sub)
