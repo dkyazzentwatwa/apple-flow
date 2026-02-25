@@ -797,6 +797,7 @@ class RelayOrchestrator:
                 self.shutdown_callback()
         elif sub == "restart":
             response = "Apple Flow restarting... (text 'health' to confirm it's back)"
+            self._mark_restart_echo_suppress(sender, response)
             self.egress.send(sender, response)
             restarted = self._restart_launchd_service()
             if not restarted and self.shutdown_callback is not None:
@@ -831,6 +832,23 @@ class RelayOrchestrator:
             )
             self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.SYSTEM, response=sub)
+
+    def _mark_restart_echo_suppress(self, sender: str, text: str) -> None:
+        """Persist a short-lived marker to suppress restart-message echo after reboot."""
+        try:
+            self.store.set_state(
+                "system_restart_echo_suppress",
+                json.dumps(
+                    {
+                        "sender": sender,
+                        "text": text,
+                        # launchd restart should occur quickly; keep this window tight.
+                        "expires_at": time.time() + 120.0,
+                    }
+                ),
+            )
+        except Exception:
+            logger.debug("Failed to persist restart echo suppress marker", exc_info=True)
 
     def _inject_auto_context(self, sender: str, prompt: str) -> str:
         if self.auto_context_messages <= 0:

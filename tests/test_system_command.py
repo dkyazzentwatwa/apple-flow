@@ -89,6 +89,9 @@ def test_system_restart_triggers_launchd_kickstart(fake_connector, fake_egress, 
     assert called == []
     assert len(fake_egress.messages) == 1
     assert "restarting" in fake_egress.messages[0][1].lower()
+    marker = fake_store.get_state("system_restart_echo_suppress")
+    assert marker is not None
+    assert "Apple Flow restarting" in marker
 
 
 def test_system_restart_falls_back_to_shutdown_when_kickstart_fails(fake_connector, fake_egress, fake_store):

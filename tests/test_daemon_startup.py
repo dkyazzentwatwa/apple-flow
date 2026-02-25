@@ -217,7 +217,10 @@ async def test_imessage_poll_loop_worker_exception_sends_fallback_notice(caplog,
         is_sender_allowed=lambda sender: True,
         is_under_rate_limit=lambda sender, now: True,
     )
-    daemon.store = SimpleNamespace(set_state=lambda key, value: None)
+    daemon.store = SimpleNamespace(
+        set_state=lambda key, value: None,
+        get_state=lambda key: None,
+    )
     sent: list[tuple[str, str]] = []
     daemon.egress = SimpleNamespace(
         was_recent_outbound=lambda sender, text: False,
@@ -278,7 +281,10 @@ async def test_status_command_fastlane_bypasses_busy_concurrency_semaphore(tmp_p
         is_sender_allowed=lambda sender: True,
         is_under_rate_limit=lambda sender, now: True,
     )
-    daemon.store = SimpleNamespace(set_state=lambda key, value: None)
+    daemon.store = SimpleNamespace(
+        set_state=lambda key, value: None,
+        get_state=lambda key: None,
+    )
     sent: list[tuple[str, str]] = []
     daemon.egress = SimpleNamespace(
         was_recent_outbound=lambda sender, text: False,
@@ -295,6 +301,56 @@ async def test_status_command_fastlane_bypasses_busy_concurrency_semaphore(tmp_p
 
     await asyncio.wait_for(daemon._poll_imessage_loop(), timeout=0.5)
     assert any("No pending approvals." in body for _, body in sent)
+
+
+def test_consume_restart_echo_suppress_matches_and_clears():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    marker_store = {
+        "value": (
+            '{"sender":"+15551234567","text":"Apple Flow restarting... (text \\"health\\" to confirm it\'s back)",'
+            '"expires_at":9999999999}'
+        ),
+        "clears": 0,
+    }
+
+    def _get_state(_key):
+        return marker_store["value"]
+
+    def _set_state(_key, value):
+        marker_store["value"] = value
+        marker_store["clears"] += 1
+
+    daemon.store = SimpleNamespace(get_state=_get_state, set_state=_set_state)
+
+    assert daemon._consume_restart_echo_suppress(
+        "+15551234567",
+        "Apple Flow restarting... (text 'health' to confirm it's back)",
+    )
+    assert marker_store["clears"] == 1
+    assert marker_store["value"] == ""
+
+
+def test_consume_restart_echo_suppress_ignores_non_matching_text():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    marker_store = {
+        "value": (
+            '{"sender":"+15551234567","text":"Apple Flow restarting... (text \\"health\\" to confirm it\'s back)",'
+            '"expires_at":9999999999}'
+        ),
+        "clears": 0,
+    }
+
+    def _set_state(_key, value):
+        marker_store["value"] = value
+        marker_store["clears"] += 1
+
+    daemon.store = SimpleNamespace(
+        get_state=lambda _key: marker_store["value"],
+        set_state=_set_state,
+    )
+
+    assert not daemon._consume_restart_echo_suppress("+15551234567", "hello there")
+    assert marker_store["clears"] == 0
 
 
 @pytest.mark.asyncio

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import shutil
 import signal
@@ -52,6 +53,13 @@ _FASTLANE_COMMANDS = {
     CommandKind.CLEAR_CONTEXT,
     CommandKind.SYSTEM,
 }
+
+
+def _normalize_echo_text(text: str) -> str:
+    normalized = (text or "")
+    normalized = normalized.replace("\u2019", "'").replace("\u2018", "'")
+    normalized = normalized.replace('"', "'")
+    return " ".join(normalized.lower().split())
 
 
 def migrate_legacy_db_if_needed(
@@ -644,6 +652,9 @@ class RelayDaemon:
                     if not msg.text.strip():
                         logger.info("Ignoring empty inbound rowid=%s sender=%s", msg.id, msg.sender)
                         continue
+                    if self._consume_restart_echo_suppress(msg.sender, msg.text):
+                        logger.info("Ignoring restart confirmation echo from %s (rowid=%s)", msg.sender, msg.id)
+                        continue
                     logger.info(
                         "Inbound message rowid=%s sender=%s chars=%s text=%r",
                         msg.id,
@@ -762,6 +773,28 @@ class RelayDaemon:
 
             await asyncio.sleep(self.settings.poll_interval_seconds)
         await self._flush_inflight_on_shutdown(timeout=2.0)
+
+    def _consume_restart_echo_suppress(self, sender: str, text: str) -> bool:
+        """Consume one short-lived restart echo suppress marker, if present and matching."""
+        raw_marker = self.store.get_state("system_restart_echo_suppress")
+        if not raw_marker:
+            return False
+        try:
+            marker = json.loads(raw_marker)
+            expires_at = float(marker.get("expires_at", 0.0))
+            if time.time() > expires_at:
+                self.store.set_state("system_restart_echo_suppress", "")
+                return False
+            marker_sender = str(marker.get("sender", ""))
+            marker_text = str(marker.get("text", ""))
+            if marker_sender == sender and _normalize_echo_text(marker_text) == _normalize_echo_text(text):
+                self.store.set_state("system_restart_echo_suppress", "")
+                return True
+        except Exception:
+            # Clear malformed marker to avoid repeated parse failures.
+            self.store.set_state("system_restart_echo_suppress", "")
+            return False
+        return False
 
     async def _poll_mail_loop(self) -> None:
         """Apple Mail polling loop — runs alongside iMessage when enabled."""
