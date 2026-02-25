@@ -21,6 +21,7 @@ class GeminiCliConnector:
         context_window: int = 10,
         model: str = "gemini-3-flash-preview",
         inject_tools_context: bool = True,
+        system_prompt: str = "",
     ):
         self.gemini_command = gemini_command
         self.workspace = workspace
@@ -28,6 +29,7 @@ class GeminiCliConnector:
         self.context_window = context_window
         self.model = model.strip()
         self.inject_tools_context = inject_tools_context
+        self.system_prompt = system_prompt.strip()
         self.soul_prompt: str = ""
 
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
@@ -184,6 +186,19 @@ class GeminiCliConnector:
 
         if self.soul_prompt:
             parts.append(self.soul_prompt)
+
+        if self.system_prompt:
+            parts.append(self.system_prompt)
+
+        # Keep Gemini responses user-facing for iMessage and avoid exposing
+        # planning/tool narration that looks like internal reasoning.
+        parts.append(
+            "Response rules:\n"
+            "- Return only the final answer to the user.\n"
+            "- Do not narrate plans, internal reasoning, or tool checks.\n"
+            "- If tools are needed, use them silently and report only outcomes.\n"
+            "- Keep replies concise and natural for iMessage."
+        )
 
         if self.inject_tools_context:
             parts.append(TOOLS_CONTEXT)

@@ -164,6 +164,9 @@ class RelayDaemon:
                 context_window=settings.gemini_cli_context_window,
                 model=settings.gemini_cli_model,
                 inject_tools_context=settings.inject_tools_context,
+                system_prompt=settings.personality_prompt.replace(
+                    "{workspace}", settings.default_workspace
+                ),
             )
         else:  # codex-cli (default)
             logger.info("Using CLI connector (codex exec) for stateless execution")
