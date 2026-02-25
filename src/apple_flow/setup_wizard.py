@@ -91,6 +91,7 @@ def generate_env(
         "apple_flow_connector": connector,
         "apple_flow_codex_cli_command": connector_command if connector == "codex-cli" else "codex",
         "apple_flow_claude_cli_command": connector_command if connector == "claude-cli" else "claude",
+        "apple_flow_gemini_cli_command": connector_command if connector == "gemini-cli" else "gemini",
         "apple_flow_cline_command": connector_command if connector == "cline" else "cline",
         "apple_flow_only_poll_allowed_senders": "true",
         "apple_flow_require_chat_prefix": "false",
@@ -198,6 +199,7 @@ def _choose_connector() -> tuple[str, str]:
     options = [
         ("claude-cli", "Claude CLI (recommended)", "claude"),
         ("codex-cli", "Codex CLI", "codex"),
+        ("gemini-cli", "Gemini CLI", "gemini"),
         ("cline", "Cline CLI", "cline"),
     ]
     print("\nChoose your AI connector:")

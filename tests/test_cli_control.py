@@ -85,6 +85,27 @@ def test_wizard_generate_env_success(capsys, tmp_path, monkeypatch):
     assert payload["validation_errors"] == []
 
 
+def test_wizard_generate_env_supports_gemini_connector(capsys, tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(cli_control, "resolve_binary", lambda _binary: "/usr/local/bin/gemini")
+
+    args = _args(
+        tool_args=["generate-env"],
+        phone="+15551234567",
+        connector="gemini-cli",
+        connector_command="gemini",
+        workspace=str(workspace),
+        gateways="",
+    )
+    code = cli_control.run_cli_control("wizard", args)
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert "apple_flow_connector=gemini-cli" in payload["env_preview"]
+    assert "apple_flow_gemini_cli_command=gemini" in payload["env_preview"]
+
+
 def test_wizard_generate_env_supports_custom_gateway_names(capsys, tmp_path, monkeypatch):
     workspace = tmp_path / "workspace"
     workspace.mkdir()

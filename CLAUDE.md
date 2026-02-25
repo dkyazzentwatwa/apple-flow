@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Apple Flow is a local-first daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar on macOS to Codex CLI/App Server. It polls the local Messages database and (optionally) Apple Mail, Reminders, Notes, and Calendar for inbound messages/tasks, routes allowlisted senders to Codex, enforces approval workflows for mutating operations, and replies via AppleScript. Users can iMessage, email, add Reminders, write Notes, or schedule Calendar events for Codex. By default, it uses the stateless CLI connector (`codex exec`) to avoid state corruption issues.
+Apple Flow is a local-first daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar on macOS to AI CLIs (Codex, Claude, Gemini, Cline, or app-server fallback). It polls the local Messages database and (optionally) Apple Mail, Reminders, Notes, and Calendar for inbound messages/tasks, routes allowlisted senders to the configured connector, enforces approval workflows for mutating operations, and replies via AppleScript. By default, it uses a stateless CLI connector (`codex exec`) to avoid state corruption issues.
 
 The project also ships an optional **Autonomous Companion Layer**: a proactive loop (`companion.py`) that watches for stale approvals, upcoming calendar events, overdue reminders, and office inbox items, synthesizes observations via AI, and sends proactive iMessages. Companion state is anchored in `agent-office/` — a structured workspace directory that holds the companion's identity (`SOUL.md`), durable memory (`MEMORY.md`), topic memory files, daily notes, project briefs, and automation playbooks.
 
@@ -115,6 +115,9 @@ Only `SCAFFOLD.md`, `setup.sh`, and `SOUL.md` are tracked by git. Everything els
 | `store.py` | Thread-safe SQLite with connection caching and indexes |
 | `config.py` | Pydantic settings with `apple_flow_` env prefix, path resolution |
 | `codex_cli_connector.py` | Stateless CLI connector using `codex exec` (default, avoids state corruption) |
+| `claude_cli_connector.py` | Stateless CLI connector using `claude -p` |
+| `gemini_cli_connector.py` | Stateless CLI connector using `gemini -p` |
+| `cline_connector.py` | Agentic CLI connector using `cline -y` |
 | `codex_connector.py` | Stateful app-server connector via JSON-RPC (fallback option) |
 | `main.py` | FastAPI admin endpoints (/sessions, /approvals, /events, POST /task) |
 | `admin_client.py` | Admin API client library (programmatic access to admin endpoints) |
@@ -218,7 +221,7 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 
 ### Connector Settings
 
-- `apple_flow_connector` - connector to use: `"codex-cli"` (default), `"claude-cli"`, `"cline"`, `"codex-app-server"` (deprecated)
+- `apple_flow_connector` - connector to use: `"codex-cli"` (default), `"claude-cli"`, `"gemini-cli"`, `"cline"`, `"codex-app-server"` (deprecated)
 - `apple_flow_codex_turn_timeout_seconds` - timeout for all connectors (default: 300s/5min)
 
 **Codex CLI** (`connector=codex-cli`, requires `codex login`):
@@ -233,6 +236,11 @@ All settings use `apple_flow_` env prefix. Key settings in `.env`:
 - `apple_flow_claude_cli_dangerously_skip_permissions` - pass `--dangerously-skip-permissions` (default: true)
 - `apple_flow_claude_cli_tools` - comma-separated values passed to `--tools` (optional, e.g. `default,WebSearch`)
 - `apple_flow_claude_cli_allowed_tools` - comma-separated values passed to `--allowedTools` (optional, e.g. `WebSearch`)
+
+**Gemini CLI** (`connector=gemini-cli`, requires `gemini auth login`):
+- `apple_flow_gemini_cli_command` - path to gemini binary (default: "gemini")
+- `apple_flow_gemini_cli_context_window` - recent exchanges to include as context (default: 10)
+- `apple_flow_gemini_cli_model` - model flag (default: `gemini-3-flash-preview`)
 
 **Cline CLI** (`connector=cline`, supports any model):
 - `apple_flow_cline_command` - path to cline binary (default: "cline")
@@ -423,6 +431,7 @@ tests/test_ambient.py             # AmbientScanner: passive context enrichment, 
 - Authentication for your chosen connector (run once):
   - `codex login` — if using `apple_flow_connector=codex-cli` (default)
   - `claude auth login` — if using `apple_flow_connector=claude-cli`
+  - `gemini auth login` — if using `apple_flow_connector=gemini-cli`
 - For Apple Mail integration: Apple Mail configured and running on this Mac
 - For Apple Reminders integration: Reminders.app on this Mac, a list named per config (default: "Codex Tasks")
 - For Apple Notes integration: Notes.app on this Mac, a folder named per config (default: "Codex Inbox")
@@ -465,6 +474,7 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 ### Connector selection
 - `"codex-cli"` (default): `codex_cli_connector.py` — stateless `codex exec`, requires `codex login`
 - `"claude-cli"`: `claude_cli_connector.py` — stateless `claude -p`, requires `claude auth login`
+- `"gemini-cli"`: `gemini_cli_connector.py` — stateless `gemini -p`, requires `gemini auth login`
 - `"cline"`: `cline_connector.py` — agentic `cline -y`, supports any model provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
 - `"codex-app-server"` (deprecated): `codex_connector.py` — stateful JSON-RPC, prone to state corruption
 - Selection controlled by `apple_flow_connector` config field (falls back to `apple_flow_use_codex_cli` for backwards compat)

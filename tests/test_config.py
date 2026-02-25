@@ -104,3 +104,9 @@ def test_empty_admin_port_and_memory_fall_back_to_defaults(monkeypatch, tmp_path
 
     assert settings.admin_port == 8787
     assert settings.enable_memory is False
+
+
+def test_gemini_cli_model_default(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.gemini_cli_model == "gemini-3-flash-preview"

@@ -78,6 +78,10 @@ pin_selected_connector_binary() {
       key="apple_flow_codex_cli_command"
       default_cmd="codex"
       ;;
+    gemini-cli)
+      key="apple_flow_gemini_cli_command"
+      default_cmd="gemini"
+      ;;
     cline)
       key="apple_flow_cline_command"
       default_cmd="cline"

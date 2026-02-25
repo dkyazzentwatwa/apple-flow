@@ -4,7 +4,7 @@ Instructions for AI coding agents working in this repository.
 
 ## Project Overview
 
-Apple Flow is a local-first macOS daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar to AI coding agents (Codex CLI, Claude Code, Cline, or any compatible connector). It polls the local Messages database and (optionally) Apple Mail, Reminders, Notes, and Calendar for inbound messages/tasks, routes allowlisted senders to the configured AI agent, enforces approval workflows for mutating operations, and replies via AppleScript.
+Apple Flow is a local-first macOS daemon that bridges iMessage, Apple Mail, Apple Reminders, Apple Notes, and Apple Calendar to AI coding agents (Codex CLI, Claude Code, Gemini CLI, Cline, or any compatible connector). It polls the local Messages database and (optionally) Apple Mail, Reminders, Notes, and Calendar for inbound messages/tasks, routes allowlisted senders to the configured AI agent, enforces approval workflows for mutating operations, and replies via AppleScript.
 
 The project also ships an optional **Autonomous Companion Layer**: a proactive loop (`companion.py`) that watches for stale approvals, upcoming calendar events, overdue reminders, and office inbox items, synthesizes observations via AI, and sends proactive iMessages. Companion state is anchored in `agent-office/` — a structured workspace directory that holds the companion's identity (`SOUL.md`), durable memory (`MEMORY.md`), topic memory files, daily notes, project briefs, and automation playbooks.
 
@@ -117,6 +117,7 @@ Only `SCAFFOLD.md`, `setup.sh`, and `SOUL.md` are tracked by git. Everything els
 | `config.py` | Pydantic settings with `apple_flow_` env prefix, path resolution |
 | `codex_cli_connector.py` | Stateless CLI connector using `codex exec` (default, avoids state corruption) |
 | `claude_cli_connector.py` | Stateless CLI connector using `claude -p` |
+| `gemini_cli_connector.py` | Stateless CLI connector using `gemini -p` |
 | `cline_connector.py` | Agentic CLI connector using `cline -y`, supports any model provider |
 | `codex_connector.py` | Stateful app-server connector via JSON-RPC (deprecated fallback) |
 | `main.py` | FastAPI admin endpoints (/sessions, /approvals, /events, POST /task) |
@@ -225,7 +226,7 @@ All settings use the `apple_flow_` env prefix. Configured via `.env` file.
 
 ### Connector Settings
 
-- `apple_flow_connector` -- connector to use: `"codex-cli"` (default), `"claude-cli"`, `"cline"`, `"codex-app-server"` (deprecated)
+- `apple_flow_connector` -- connector to use: `"codex-cli"` (default), `"claude-cli"`, `"gemini-cli"`, `"cline"`, `"codex-app-server"` (deprecated)
 - `apple_flow_codex_turn_timeout_seconds` -- timeout for all connectors (default: 300s/5min)
 
 Connector-specific settings (CLI binary path, model, context window, etc.) are documented in `.env.example`. See also the **Connector selection** section under Development Conventions below.
@@ -300,6 +301,7 @@ tests/test_calendar_egress.py   # Apple Calendar egress (write results to event)
 
 # Connectors
 tests/test_cli_connector.py     # Stateless CLI connector (codex exec)
+tests/test_gemini_cli_connector.py  # Stateless Gemini CLI connector (gemini -p)
 tests/test_cline_connector.py   # Cline CLI connector
 
 # Features
@@ -336,6 +338,7 @@ tests/test_ambient.py             # AmbientScanner: passive context enrichment, 
 - Authentication for your chosen connector (run once):
   - `codex login` -- if using `apple_flow_connector=codex-cli` (default)
   - `claude auth login` -- if using `apple_flow_connector=claude-cli`
+  - `gemini auth login` -- if using `apple_flow_connector=gemini-cli`
   - No auth needed for `cline` (uses its own config)
 - For Apple Mail integration: Apple Mail configured and running on this Mac
 - For Apple Reminders integration: Reminders.app on this Mac, a list named per config (default: "Codex Tasks")
@@ -384,6 +387,7 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 
 - `"codex-cli"` (default): `codex_cli_connector.py` -- stateless `codex exec`, requires `codex login`
 - `"claude-cli"`: `claude_cli_connector.py` -- stateless `claude -p`, requires `claude auth login`
+- `"gemini-cli"`: `gemini_cli_connector.py` -- stateless `gemini -p`, requires `gemini auth login`
 - `"cline"`: `cline_connector.py` -- agentic `cline -y`, supports any model provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
 - `"codex-app-server"` (deprecated): `codex_connector.py` -- stateful JSON-RPC, prone to state corruption
 - Selection controlled by `apple_flow_connector` config field (falls back to `apple_flow_use_codex_cli` for backwards compat)

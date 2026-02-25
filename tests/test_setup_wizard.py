@@ -70,3 +70,17 @@ def test_generate_env_uses_standardized_gateway_names_and_pinned_connector():
     assert "apple_flow_notes_archive_folder_name=agent-archive" in env
     assert "apple_flow_notes_log_folder_name=agent-logs" in env
     assert "apple_flow_calendar_name=agent-schedule" in env
+
+
+def test_generate_env_sets_gemini_command_when_gemini_connector_selected():
+    env = setup_wizard.generate_env(
+        phone="+15551234567",
+        connector="gemini-cli",
+        connector_command="/opt/homebrew/bin/gemini",
+        workspace="/Users/example/code",
+        gateways=[],
+        mail_address="",
+    )
+
+    assert "apple_flow_connector=gemini-cli" in env
+    assert "apple_flow_gemini_cli_command=/opt/homebrew/bin/gemini" in env

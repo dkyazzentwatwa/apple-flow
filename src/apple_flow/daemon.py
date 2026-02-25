@@ -16,6 +16,7 @@ from .claude_cli_connector import ClaudeCliConnector
 from .cline_connector import ClineConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
+from .gemini_cli_connector import GeminiCliConnector
 from .companion import CompanionLoop
 from .config import RelaySettings
 from .egress import IMessageEgress
@@ -103,7 +104,13 @@ class RelayDaemon:
 
         # Choose connector based on configuration
         connector_type = settings.get_connector_type()
-        known_connectors = {"codex-cli", "claude-cli", "cline", "codex-app-server"}
+        known_connectors = {
+            "codex-cli",
+            "claude-cli",
+            "gemini-cli",
+            "cline",
+            "codex-app-server",
+        }
         if connector_type not in known_connectors:
             raise ValueError(
                 f"Unknown connector type: {connector_type!r}. "
@@ -113,7 +120,8 @@ class RelayDaemon:
         if connector_type == "codex-app-server":
             logger.warning(
                 "app-server connector is deprecated and may cause state corruption. "
-                "Set apple_flow_connector=codex-cli or apple_flow_connector=claude-cli instead."
+                "Set apple_flow_connector=codex-cli, apple_flow_connector=claude-cli, or "
+                "apple_flow_connector=gemini-cli instead."
             )
             logger.info("Using app-server connector (JSON-RPC with persistent threads)")
             self.connector: ConnectorProtocol = CodexAppServerConnector(
@@ -147,6 +155,16 @@ class RelayDaemon:
                 use_json=settings.cline_use_json,
                 act_mode=settings.cline_act_mode,
             )
+        elif connector_type == "gemini-cli":
+            logger.info("Using Gemini CLI connector (gemini -p) for stateless execution")
+            self.connector = GeminiCliConnector(
+                gemini_command=settings.gemini_cli_command,
+                workspace=settings.default_workspace,
+                timeout=settings.codex_turn_timeout_seconds,
+                context_window=settings.gemini_cli_context_window,
+                model=settings.gemini_cli_model,
+                inject_tools_context=settings.inject_tools_context,
+            )
         else:  # codex-cli (default)
             logger.info("Using CLI connector (codex exec) for stateless execution")
             self.connector = CodexCliConnector(
@@ -172,7 +190,7 @@ class RelayDaemon:
         else:
             logger.info("SOUL.md not found at %s — using personality_prompt fallback", soul_path)
 
-        # Inject soul prompt into connector (both claude-cli and codex-cli support it)
+        # Inject soul prompt into connector when supported by connector implementation.
         if self._soul_prompt and hasattr(self.connector, "set_soul_prompt"):
             self.connector.set_soul_prompt(self._soul_prompt)
 
@@ -953,6 +971,9 @@ class RelayDaemon:
         if connector_type == "claude-cli":
             model_val = self.settings.claude_cli_model or "claude default"
             connector_line = "⚙️  Engine: claude -p (stateless)"
+        elif connector_type == "gemini-cli":
+            model_val = self.settings.gemini_cli_model or "gemini default"
+            connector_line = "⚙️  Engine: gemini -p (stateless)"
         elif connector_type == "cline":
             model_val = self.settings.cline_model or "cline default"
             connector_line = "⚙️  Engine: cline -y (agentic)"

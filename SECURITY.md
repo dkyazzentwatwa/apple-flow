@@ -41,7 +41,7 @@ Apple Flow is designed with **security-first principles** for local-first AI ass
 - Full Disk Access is required but used safely
 
 #### 6. Stateless AI Execution
-- CLI connectors (`claude-cli`, `codex-cli`, `cline`) spawn fresh processes per turn
+- CLI connectors (`claude-cli`, `codex-cli`, `gemini-cli`, `cline`) spawn fresh processes per turn
 - No persistent state that could be corrupted
 - Conversation context is managed in-memory with configurable history
 

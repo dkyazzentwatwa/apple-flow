@@ -25,6 +25,7 @@ Works via **iMessage** (default), **Apple Mail**, **Apple Reminders**, **Apple N
 - At least one AI CLI installed and authenticated:
   - **Codex CLI** (default) -- [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli/)
   - **Claude Code CLI** -- `claude` binary from [claude.ai/code](https://claude.ai/code)
+  - **Gemini CLI** -- `gemini` binary from [github.com/google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli)
   - **Cline CLI** -- `cline` binary, supports any model provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
 
 ---
@@ -76,12 +77,18 @@ claude auth login
 **Option C -- Cline CLI** (uses `cline -y`, supports any model):
 No separate auth needed -- Cline uses its own configuration.
 
-Follow the prompts in your browser (Options A/B). This only needs to be done once per machine.
+**Option D -- Gemini CLI** (uses `gemini -p`):
+```bash
+gemini auth login
+```
+
+Follow the prompts in your browser (Options A/B/D). This only needs to be done once per machine.
 
 Then set your connector in `.env` (Step 6, if you choose manual editing):
 ```bash
 apple_flow_connector=codex-cli   # for Codex (default)
 apple_flow_connector=claude-cli  # for Claude Code
+apple_flow_connector=gemini-cli  # for Gemini CLI
 apple_flow_connector=cline       # for Cline
 ```
 
@@ -150,6 +157,7 @@ apple_flow_default_workspace=/Users/yourname/code/my-project
 # 3. Your AI backend connector (pick one)
 apple_flow_connector=codex-cli   # default -- requires: codex login
 apple_flow_connector=claude-cli  # alternative -- requires: claude auth login
+apple_flow_connector=gemini-cli  # alternative -- requires: gemini auth login
 apple_flow_connector=cline       # alternative -- uses its own config
 ```
 
@@ -307,13 +315,14 @@ nano .env
 # Set: apple_flow_allowed_senders=+15551234567
 ```
 
-### "codex not found" / "claude not found" / "cline not found"
+### "codex not found" / "claude not found" / "gemini not found" / "cline not found"
 
 **Cause**: The CLI for your chosen connector isn't installed or not on `$PATH`.
 
 **Fix**:
 - For Codex: install from [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli/), then run `codex login`
 - For Claude: install the `claude` CLI from [claude.ai/code](https://claude.ai/code), then run `claude auth login`
+- For Gemini: install the `gemini` CLI from [github.com/google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli), then run `gemini auth login`
 - For Cline: install the `cline` CLI and configure it
 - Make sure `apple_flow_connector` in `.env` matches what you installed
 
@@ -467,7 +476,7 @@ POST /task -> FastAPI ---------------+
 - **Ingress modules**: Read from macOS app databases/AppleScript
 - **Policy**: Enforces sender allowlist and rate limits
 - **Orchestrator**: Routes commands and manages approvals
-- **Connector**: Stateless CLI per turn -- `codex exec`, `claude -p`, or `cline -y`
+- **Connector**: Stateless CLI per turn -- `codex exec`, `claude -p`, `gemini -p`, or `cline -y`
 - **Store**: Persists sessions, runs, approvals, and scheduled actions
 - **Egress modules**: Send replies via AppleScript to each Apple app
 - **CompanionLoop**: Proactive observations, daily digests, weekly reviews

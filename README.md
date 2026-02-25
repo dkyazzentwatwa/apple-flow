@@ -111,6 +111,7 @@ Choose your AI backend:
   <tr>
     <th>🟠 Claude CLI</th>
     <th>🔵 Codex CLI</th>
+    <th>🟣 Gemini CLI</th>
     <th>🟢 Cline CLI</th>
   </tr>
   <tr>
@@ -125,6 +126,11 @@ Choose your AI backend:
       <code>codex login</code>
     </td>
     <td>
+      <i>Google Gemini CLI</i><br><br>
+      <code>npm install -g @google/gemini-cli</code><br>
+      <code>gemini auth login</code>
+    </td>
+    <td>
       <i>Multi-provider agentic AI</i><br><br>
       <code>npm install -g cline</code><br>
       <code>cline auth</code>
@@ -133,6 +139,7 @@ Choose your AI backend:
   <tr>
     <td>Uses Anthropic account</td>
     <td>Uses OpenAI account</td>
+    <td>Uses Google Gemini account</td>
     <td>Kimi, GLM, DeepSeek, Groq, and more</td>
   </tr>
 </table>
@@ -182,6 +189,7 @@ apple_flow_allowed_workspaces=/Users/you/code # folder(s) the AI can read/write
 # Choose your AI connector (pick one):
 apple_flow_connector=claude-cli   # Claude Code CLI  — requires: claude auth login
 apple_flow_connector=codex-cli    # Codex CLI        — requires: codex login
+apple_flow_connector=gemini-cli   # Gemini CLI       — requires: gemini auth login
 apple_flow_connector=cline        # Cline CLI        — supports any model provider
 ```
 
@@ -287,6 +295,17 @@ apple_flow_codex_cli_model=  # uses Codex default
 - Uses `codex exec` for stateless execution
 - OpenAI's official CLI
 - Requires OpenAI account
+
+### Gemini CLI
+
+```env
+apple_flow_connector=gemini-cli
+apple_flow_gemini_cli_model=gemini-3-flash-preview  # default
+```
+
+- Uses `gemini -p` for stateless execution
+- Default model: `gemini-3-flash-preview`
+- Requires Google Gemini account
 
 ### Cline CLI (Multi-Provider)
 

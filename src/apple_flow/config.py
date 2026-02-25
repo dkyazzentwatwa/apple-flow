@@ -34,7 +34,7 @@ class RelaySettings(BaseSettings):
     codex_cli_model: str = ""  # e.g., "gpt-5.3-codex" (empty = use codex default)
 
     # Connector selection (overrides use_codex_cli when set)
-    connector: str = ""  # "codex-cli" | "claude-cli" | "cline" | "codex-app-server"
+    connector: str = ""  # "codex-cli" | "claude-cli" | "gemini-cli" | "cline" | "codex-app-server"
 
     # Claude CLI connector settings (used when connector="claude-cli")
     claude_cli_command: str = "claude"
@@ -50,6 +50,11 @@ class RelaySettings(BaseSettings):
     cline_model: str = ""  # e.g. "kimi-k2", "gpt-4o" (empty = cline default)
     cline_use_json: bool = True
     cline_act_mode: bool = True  # skip plan mode for faster responses
+
+    # Gemini CLI connector settings (used when connector="gemini-cli")
+    gemini_cli_command: str = "gemini"
+    gemini_cli_context_window: int = 10
+    gemini_cli_model: str = "gemini-3-flash-preview"
 
     admin_host: str = "127.0.0.1"
     admin_port: int = 8787

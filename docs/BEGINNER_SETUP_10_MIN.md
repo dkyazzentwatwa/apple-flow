@@ -9,6 +9,7 @@ This guide gets `apple-flow` running fast on macOS with the safest default path.
 - At least one AI CLI installed:
   - **Codex** (default): `codex` binary — [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli/)
   - **Claude Code CLI**: `claude` binary — [claude.ai/code](https://claude.ai/code)
+  - **Gemini CLI**: `gemini` binary — [github.com/google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli)
 
 ## 10-minute quick path
 
@@ -31,7 +32,7 @@ Open `.env` and confirm these at minimum:
 - `apple_flow_allowed_senders=+1YOURNUMBER`
 - `apple_flow_allowed_workspaces=/Users/yourname/code`
 - `apple_flow_default_workspace=/Users/yourname/code/my-project`
-- `apple_flow_connector=codex-cli` (default) **or** `apple_flow_connector=claude-cli`
+- `apple_flow_connector=codex-cli` (default), `apple_flow_connector=claude-cli`, **or** `apple_flow_connector=gemini-cli`
 
 Important: your own phone number must be in `apple_flow_allowed_senders` or relay messages will be blocked.
 
@@ -45,6 +46,9 @@ codex login
 
 # If using apple_flow_connector=claude-cli
 claude auth login
+
+# If using apple_flow_connector=gemini-cli
+gemini auth login
 ```
 
 ## 5) Run beginner setup + tests + daemon (3-4 min)

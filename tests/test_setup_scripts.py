@@ -23,6 +23,14 @@ def test_setup_scripts_include_connector_resolution_failure_guidance():
     assert "Could not resolve connector binary" in content
 
 
+def test_setup_scripts_include_gemini_connector_option():
+    setup_content = _read("scripts/setup_autostart.sh")
+    beginner_content = _read("scripts/start_beginner.sh")
+    assert "gemini-cli" in setup_content
+    assert "apple_flow_gemini_cli_command" in setup_content
+    assert "apple_flow_gemini_cli_command" in beginner_content
+
+
 def test_launchd_path_includes_local_bin_fallback():
     setup_content = _read("scripts/setup_autostart.sh")
     install_content = _read("scripts/install_autostart.sh")

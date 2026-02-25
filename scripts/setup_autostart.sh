@@ -82,6 +82,10 @@ pin_selected_connector_binary() {
       key="apple_flow_codex_cli_command"
       default_cmd="codex"
       ;;
+    gemini-cli)
+      key="apple_flow_gemini_cli_command"
+      default_cmd="gemini"
+      ;;
     cline)
       key="apple_flow_cline_command"
       default_cmd="cline"
@@ -92,7 +96,7 @@ pin_selected_connector_binary() {
       ;;
     *)
       echo "❌ Unsupported connector in .env: $connector"
-      echo "Set apple_flow_connector to one of: codex-cli, claude-cli, cline, codex-app-server"
+      echo "Set apple_flow_connector to one of: codex-cli, claude-cli, gemini-cli, cline, codex-app-server"
       exit 1
       ;;
   esac
@@ -115,6 +119,7 @@ pin_selected_connector_binary() {
     echo "Install/auth the connector first, then rerun setup:"
     echo "  - codex-cli: npm install -g @openai/codex && codex login"
     echo "  - claude-cli: curl -fsSL https://claude.ai/install.sh | bash && claude auth login"
+    echo "  - gemini-cli: npm install -g @google/gemini-cli && gemini auth login"
     echo "  - cline: npm install -g cline && cline auth"
     exit 1
   fi

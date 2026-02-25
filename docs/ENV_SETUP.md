@@ -35,7 +35,7 @@ Pick one AI backend. The value of `apple_flow_connector` determines which is use
 
 | Variable | Default | Options / Description |
 |---|---|---|
-| `apple_flow_connector` | `codex-cli` | `codex-cli` — uses `codex exec` (requires `codex login`)<br>`claude-cli` — uses `claude -p` (requires `claude auth login`)<br>`cline` — uses `cline -y` (supports multiple model providers)<br>`codex-app-server` — deprecated stateful connector |
+| `apple_flow_connector` | `codex-cli` | `codex-cli` — uses `codex exec` (requires `codex login`)<br>`claude-cli` — uses `claude -p` (requires `claude auth login`)<br>`gemini-cli` — uses `gemini -p` (requires `gemini auth login`)<br>`cline` — uses `cline -y` (supports multiple model providers)<br>`codex-app-server` — deprecated stateful connector |
 
 ### Codex CLI settings (`connector=codex-cli`)
 
@@ -55,6 +55,14 @@ Pick one AI backend. The value of `apple_flow_connector` determines which is use
 | `apple_flow_claude_cli_dangerously_skip_permissions` | `true` | Pass `--dangerously-skip-permissions` to the claude binary. |
 | `apple_flow_claude_cli_tools` | *(empty)* | Comma-separated values for `--tools` (e.g. `default,WebSearch`). |
 | `apple_flow_claude_cli_allowed_tools` | *(empty)* | Comma-separated values for `--allowedTools` (e.g. `WebSearch`). |
+
+### Gemini CLI settings (`connector=gemini-cli`)
+
+| Variable | Default | Description |
+|---|---|---|
+| `apple_flow_gemini_cli_command` | `gemini` | Path to the `gemini` binary. |
+| `apple_flow_gemini_cli_model` | `gemini-3-flash-preview` | Model flag passed to gemini. |
+| `apple_flow_gemini_cli_context_window` | `10` | Number of recent exchanges to inject per turn. |
 
 ### Cline settings (`connector=cline`)
 
@@ -251,11 +259,11 @@ Allow the AI to read files sent as iMessage attachments.
 
 ## Agent Office
 
-Path to the companion's personality file. Injected as the system prompt for claude-cli turns when `enable_companion=true`.
+Path to the companion's personality file. Injected as companion/system context for supported stateless connectors when `enable_companion=true`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `apple_flow_soul_file` | `agent-office/SOUL.md` | Path to `SOUL.md` injected into claude-cli as `--append-system-prompt`. Relative paths are resolved from the repo root. |
+| `apple_flow_soul_file` | `agent-office/SOUL.md` | Path to `SOUL.md` injected into connector prompts. Relative paths are resolved from the repo root. |
 
 Run `cd agent-office && bash setup.sh` once after cloning to scaffold the workspace directory.
 

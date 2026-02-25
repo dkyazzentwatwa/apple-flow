@@ -87,6 +87,8 @@ def _connector_command_key(connector: str) -> str:
         return "apple_flow_claude_cli_command"
     if connector == "codex-cli":
         return "apple_flow_codex_cli_command"
+    if connector == "gemini-cli":
+        return "apple_flow_gemini_cli_command"
     if connector == "cline":
         return "apple_flow_cline_command"
     if connector == "codex-app-server":
@@ -371,6 +373,7 @@ def _wizard_doctor(args: Any) -> dict[str, Any]:
         default_commands = {
             "claude-cli": "claude",
             "codex-cli": "codex",
+            "gemini-cli": "gemini",
             "cline": "cline",
             "codex-app-server": "codex app-server",
         }
@@ -430,8 +433,10 @@ def _wizard_generate_env(args: Any) -> dict[str, Any]:
         validation_errors.append("phone must be E.164 format, e.g. +15551234567")
 
     connector = (args.connector or "").strip()
-    if connector not in {"claude-cli", "codex-cli", "cline", "codex-app-server"}:
-        validation_errors.append("connector must be one of: claude-cli, codex-cli, cline, codex-app-server")
+    if connector not in {"claude-cli", "codex-cli", "gemini-cli", "cline", "codex-app-server"}:
+        validation_errors.append(
+            "connector must be one of: claude-cli, codex-cli, gemini-cli, cline, codex-app-server"
+        )
 
     workspace = validate_workspace_path(args.workspace or "")
     if not workspace:
