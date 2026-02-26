@@ -145,9 +145,11 @@ def test_help_command_returns_command_guide():
 
     result = orchestrator.handle_message(msg)
     assert result.kind is CommandKind.HELP
-    assert "Apple Flow help" in result.response
+    assert "🤖 Apple Flow help" in result.response
     assert "status <run_id|request_id>" in result.response
     assert "approve <id> <extra instructions>" in result.response
+    assert "system: stop | restart | kill provider | cancel run <run_id>" in result.response
+    assert "🔧 System controls:" in result.response
     assert egress.messages
 
 
