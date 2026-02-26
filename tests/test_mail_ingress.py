@@ -46,9 +46,17 @@ def test_fetch_new_skips_non_allowlisted_senders(monkeypatch):
     ingress = AppleMailIngress()
     # With AppleScript filtering, only alice's email would be returned
     raw_messages = [
-        {"id": "1", "sender": "alice@example.com", "subject": "relay: hi", "body": "hello", "date": ""},
+        {
+            "id": "1",
+            "sender": "alice@example.com",
+            "subject": "relay: hi",
+            "body": "hello",
+            "date": "",
+        },
     ]
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
+    monkeypatch.setattr(
+        ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages
+    )
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: None)
 
     messages = ingress.fetch_new(sender_allowlist=["alice@example.com"])
@@ -73,7 +81,9 @@ def test_fetch_new_converts_to_inbound_messages(monkeypatch):
             "date": "2025-01-15T10:00:00",
         },
     ]
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
+    monkeypatch.setattr(
+        ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages
+    )
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: None)
 
     messages = ingress.fetch_new()
@@ -91,7 +101,9 @@ def test_fetch_new_skips_empty_messages(monkeypatch):
     raw_messages = [
         {"id": "1", "sender": "test@example.com", "subject": "", "body": "", "date": ""},
     ]
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
+    monkeypatch.setattr(
+        ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages
+    )
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: None)
 
     messages = ingress.fetch_new()
@@ -106,10 +118,18 @@ def test_latest_rowid_returns_zero():
 def test_fetch_new_marks_messages_as_read(monkeypatch):
     ingress = AppleMailIngress()
     raw_messages = [
-        {"id": "10", "sender": "test@example.com", "subject": "relay: hello", "body": "world", "date": ""},
+        {
+            "id": "10",
+            "sender": "test@example.com",
+            "subject": "relay: hello",
+            "body": "world",
+            "date": "",
+        },
     ]
     marked_ids: list[list[str]] = []
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
+    monkeypatch.setattr(
+        ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages
+    )
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: marked_ids.append(ids))
 
     ingress.fetch_new()
@@ -124,10 +144,18 @@ def test_trigger_tag_required_skips_without_tag(monkeypatch):
     """Emails without the trigger tag should be skipped and NOT marked as read."""
     ingress = AppleMailIngress(trigger_tag="!!agent")
     raw_messages = [
-        {"id": "1", "sender": "user@example.com", "subject": "Hello there", "body": "Just saying hi", "date": ""},
+        {
+            "id": "1",
+            "sender": "user@example.com",
+            "subject": "Hello there",
+            "body": "Just saying hi",
+            "date": "",
+        },
     ]
     marked_ids: list[list[str]] = []
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
+    monkeypatch.setattr(
+        ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages
+    )
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: marked_ids.append(ids))
 
     messages = ingress.fetch_new()
@@ -139,9 +167,17 @@ def test_trigger_tag_in_subject_passes_and_stripped(monkeypatch):
     """Email with trigger tag in subject should be returned with tag stripped."""
     ingress = AppleMailIngress(trigger_tag="!!agent")
     raw_messages = [
-        {"id": "2", "sender": "user@example.com", "subject": "!!agent Deploy to staging", "body": "Details here", "date": ""},
+        {
+            "id": "2",
+            "sender": "user@example.com",
+            "subject": "!!agent Deploy to staging",
+            "body": "Details here",
+            "date": "",
+        },
     ]
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
+    monkeypatch.setattr(
+        ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages
+    )
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: None)
 
     messages = ingress.fetch_new()
@@ -154,9 +190,17 @@ def test_trigger_tag_in_body_passes(monkeypatch):
     """Email with trigger tag in body should be returned."""
     ingress = AppleMailIngress(trigger_tag="!!agent")
     raw_messages = [
-        {"id": "3", "sender": "user@example.com", "subject": "Work task", "body": "Please do X\n\n!!agent", "date": ""},
+        {
+            "id": "3",
+            "sender": "user@example.com",
+            "subject": "Work task",
+            "body": "Please do X\n\n!!agent",
+            "date": "",
+        },
     ]
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
+    monkeypatch.setattr(
+        ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages
+    )
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: None)
 
     messages = ingress.fetch_new()
@@ -168,10 +212,24 @@ def test_trigger_tag_empty_processes_all(monkeypatch):
     """When trigger_tag is empty, all emails are processed (backward compat)."""
     ingress = AppleMailIngress(trigger_tag="")
     raw_messages = [
-        {"id": "4", "sender": "a@example.com", "subject": "No tag here", "body": "Content", "date": ""},
-        {"id": "5", "sender": "b@example.com", "subject": "Also no tag", "body": "More content", "date": ""},
+        {
+            "id": "4",
+            "sender": "a@example.com",
+            "subject": "No tag here",
+            "body": "Content",
+            "date": "",
+        },
+        {
+            "id": "5",
+            "sender": "b@example.com",
+            "subject": "Also no tag",
+            "body": "More content",
+            "date": "",
+        },
     ]
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
+    monkeypatch.setattr(
+        ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages
+    )
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: None)
 
     messages = ingress.fetch_new()
@@ -182,11 +240,19 @@ def test_trigger_tag_only_marks_processed_emails_as_read(monkeypatch):
     """Only emails that pass the trigger tag check should be marked as read."""
     ingress = AppleMailIngress(trigger_tag="!!agent")
     raw_messages = [
-        {"id": "10", "sender": "a@example.com", "subject": "!!agent do this", "body": "", "date": ""},
+        {
+            "id": "10",
+            "sender": "a@example.com",
+            "subject": "!!agent do this",
+            "body": "",
+            "date": "",
+        },
         {"id": "11", "sender": "b@example.com", "subject": "no tag", "body": "skip me", "date": ""},
     ]
     marked_ids: list[list[str]] = []
-    monkeypatch.setattr(ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages)
+    monkeypatch.setattr(
+        ingress, "_fetch_unread_via_applescript", lambda limit, sender_filter=None: raw_messages
+    )
     monkeypatch.setattr(ingress, "_mark_as_read", lambda ids: marked_ids.append(list(ids)))
 
     messages = ingress.fetch_new()

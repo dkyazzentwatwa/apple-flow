@@ -39,10 +39,7 @@ class IMessageEgress:
     def _osascript_send(recipient: str, text: str) -> None:
         # Escape backslashes first, then quotes, then newlines
         escaped_text = (
-            text.replace('\\', '\\\\')
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-            .replace("\r", "")
+            text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "")
         )
         script = f'''
         tell application "Messages"
@@ -86,7 +83,10 @@ class IMessageEgress:
     def send(self, recipient: str, text: str) -> None:
         outbound_fingerprint = self._fingerprint(recipient, text)
         last_ts = self._recent_fingerprints.get(outbound_fingerprint)
-        if last_ts is not None and (time.time() - last_ts) <= self.suppress_duplicate_outbound_seconds:
+        if (
+            last_ts is not None
+            and (time.time() - last_ts) <= self.suppress_duplicate_outbound_seconds
+        ):
             logger.info(
                 "Suppressing duplicate outbound message to %s (%s chars) within %.1fs window",
                 recipient,
@@ -110,4 +110,6 @@ class IMessageEgress:
                     logger.warning("Send retry %s failed for %s: %s", attempt, recipient, exc)
                     time.sleep(0.25 * attempt)
             if last_error is not None:
-                raise RuntimeError(f"Failed to send iMessage after retries: {last_error}") from last_error
+                raise RuntimeError(
+                    f"Failed to send iMessage after retries: {last_error}"
+                ) from last_error

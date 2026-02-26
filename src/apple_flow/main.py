@@ -19,12 +19,14 @@ class ApprovalOverrideBody(BaseModel):
 
 class TaskSubmission(BaseModel):
     """Request body for POST /task (Siri Shortcuts / curl bridge)."""
+
     sender: str = Field(min_length=1)
     text: str = Field(min_length=1)
 
 
 def _make_auth_dependency(token: str):
     """Create a FastAPI dependency that validates the Authorization: Bearer token."""
+
     async def _verify_token(request: Request) -> None:
         if not token:
             return  # no token configured — auth disabled
@@ -34,6 +36,7 @@ def _make_auth_dependency(token: str):
         provided = auth_header[7:]
         if not secrets.compare_digest(provided, token):
             raise HTTPException(status_code=401, detail="Invalid API token")
+
     return _verify_token
 
 
@@ -78,7 +81,9 @@ def build_app(store: Any | None = None) -> FastAPI:
 
     @app.get("/metrics", dependencies=[Depends(verify_token)])
     def metrics() -> dict[str, int]:
-        events_count = len(app.state.store.list_events()) if hasattr(app.state.store, "list_events") else 0
+        events_count = (
+            len(app.state.store.list_events()) if hasattr(app.state.store, "list_events") else 0
+        )
         return {
             "active_sessions": len(app.state.store.list_sessions()),
             "pending_approvals": len(app.state.store.list_pending_approvals()),

@@ -133,6 +133,13 @@ The assistant will:
 Optional after this flow: build the standalone SwiftUI control board app:
 - [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md)
 
+You can also run it directly:
+
+```bash
+./apps/macos/AppleFlowApp/scripts/export_app.sh
+./apps/macos/AppleFlowApp/scripts/run_standalone.sh
+```
+
 ## Step 6: Manual `.env` Editing (Optional Fallback)
 
 If you prefer manual config updates, edit `.env` directly any time:

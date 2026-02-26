@@ -159,9 +159,7 @@ def test_sync_automation_log_malformed_lines_skipped(office: Path, syncer: Offic
 
 def test_sync_automation_log_companion_lines(office: Path, syncer: OfficeSyncer):
     log_path = office / "90_logs" / "automation-log.md"
-    log_path.write_text(
-        "- 2026-02-18 21:48 | companion | observation | 3 obs | quick check\n"
-    )
+    log_path.write_text("- 2026-02-18 21:48 | companion | observation | 3 obs | quick check\n")
 
     rows: list[dict] = []
     syncer._upsert = lambda table, r, **kw: (rows.extend(r), len(r))[1]  # type: ignore
@@ -252,6 +250,7 @@ def test_sync_daily_notes_upserts_on_date(office: Path, syncer: OfficeSyncer):
     (office / "10_daily" / "2026-02-19.md").write_text("# Note\n")
 
     conflict_col: list[str] = []
+
     def mock_upsert(table, rows, conflict_column="id"):
         conflict_col.append(conflict_column)
         return len(rows)
@@ -293,9 +292,7 @@ def test_sync_inbox_unchecked_is_untriaged(office: Path, syncer: OfficeSyncer):
 
 def test_sync_inbox_checked_is_archive(office: Path, syncer: OfficeSyncer):
     inbox = office / "00_inbox" / "inbox.md"
-    inbox.write_text(
-        "- [x] 2026-02-19 09:08 | companion | stale carry-forward item archived\n"
-    )
+    inbox.write_text("- [x] 2026-02-19 09:08 | companion | stale carry-forward item archived\n")
 
     rows: list[dict] = []
     syncer._upsert = lambda table, r, **kw: (rows.extend(r), len(r))[1]  # type: ignore
@@ -364,6 +361,7 @@ def test_sync_projects_no_brief_skipped(office: Path, syncer: OfficeSyncer):
 
 def test_sync_projects_missing_dir(office: Path, syncer: OfficeSyncer):
     import shutil
+
     shutil.rmtree(office / "20_projects")
     count = syncer._sync_projects()
     assert count == 0
@@ -381,9 +379,7 @@ def test_sync_all_returns_table_counts(office: Path, syncer: OfficeSyncer):
     )
     (office / "MEMORY.md").write_text("## Key\nvalue\n")
     (office / "10_daily" / "2026-02-19.md").write_text("# Day\n")
-    (office / "00_inbox" / "inbox.md").write_text(
-        "- [ ] 2026-02-19 10:00 | test | item\n"
-    )
+    (office / "00_inbox" / "inbox.md").write_text("- [ ] 2026-02-19 10:00 | test | item\n")
     proj_dir = office / "20_projects" / "alpha"
     proj_dir.mkdir()
     (proj_dir / "brief.md").write_text("## Status\nactive\n")
@@ -397,7 +393,13 @@ def test_sync_all_returns_table_counts(office: Path, syncer: OfficeSyncer):
     syncer._upsert = mock_upsert  # type: ignore[assignment]
     result = syncer.sync_all()
 
-    assert set(result.keys()) == {"automation_runs", "memory_entries", "daily_notes", "inbox_items", "projects"}
+    assert set(result.keys()) == {
+        "automation_runs",
+        "memory_entries",
+        "daily_notes",
+        "inbox_items",
+        "projects",
+    }
     assert result["automation_runs"] == 1
     assert result["memory_entries"] == 1
     assert result["daily_notes"] == 1
@@ -419,7 +421,13 @@ def test_sync_all_continues_on_partial_failure(office: Path, syncer: OfficeSynce
     result = syncer.sync_all()
     # All 5 tables attempted, automation_runs returns 0 on error
     assert result["automation_runs"] == 0
-    assert set(result.keys()) == {"automation_runs", "memory_entries", "daily_notes", "inbox_items", "projects"}
+    assert set(result.keys()) == {
+        "automation_runs",
+        "memory_entries",
+        "daily_notes",
+        "inbox_items",
+        "projects",
+    }
 
 
 # ---------------------------------------------------------------------------

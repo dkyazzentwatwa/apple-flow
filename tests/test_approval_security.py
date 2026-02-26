@@ -201,7 +201,12 @@ def test_cross_gateway_notes_unnormalized_owner_approved_via_imessage():
         text="task: deploy web app",
         received_at="2026-02-20T10:00:00Z",
         is_from_me=False,
-        context={"channel": "notes", "note_id": "n1", "note_title": "deploy web app", "folder_name": "agent-task"},
+        context={
+            "channel": "notes",
+            "note_id": "n1",
+            "note_title": "deploy web app",
+            "folder_name": "agent-task",
+        },
     )
     result1 = orchestrator.handle_message(msg1)
     assert result1.kind is CommandKind.TASK
@@ -237,7 +242,12 @@ def test_cross_gateway_reminders_unnormalized_owner_approved_via_imessage():
         text="task: run database migration",
         received_at="2026-02-20T10:00:00Z",
         is_from_me=False,
-        context={"channel": "reminders", "reminder_id": "r1", "reminder_name": "run migration", "list_name": "agent-task"},
+        context={
+            "channel": "reminders",
+            "reminder_id": "r1",
+            "reminder_name": "run migration",
+            "list_name": "agent-task",
+        },
     )
     result1 = orchestrator.handle_message(msg1)
     assert result1.kind is CommandKind.TASK
@@ -272,7 +282,12 @@ def test_cross_gateway_calendar_unnormalized_owner_approved_via_imessage():
         text="task: update SSL certificates",
         received_at="2026-02-20T10:00:00Z",
         is_from_me=False,
-        context={"channel": "calendar", "event_id": "e1", "event_summary": "update certs", "calendar_name": "agent-schedule"},
+        context={
+            "channel": "calendar",
+            "event_id": "e1",
+            "event_summary": "update certs",
+            "calendar_name": "agent-schedule",
+        },
     )
     result1 = orchestrator.handle_message(msg1)
     assert result1.kind is CommandKind.TASK
@@ -304,7 +319,12 @@ def test_cross_gateway_mismatched_sender_still_rejected():
         text="task: deploy staging",
         received_at="2026-02-20T10:00:00Z",
         is_from_me=False,
-        context={"channel": "notes", "note_id": "n2", "note_title": "deploy staging", "folder_name": "agent-task"},
+        context={
+            "channel": "notes",
+            "note_id": "n2",
+            "note_title": "deploy staging",
+            "folder_name": "agent-task",
+        },
     )
     result1 = orchestrator.handle_message(msg1)
     request_id = result1.approval_request_id

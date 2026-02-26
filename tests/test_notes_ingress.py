@@ -25,12 +25,15 @@ def _mock_applescript_output(notes):
         # Replace tabs/newlines in field values with spaces (matching AppleScript sanitise)
         def _sanitise(val: str) -> str:
             return val.replace("\t", " ").replace("\n", " ").replace("\r", " ")
-        line = "\t".join([
-            _sanitise(n.get("id", "")),
-            _sanitise(n.get("name", "")),
-            _sanitise(n.get("body", "")),
-            _sanitise(n.get("modification_date", "")),
-        ])
+
+        line = "\t".join(
+            [
+                _sanitise(n.get("id", "")),
+                _sanitise(n.get("name", "")),
+                _sanitise(n.get("body", "")),
+                _sanitise(n.get("modification_date", "")),
+            ]
+        )
         lines.append(line)
     result = MagicMock()
     result.returncode = 0
@@ -45,8 +48,18 @@ def _mock_applescript_output(notes):
 @patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_new_returns_messages(mock_run):
     notes = [
-        {"id": "note1", "name": "task: Fix login bug", "body": "Login fails on mobile", "modification_date": "2026-02-17T10:00:00Z"},
-        {"id": "note2", "name": "Deploy updates", "body": "Push latest to production", "modification_date": "2026-02-17T11:00:00Z"},
+        {
+            "id": "note1",
+            "name": "task: Fix login bug",
+            "body": "Login fails on mobile",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
+        {
+            "id": "note2",
+            "name": "Deploy updates",
+            "body": "Push latest to production",
+            "modification_date": "2026-02-17T11:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(notes)
 
@@ -64,7 +77,12 @@ def test_fetch_new_returns_messages(mock_run):
 @patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_skips_processed_ids(mock_run):
     notes = [
-        {"id": "note1", "name": "task: Fix bug", "body": "Details", "modification_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "note1",
+            "name": "task: Fix bug",
+            "body": "Details",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(notes)
 
@@ -78,7 +96,12 @@ def test_fetch_skips_processed_ids(mock_run):
 @patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_adds_task_prefix_when_no_command_prefix(mock_run):
     notes = [
-        {"id": "note1", "name": "Fix the login", "body": "Details", "modification_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "note1",
+            "name": "Fix the login",
+            "body": "Details",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(notes)
 
@@ -91,7 +114,12 @@ def test_fetch_adds_task_prefix_when_no_command_prefix(mock_run):
 @patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_adds_relay_prefix_when_auto_approve(mock_run):
     notes = [
-        {"id": "note1", "name": "Fix the login", "body": "Details", "modification_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "note1",
+            "name": "Fix the login",
+            "body": "Details",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(notes)
 
@@ -104,7 +132,12 @@ def test_fetch_adds_relay_prefix_when_auto_approve(mock_run):
 @patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_preserves_existing_command_prefix(mock_run):
     notes = [
-        {"id": "note1", "name": "idea: brainstorm features", "body": "List options", "modification_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "note1",
+            "name": "idea: brainstorm features",
+            "body": "List options",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(notes)
 
@@ -177,6 +210,7 @@ def test_fetch_handles_applescript_error(mock_run):
 @patch("apple_flow.notes_ingress.subprocess.run")
 def test_fetch_handles_timeout(mock_run):
     import subprocess
+
     mock_run.side_effect = subprocess.TimeoutExpired(cmd="osascript", timeout=30)
 
     ingress = _make_ingress()
@@ -190,7 +224,12 @@ def test_fetch_retries_on_timeout_then_succeeds(mock_run):
     import subprocess
 
     notes = [
-        {"id": "note1", "name": "relay: hello", "body": "!!codex", "modification_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "note1",
+            "name": "relay: hello",
+            "body": "!!codex",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.side_effect = [
         subprocess.TimeoutExpired(cmd="osascript", timeout=20),
@@ -251,8 +290,18 @@ def test_compose_text_both_empty():
 def test_fetch_skips_notes_without_trigger_tag(mock_run):
     """Notes without the trigger tag should be skipped."""
     notes = [
-        {"id": "note1", "name": "Incomplete note", "body": "Work in progress...", "modification_date": "2026-02-17T10:00:00Z"},
-        {"id": "note2", "name": "Ready note", "body": "Deploy to prod #codex", "modification_date": "2026-02-17T11:00:00Z"},
+        {
+            "id": "note1",
+            "name": "Incomplete note",
+            "body": "Work in progress...",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
+        {
+            "id": "note2",
+            "name": "Ready note",
+            "body": "Deploy to prod #codex",
+            "modification_date": "2026-02-17T11:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(notes)
 
@@ -272,7 +321,12 @@ def test_fetch_skips_notes_without_trigger_tag(mock_run):
 def test_fetch_processes_notes_with_trigger_tag_in_title(mock_run):
     """Notes with trigger tag in title should be processed."""
     notes = [
-        {"id": "note1", "name": "task: Fix bug #codex", "body": "Details here", "modification_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "note1",
+            "name": "task: Fix bug #codex",
+            "body": "Details here",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(notes)
 
@@ -291,7 +345,12 @@ def test_fetch_processes_notes_with_trigger_tag_in_title(mock_run):
 def test_fetch_processes_notes_with_trigger_tag_in_body(mock_run):
     """Notes with trigger tag in body should be processed."""
     notes = [
-        {"id": "note1", "name": "Deploy updates", "body": "Push to production\n\n#codex", "modification_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "note1",
+            "name": "Deploy updates",
+            "body": "Push to production\n\n#codex",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(notes)
 
@@ -310,8 +369,18 @@ def test_fetch_processes_notes_with_trigger_tag_in_body(mock_run):
 def test_fetch_processes_all_notes_when_trigger_tag_empty(mock_run):
     """When trigger tag is empty, all notes should be processed (backward compatibility)."""
     notes = [
-        {"id": "note1", "name": "Note without tag", "body": "Some content", "modification_date": "2026-02-17T10:00:00Z"},
-        {"id": "note2", "name": "Another note", "body": "More content", "modification_date": "2026-02-17T11:00:00Z"},
+        {
+            "id": "note1",
+            "name": "Note without tag",
+            "body": "Some content",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
+        {
+            "id": "note2",
+            "name": "Another note",
+            "body": "More content",
+            "modification_date": "2026-02-17T11:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(notes)
 
@@ -329,8 +398,18 @@ def test_fetch_processes_all_notes_when_trigger_tag_empty(mock_run):
 def test_fetch_custom_trigger_tag(mock_run):
     """Should support custom trigger tags."""
     notes = [
-        {"id": "note1", "name": "Deploy", "body": "Deploy to staging @go", "modification_date": "2026-02-17T10:00:00Z"},
-        {"id": "note2", "name": "Deploy", "body": "Deploy to prod #codex", "modification_date": "2026-02-17T11:00:00Z"},
+        {
+            "id": "note1",
+            "name": "Deploy",
+            "body": "Deploy to staging @go",
+            "modification_date": "2026-02-17T10:00:00Z",
+        },
+        {
+            "id": "note2",
+            "name": "Deploy",
+            "body": "Deploy to prod #codex",
+            "modification_date": "2026-02-17T11:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(notes)
 

@@ -41,6 +41,7 @@ from apple_flow.apple_tools import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _ok_result(stdout: str) -> MagicMock:
     """Build a mock subprocess.CompletedProcess with returncode=0."""
     r = MagicMock()
@@ -61,14 +62,26 @@ def _err_result(stderr: str = "boom") -> MagicMock:
 
 def _notes_tab(items: list[dict]) -> str:
     return "\n".join(
-        "\t".join([i.get("id", ""), i.get("name", ""), i.get("preview", ""), i.get("modification_date", "")])
+        "\t".join(
+            [
+                i.get("id", ""),
+                i.get("name", ""),
+                i.get("preview", ""),
+                i.get("modification_date", ""),
+            ]
+        )
         for i in items
     )
 
 
 def _make_notes(n: int = 2) -> list[dict]:
     return [
-        {"id": f"id-{i}", "name": f"Note {i}", "preview": f"Body {i}", "modification_date": "2026-01-0{i}"}
+        {
+            "id": f"id-{i}",
+            "name": f"Note {i}",
+            "preview": f"Body {i}",
+            "modification_date": "2026-01-0{i}",
+        }
         for i in range(1, n + 1)
     ]
 
@@ -76,6 +89,7 @@ def _make_notes(n: int = 2) -> list[dict]:
 # ---------------------------------------------------------------------------
 # _run_script
 # ---------------------------------------------------------------------------
+
 
 class TestRunScript:
     def test_returns_stdout_on_success(self):
@@ -104,6 +118,7 @@ class TestRunScript:
 # _parse_json_output
 # ---------------------------------------------------------------------------
 
+
 class TestParseJsonOutput:
     def test_parses_valid_json(self):
         raw = '[{"id": "1", "name": "Test"}]'
@@ -131,11 +146,19 @@ class TestParseJsonOutput:
 # _parse_delimited_output
 # ---------------------------------------------------------------------------
 
+
 class TestParseDelimitedOutput:
     def test_parses_valid_tab_delimited(self):
         raw = "id-1\tNote 1\tpreview\t2026-01-01"
         result = _parse_delimited_output(raw, ["id", "name", "preview", "modification_date"])
-        assert result == [{"id": "id-1", "name": "Note 1", "preview": "preview", "modification_date": "2026-01-01"}]
+        assert result == [
+            {
+                "id": "id-1",
+                "name": "Note 1",
+                "preview": "preview",
+                "modification_date": "2026-01-01",
+            }
+        ]
 
     def test_parses_multiple_records(self):
         raw = "id-1\tNote 1\tpreview\t2026-01-01\nid-2\tNote 2\tbody\t2026-01-02"
@@ -165,6 +188,7 @@ class TestParseDelimitedOutput:
 # _format_output
 # ---------------------------------------------------------------------------
 
+
 class TestFormatOutput:
     def test_returns_list_when_not_as_text(self):
         data = [{"name": "A"}, {"name": "B"}]
@@ -191,6 +215,7 @@ class TestFormatOutput:
 # TOOLS_CONTEXT
 # ---------------------------------------------------------------------------
 
+
 class TestToolsContext:
     def test_nonempty(self):
         assert TOOLS_CONTEXT
@@ -207,6 +232,7 @@ class TestToolsContext:
 # ---------------------------------------------------------------------------
 # Apple Notes
 # ---------------------------------------------------------------------------
+
 
 class TestNotesListFolders:
     def test_returns_folder_names(self):
@@ -270,7 +296,12 @@ class TestNotesSearch:
 
     def test_filters_by_preview(self):
         notes = [
-            {"id": "1", "name": "untitled", "preview": "contains keyword here", "modification_date": ""},
+            {
+                "id": "1",
+                "name": "untitled",
+                "preview": "contains keyword here",
+                "modification_date": "",
+            },
             {"id": "2", "name": "other", "preview": "nothing here", "modification_date": ""},
         ]
         raw = _notes_tab(notes)
@@ -358,9 +389,19 @@ class TestNotesAppend:
 # Apple Mail
 # ---------------------------------------------------------------------------
 
+
 def _mail_tab(items: list[dict]) -> str:
     return "\n".join(
-        "\t".join([i.get("id", ""), i.get("sender", ""), i.get("subject", ""), i.get("body_preview", ""), i.get("date", ""), i.get("read", "")])
+        "\t".join(
+            [
+                i.get("id", ""),
+                i.get("sender", ""),
+                i.get("subject", ""),
+                i.get("body_preview", ""),
+                i.get("date", ""),
+                i.get("read", ""),
+            ]
+        )
         for i in items
     )
 
@@ -414,8 +455,22 @@ class TestMailListUnread:
 class TestMailSearch:
     def test_filters_by_subject(self):
         mails = [
-            {"id": "1", "sender": "a@b.com", "subject": "Invoice #123", "body_preview": "", "date": "", "read": "false"},
-            {"id": "2", "sender": "x@y.com", "subject": "Hello World", "body_preview": "", "date": "", "read": "false"},
+            {
+                "id": "1",
+                "sender": "a@b.com",
+                "subject": "Invoice #123",
+                "body_preview": "",
+                "date": "",
+                "read": "false",
+            },
+            {
+                "id": "2",
+                "sender": "x@y.com",
+                "subject": "Hello World",
+                "body_preview": "",
+                "date": "",
+                "read": "false",
+            },
         ]
         with patch("subprocess.run", return_value=_ok_result(_mail_tab(mails))):
             result = mail_search("invoice")
@@ -425,8 +480,22 @@ class TestMailSearch:
 
     def test_filters_by_sender(self):
         mails = [
-            {"id": "1", "sender": "boss@work.com", "subject": "Re: stuff", "body_preview": "", "date": "", "read": "false"},
-            {"id": "2", "sender": "friend@personal.com", "subject": "Hi", "body_preview": "", "date": "", "read": "false"},
+            {
+                "id": "1",
+                "sender": "boss@work.com",
+                "subject": "Re: stuff",
+                "body_preview": "",
+                "date": "",
+                "read": "false",
+            },
+            {
+                "id": "2",
+                "sender": "friend@personal.com",
+                "subject": "Hi",
+                "body_preview": "",
+                "date": "",
+                "read": "false",
+            },
         ]
         with patch("subprocess.run", return_value=_ok_result(_mail_tab(mails))):
             result = mail_search("work.com")
@@ -434,8 +503,22 @@ class TestMailSearch:
 
     def test_filters_by_body_preview(self):
         mails = [
-            {"id": "1", "sender": "a@b.com", "subject": "Greet", "body_preview": "contains keyword here", "date": "", "read": "false"},
-            {"id": "2", "sender": "a@b.com", "subject": "Other", "body_preview": "nothing special", "date": "", "read": "false"},
+            {
+                "id": "1",
+                "sender": "a@b.com",
+                "subject": "Greet",
+                "body_preview": "contains keyword here",
+                "date": "",
+                "read": "false",
+            },
+            {
+                "id": "2",
+                "sender": "a@b.com",
+                "subject": "Other",
+                "body_preview": "nothing special",
+                "date": "",
+                "read": "false",
+            },
         ]
         with patch("subprocess.run", return_value=_ok_result(_mail_tab(mails))):
             result = mail_search("keyword")
@@ -484,9 +567,13 @@ class TestMailListMailboxes:
 
 class TestMailMoveToLabel:
     def test_moves_message_with_exact_label(self):
-        raw_mailboxes = "Action\tdavid@techtiff.ai\nFocus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
+        raw_mailboxes = (
+            "Action\tdavid@techtiff.ai\nFocus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
+        )
         with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok")]):
-            result = mail_move_to_label(["123"], label="Focus", account="david@techtiff.ai", source_mailbox="INBOX")
+            result = mail_move_to_label(
+                ["123"], label="Focus", account="david@techtiff.ai", source_mailbox="INBOX"
+            )
             assert result["attempted"] == 1
             assert result["moved"] == 1
             assert result["destination_mailbox"] == "Focus"
@@ -516,7 +603,9 @@ class TestMailMoveToLabel:
             assert "suggestions" in result
 
     def test_returns_error_for_no_match_with_suggestions(self):
-        raw_mailboxes = "Action\tdavid@techtiff.ai\nFocus\tdavid@techtiff.ai\nNoise\tdavid@techtiff.ai"
+        raw_mailboxes = (
+            "Action\tdavid@techtiff.ai\nFocus\tdavid@techtiff.ai\nNoise\tdavid@techtiff.ai"
+        )
         with patch("subprocess.run", return_value=_ok_result(raw_mailboxes)):
             result = mail_move_to_label(["123"], label="urgent", account="david@techtiff.ai")
             assert result["moved"] == 0
@@ -526,7 +615,10 @@ class TestMailMoveToLabel:
 
     def test_handles_missing_message(self):
         raw_mailboxes = "Focus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
-        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("error: not found")]):
+        with patch(
+            "subprocess.run",
+            side_effect=[_ok_result(raw_mailboxes), _ok_result("error: not found")],
+        ):
             result = mail_move_to_label(["missing-id"], label="focus", account="david@techtiff.ai")
             assert result["attempted"] == 1
             assert result["moved"] == 0
@@ -535,7 +627,10 @@ class TestMailMoveToLabel:
 
     def test_handles_timeout_without_raising(self):
         raw_mailboxes = "Focus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
-        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), subprocess.TimeoutExpired("osascript", 30)]):
+        with patch(
+            "subprocess.run",
+            side_effect=[_ok_result(raw_mailboxes), subprocess.TimeoutExpired("osascript", 30)],
+        ):
             result = mail_move_to_label(["123"], label="focus", account="david@techtiff.ai")
             assert result["attempted"] == 1
             assert result["moved"] == 0
@@ -584,9 +679,19 @@ class TestMailSend:
 # Apple Reminders
 # ---------------------------------------------------------------------------
 
+
 def _rem_tab(items: list[dict]) -> str:
     return "\n".join(
-        "\t".join([i.get("id", ""), i.get("name", ""), i.get("body", ""), i.get("due_date", ""), i.get("completed", ""), i.get("list", "")])
+        "\t".join(
+            [
+                i.get("id", ""),
+                i.get("name", ""),
+                i.get("body", ""),
+                i.get("due_date", ""),
+                i.get("completed", ""),
+                i.get("list", ""),
+            ]
+        )
         for i in items
     )
 
@@ -655,9 +760,30 @@ class TestRemindersList:
 class TestRemindersSearch:
     def test_filters_by_name(self):
         rems = [
-            {"id": "1", "name": "buy groceries", "body": "", "due_date": "", "completed": "false", "list": ""},
-            {"id": "2", "name": "dentist appointment", "body": "", "due_date": "", "completed": "false", "list": ""},
-            {"id": "3", "name": "buy milk", "body": "", "due_date": "", "completed": "false", "list": ""},
+            {
+                "id": "1",
+                "name": "buy groceries",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "",
+            },
+            {
+                "id": "2",
+                "name": "dentist appointment",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "",
+            },
+            {
+                "id": "3",
+                "name": "buy milk",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "",
+            },
         ]
         with patch("subprocess.run", return_value=_ok_result(_rem_tab(rems))):
             result = reminders_search("buy")
@@ -666,15 +792,38 @@ class TestRemindersSearch:
 
     def test_filters_by_body(self):
         rems = [
-            {"id": "1", "name": "meeting", "body": "discuss project alpha", "due_date": "", "completed": "false", "list": ""},
-            {"id": "2", "name": "lunch", "body": "with team", "due_date": "", "completed": "false", "list": ""},
+            {
+                "id": "1",
+                "name": "meeting",
+                "body": "discuss project alpha",
+                "due_date": "",
+                "completed": "false",
+                "list": "",
+            },
+            {
+                "id": "2",
+                "name": "lunch",
+                "body": "with team",
+                "due_date": "",
+                "completed": "false",
+                "list": "",
+            },
         ]
         with patch("subprocess.run", return_value=_ok_result(_rem_tab(rems))):
             result = reminders_search("project")
             assert len(result) == 1
 
     def test_case_insensitive(self):
-        rems = [{"id": "1", "name": "URGENT Task", "body": "", "due_date": "", "completed": "false", "list": ""}]
+        rems = [
+            {
+                "id": "1",
+                "name": "URGENT Task",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "",
+            }
+        ]
         with patch("subprocess.run", return_value=_ok_result(_rem_tab(rems))):
             assert len(reminders_search("urgent")) == 1
 
@@ -728,9 +877,19 @@ class TestRemindersComplete:
 # Apple Calendar
 # ---------------------------------------------------------------------------
 
+
 def _evt_tab(items: list[dict]) -> str:
     return "\n".join(
-        "\t".join([i.get("id", ""), i.get("summary", ""), i.get("description", ""), i.get("start_date", ""), i.get("end_date", ""), i.get("calendar", "")])
+        "\t".join(
+            [
+                i.get("id", ""),
+                i.get("summary", ""),
+                i.get("description", ""),
+                i.get("start_date", ""),
+                i.get("end_date", ""),
+                i.get("calendar", ""),
+            ]
+        )
         for i in items
     )
 
@@ -741,8 +900,8 @@ def _make_events(n: int = 2) -> list[dict]:
             "id": f"uid-{i}",
             "summary": f"Event {i}",
             "description": f"Desc {i}",
-            "start_date": f"2026-02-{10+i}",
-            "end_date": f"2026-02-{10+i}",
+            "start_date": f"2026-02-{10 + i}",
+            "end_date": f"2026-02-{10 + i}",
             "calendar": "Work",
         }
         for i in range(1, n + 1)
@@ -804,9 +963,30 @@ class TestCalendarListEvents:
 class TestCalendarSearch:
     def test_filters_by_summary(self):
         evts = [
-            {"id": "1", "summary": "Team Standup", "description": "", "start_date": "", "end_date": "", "calendar": ""},
-            {"id": "2", "summary": "Doctor Visit", "description": "", "start_date": "", "end_date": "", "calendar": ""},
-            {"id": "3", "summary": "Team Retrospective", "description": "", "start_date": "", "end_date": "", "calendar": ""},
+            {
+                "id": "1",
+                "summary": "Team Standup",
+                "description": "",
+                "start_date": "",
+                "end_date": "",
+                "calendar": "",
+            },
+            {
+                "id": "2",
+                "summary": "Doctor Visit",
+                "description": "",
+                "start_date": "",
+                "end_date": "",
+                "calendar": "",
+            },
+            {
+                "id": "3",
+                "summary": "Team Retrospective",
+                "description": "",
+                "start_date": "",
+                "end_date": "",
+                "calendar": "",
+            },
         ]
         with patch("subprocess.run", return_value=_ok_result(_evt_tab(evts))):
             result = calendar_search("team")
@@ -815,15 +995,38 @@ class TestCalendarSearch:
 
     def test_filters_by_description(self):
         evts = [
-            {"id": "1", "summary": "Lunch", "description": "discuss quarterly targets", "start_date": "", "end_date": "", "calendar": ""},
-            {"id": "2", "summary": "Gym", "description": "morning workout", "start_date": "", "end_date": "", "calendar": ""},
+            {
+                "id": "1",
+                "summary": "Lunch",
+                "description": "discuss quarterly targets",
+                "start_date": "",
+                "end_date": "",
+                "calendar": "",
+            },
+            {
+                "id": "2",
+                "summary": "Gym",
+                "description": "morning workout",
+                "start_date": "",
+                "end_date": "",
+                "calendar": "",
+            },
         ]
         with patch("subprocess.run", return_value=_ok_result(_evt_tab(evts))):
             result = calendar_search("quarterly")
             assert len(result) == 1
 
     def test_case_insensitive(self):
-        evts = [{"id": "1", "summary": "BOARD MEETING", "description": "", "start_date": "", "end_date": "", "calendar": ""}]
+        evts = [
+            {
+                "id": "1",
+                "summary": "BOARD MEETING",
+                "description": "",
+                "start_date": "",
+                "end_date": "",
+                "calendar": "",
+            }
+        ]
         with patch("subprocess.run", return_value=_ok_result(_evt_tab(evts))):
             assert len(calendar_search("board")) == 1
 
@@ -855,6 +1058,7 @@ class TestCalendarCreate:
 # iMessage (SQLite mocked)
 # ---------------------------------------------------------------------------
 
+
 class TestMessagesListRecentChats:
     def test_returns_chats(self):
         # Mock the sqlite3 connection
@@ -863,9 +1067,7 @@ class TestMessagesListRecentChats:
             {"handle": "+15551234567", "service": "iMessage"},
             {"handle": "+15559876543", "service": "SMS"},
         ]
-        mock_conn.execute.return_value.fetchall.return_value = [
-            _sqlite_row(r) for r in mock_rows
-        ]
+        mock_conn.execute.return_value.fetchall.return_value = [_sqlite_row(r) for r in mock_rows]
         with patch.object(at, "_messages_connect", return_value=mock_conn):
             result = messages_list_recent_chats()
             assert isinstance(result, list)
@@ -899,9 +1101,7 @@ class TestMessagesSearch:
         mock_rows = [
             {"handle": "+15551234567", "text": "hello world", "date": 123456789},
         ]
-        mock_conn.execute.return_value.fetchall.return_value = [
-            _sqlite_row(r) for r in mock_rows
-        ]
+        mock_conn.execute.return_value.fetchall.return_value = [_sqlite_row(r) for r in mock_rows]
         with patch.object(at, "_messages_connect", return_value=mock_conn):
             result = messages_search("hello")
             assert isinstance(result, list)
@@ -933,6 +1133,7 @@ class TestMessagesSearch:
 # ---------------------------------------------------------------------------
 # Connector prompt injection
 # ---------------------------------------------------------------------------
+
 
 class TestConnectorToolsContextInjection:
     """Verify that ClaudeCliConnector and CodexCliConnector inject TOOLS_CONTEXT."""
@@ -988,6 +1189,7 @@ class TestConnectorToolsContextInjection:
 # ---------------------------------------------------------------------------
 # Helpers for sqlite3.Row mocking
 # ---------------------------------------------------------------------------
+
 
 def _sqlite_row(data: dict) -> MagicMock:
     """Return a mock that behaves like sqlite3.Row for dict key access."""

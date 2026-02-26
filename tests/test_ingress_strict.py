@@ -20,7 +20,9 @@ def test_fetch_new_returns_none_when_strict_filter_required_but_empty_allowlist(
             """
         )
         conn.execute("INSERT INTO handle(ROWID, id) VALUES (1, '+15551234567')")
-        conn.execute("INSERT INTO message(handle_id, destination_caller_id, text, date, is_from_me) VALUES (1, NULL, 'hello', 0, 0)")
+        conn.execute(
+            "INSERT INTO message(handle_id, destination_caller_id, text, date, is_from_me) VALUES (1, NULL, 'hello', 0, 0)"
+        )
 
     ingress = IMessageIngress(db_path)
     rows = ingress.fetch_new(sender_allowlist=[], require_sender_filter=True)

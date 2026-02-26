@@ -116,8 +116,8 @@ def test_move_to_archive_builds_correct_script(mock_run):
     # Verify key AppleScript elements
     assert 'folder "codex-task"' in script
     assert 'folder "codex-archive" of folder "codex-task"' in script
-    assert 'x-coredata://ABC123' in script
-    assert 'Task completed successfully' in script
+    assert "x-coredata://ABC123" in script
+    assert "Task completed successfully" in script
     assert "move matchedNote to archiveFolder" in script
 
 
@@ -201,7 +201,7 @@ def test_move_to_archive_escapes_special_characters(mock_run):
 
     # Verify escaping
     assert '\\"quotes\\"' in script
-    assert '\\\\' in script
+    assert "\\\\" in script
 
 
 @patch("apple_flow.notes_egress.subprocess.run")

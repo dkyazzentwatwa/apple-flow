@@ -223,7 +223,11 @@ class AppleCalendarIngress:
                 timeout=30,
             )
             if result.returncode != 0:
-                logger.warning("Calendar AppleScript failed (rc=%s): %s", result.returncode, result.stderr.strip())
+                logger.warning(
+                    "Calendar AppleScript failed (rc=%s): %s",
+                    result.returncode,
+                    result.stderr.strip(),
+                )
                 return []
             output = result.stdout.strip()
             if not output:
@@ -247,10 +251,12 @@ class AppleCalendarIngress:
             parts = line.split("\t")
             if len(parts) < 4:
                 continue
-            events.append({
-                "id": parts[0],
-                "summary": parts[1],
-                "description": parts[2],
-                "start_date": parts[3],
-            })
+            events.append(
+                {
+                    "id": parts[0],
+                    "summary": parts[1],
+                    "description": parts[2],
+                    "start_date": parts[3],
+                }
+            )
         return events

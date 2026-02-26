@@ -14,4 +14,3 @@ def test_suppresses_duplicate_outbound_within_window(monkeypatch):
     egress.send("+15551234567", "Hello world")
 
     assert len(sent_calls) == 1
-

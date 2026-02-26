@@ -85,12 +85,20 @@ Phase F - Service and Health Verification
    - log file locations
    - next commands I can run
 
+Phase G - Optional Swift Onboarding/Dashboard App (ask first)
+1) Ask if I want the native macOS Swift app for onboarding + control panel.
+2) If yes, ask for confirmation before each command and run:
+   ./apps/macos/AppleFlowApp/scripts/export_app.sh
+   ./apps/macos/AppleFlowApp/scripts/run_standalone.sh
+3) Remind me I can also open source in Xcode with:
+   ./apps/macos/AppleFlowApp/scripts/open_in_xcode.sh
+
 Completion criteria:
 - Full .env configured (not starter-only)
 - Config validation passes
 - Gateway setup passes (or clear acknowledged skips)
 - Service status healthy
-- I receive a final summary and control-board entrypoint guidance
+- I receive a final summary and control-board/Swift app entrypoint guidance
 ```
 
 ## Notes

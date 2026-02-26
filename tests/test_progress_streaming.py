@@ -64,16 +64,22 @@ def test_streaming_used_for_approved_execution():
 
     # Create a task that needs approval
     msg = InboundMessage(
-        id="m1", sender="+15551234567", text="task: deploy code",
-        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+        id="m1",
+        sender="+15551234567",
+        text="task: deploy code",
+        received_at="2026-02-17T12:00:00Z",
+        is_from_me=False,
     )
     result = orch.handle_message(msg)
     assert result.approval_request_id is not None
 
     # Approve it
     approve_msg = InboundMessage(
-        id="m2", sender="+15551234567", text=f"approve {result.approval_request_id}",
-        received_at="2026-02-17T12:01:00Z", is_from_me=False,
+        id="m2",
+        sender="+15551234567",
+        text=f"approve {result.approval_request_id}",
+        received_at="2026-02-17T12:01:00Z",
+        is_from_me=False,
     )
     approve_result = orch.handle_message(approve_msg)
 
@@ -86,13 +92,19 @@ def test_streaming_disabled_uses_regular_run():
     orch = _make_orchestrator(enable_streaming=False)
 
     msg = InboundMessage(
-        id="m1", sender="+15551234567", text="task: deploy code",
-        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+        id="m1",
+        sender="+15551234567",
+        text="task: deploy code",
+        received_at="2026-02-17T12:00:00Z",
+        is_from_me=False,
     )
     result = orch.handle_message(msg)
     approve_msg = InboundMessage(
-        id="m2", sender="+15551234567", text=f"approve {result.approval_request_id}",
-        received_at="2026-02-17T12:01:00Z", is_from_me=False,
+        id="m2",
+        sender="+15551234567",
+        text=f"approve {result.approval_request_id}",
+        received_at="2026-02-17T12:01:00Z",
+        is_from_me=False,
     )
     orch.handle_message(approve_msg)
 
@@ -106,13 +118,19 @@ def test_progress_sends_updates_to_sender():
     orch = _make_orchestrator(enable_streaming=True, progress_interval=0.0)
 
     msg = InboundMessage(
-        id="m1", sender="+15551234567", text="task: deploy code",
-        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+        id="m1",
+        sender="+15551234567",
+        text="task: deploy code",
+        received_at="2026-02-17T12:00:00Z",
+        is_from_me=False,
     )
     result = orch.handle_message(msg)
     approve_msg = InboundMessage(
-        id="m2", sender="+15551234567", text=f"approve {result.approval_request_id}",
-        received_at="2026-02-17T12:01:00Z", is_from_me=False,
+        id="m2",
+        sender="+15551234567",
+        text=f"approve {result.approval_request_id}",
+        received_at="2026-02-17T12:01:00Z",
+        is_from_me=False,
     )
     orch.handle_message(approve_msg)
 

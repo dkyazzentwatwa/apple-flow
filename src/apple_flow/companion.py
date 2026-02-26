@@ -92,7 +92,10 @@ class CompanionLoop:
     # ------------------------------------------------------------------
 
     async def _observation_loop(self, is_shutdown: Callable[[], bool]) -> None:
-        logger.info("Companion observation loop started (poll=%.0fs)", self.config.companion_poll_interval_seconds)
+        logger.info(
+            "Companion observation loop started (poll=%.0fs)",
+            self.config.companion_poll_interval_seconds,
+        )
         # One-time startup greeting (skipped if muted; throttled to once per hour)
         if not self._is_muted():
             last_greeted = self.store.get_state("companion_greeted_at")
@@ -168,10 +171,14 @@ class CompanionLoop:
                 if created_at:
                     try:
                         created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                        age_minutes = (datetime.now(created_dt.tzinfo) - created_dt).total_seconds() / 60
+                        age_minutes = (
+                            datetime.now(created_dt.tzinfo) - created_dt
+                        ).total_seconds() / 60
                         if age_minutes >= stale_minutes:
                             req_id = approval.get("request_id", "?")
-                            preview = (approval.get("command_preview", "") or "")[:80].replace("\n", " ")
+                            preview = (approval.get("command_preview", "") or "")[:80].replace(
+                                "\n", " "
+                            )
                             observations.append(
                                 f"Stale approval {req_id} ({int(age_minutes)} min old): {preview}"
                             )
@@ -183,6 +190,7 @@ class CompanionLoop:
         # 2. Upcoming calendar events — only within lookahead window, cooldown per event
         try:
             from . import apple_tools
+
             lookahead = self.config.companion_calendar_lookahead_minutes
             events = apple_tools.calendar_list_events(days_ahead=1, limit=20)
             if isinstance(events, list):
@@ -211,6 +219,7 @@ class CompanionLoop:
         # 3. Overdue reminders — due < now, scoped to reminders_list_name, cooldown per item
         try:
             from . import apple_tools
+
             reminders = apple_tools.reminders_list(filter="incomplete", limit=20)
             if isinstance(reminders, list):
                 now = datetime.now()
@@ -294,12 +303,20 @@ class CompanionLoop:
         # Extract keywords (3+ char words) from each observation
         keyword_map: dict[str, list[int]] = {}
         for idx, obs in enumerate(observations):
-            words = set(
-                w.lower() for w in obs.split()
-                if len(w) >= 4 and w.isalpha()
-            )
+            words = set(w.lower() for w in obs.split() if len(w) >= 4 and w.isalpha())
             # Skip very common words
-            words -= {"with", "from", "this", "that", "have", "been", "will", "your", "task", "item"}
+            words -= {
+                "with",
+                "from",
+                "this",
+                "that",
+                "have",
+                "been",
+                "will",
+                "your",
+                "task",
+                "item",
+            }
             for word in words:
                 keyword_map.setdefault(word, []).append(idx)
 
@@ -319,7 +336,9 @@ class CompanionLoop:
         first_idx = min(clustered_indices)
         related_count = len(clustered_indices) - 1
         keywords_str = ", ".join(sorted(set(cluster_keywords))[:3])
-        result[first_idx] += f" [related to {related_count} other item(s) — keywords: {keywords_str}]"
+        result[first_idx] += (
+            f" [related to {related_count} other item(s) — keywords: {keywords_str}]"
+        )
         return result
 
     def _synthesize_message(self, observations: list[str]) -> str:
@@ -380,9 +399,7 @@ class CompanionLoop:
             parts = self.config.companion_digest_time.split(":")
             target = time(int(parts[0]), int(parts[1]))
             now = datetime.now().time()
-            return abs(
-                (now.hour * 60 + now.minute) - (target.hour * 60 + target.minute)
-            ) <= 1
+            return abs((now.hour * 60 + now.minute) - (target.hour * 60 + target.minute)) <= 1
         except (ValueError, IndexError):
             return False
 
@@ -397,6 +414,7 @@ class CompanionLoop:
         # Today's calendar events
         try:
             from . import apple_tools
+
             events = apple_tools.calendar_list_events(days_ahead=1, limit=10)
             if isinstance(events, list) and events:
                 lines = ["Today's calendar:"]
@@ -409,6 +427,7 @@ class CompanionLoop:
         # Incomplete reminders
         try:
             from . import apple_tools
+
             reminders = apple_tools.reminders_list(filter="incomplete", limit=10)
             if isinstance(reminders, list) and reminders:
                 lines = [f"Open reminders ({len(reminders)}):"]
@@ -427,7 +446,9 @@ class CompanionLoop:
             if pending:
                 lines = [f"Pending approvals ({len(pending)}):"]
                 for a in pending:
-                    lines.append(f"  - {a.get('request_id', '?')}: {(a.get('command_preview', '') or '')[:60]}")
+                    lines.append(
+                        f"  - {a.get('request_id', '?')}: {(a.get('command_preview', '') or '')[:60]}"
+                    )
                 sections.append("\n".join(lines))
         except Exception:
             pass
@@ -525,9 +546,10 @@ class CompanionLoop:
         try:
             parts = self.config.companion_weekly_review_time.split(":")
             target = time(int(parts[0]), int(parts[1]))
-            return abs(
-                (now.time().hour * 60 + now.time().minute) - (target.hour * 60 + target.minute)
-            ) <= 1
+            return (
+                abs((now.time().hour * 60 + now.time().minute) - (target.hour * 60 + target.minute))
+                <= 1
+            )
         except (ValueError, IndexError):
             return False
 

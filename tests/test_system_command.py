@@ -36,6 +36,7 @@ def _make_message(text: str, sender: str = "+15550000001") -> InboundMessage:
 
 # --- Parser tests ---
 
+
 def test_system_stop_parsed_correctly():
     cmd = parse_command("system: stop")
     assert cmd.kind is CommandKind.SYSTEM
@@ -56,10 +57,13 @@ def test_system_stop_case_insensitive():
 
 # --- Orchestrator tests ---
 
+
 def test_system_stop_calls_shutdown_callback(fake_connector, fake_egress, fake_store):
     called = []
     orchestrator = _make_orchestrator(
-        fake_connector, fake_egress, fake_store,
+        fake_connector,
+        fake_egress,
+        fake_store,
         shutdown_callback=lambda: called.append(True),
     )
     result = orchestrator.handle_message(_make_message("system: stop"))
@@ -73,7 +77,9 @@ def test_system_stop_calls_shutdown_callback(fake_connector, fake_egress, fake_s
 def test_system_restart_triggers_launchd_kickstart(fake_connector, fake_egress, fake_store):
     called = []
     orchestrator = _make_orchestrator(
-        fake_connector, fake_egress, fake_store,
+        fake_connector,
+        fake_egress,
+        fake_store,
         shutdown_callback=lambda: called.append(True),
     )
     with patch("subprocess.run") as mock_run:
@@ -89,12 +95,19 @@ def test_system_restart_triggers_launchd_kickstart(fake_connector, fake_egress, 
     assert called == []
     assert len(fake_egress.messages) == 1
     assert "restarting" in fake_egress.messages[0][1].lower()
+    marker = fake_store.get_state("system_restart_echo_suppress")
+    assert marker is not None
+    assert "Apple Flow restarting" in marker
 
 
-def test_system_restart_falls_back_to_shutdown_when_kickstart_fails(fake_connector, fake_egress, fake_store):
+def test_system_restart_falls_back_to_shutdown_when_kickstart_fails(
+    fake_connector, fake_egress, fake_store
+):
     called = []
     orchestrator = _make_orchestrator(
-        fake_connector, fake_egress, fake_store,
+        fake_connector,
+        fake_egress,
+        fake_store,
         shutdown_callback=lambda: called.append(True),
     )
     with patch("subprocess.run") as mock_run:
@@ -110,7 +123,9 @@ def test_system_restart_falls_back_to_shutdown_when_kickstart_fails(fake_connect
 def test_system_unknown_subcommand(fake_connector, fake_egress, fake_store):
     called = []
     orchestrator = _make_orchestrator(
-        fake_connector, fake_egress, fake_store,
+        fake_connector,
+        fake_egress,
+        fake_store,
         shutdown_callback=lambda: called.append(True),
     )
     result = orchestrator.handle_message(_make_message("system: dance"))
@@ -119,11 +134,56 @@ def test_system_unknown_subcommand(fake_connector, fake_egress, fake_store):
     assert called == [], "Callback must NOT be called for unknown subcommand"
     assert len(fake_egress.messages) == 1
     assert "unknown system command" in fake_egress.messages[0][1].lower()
+    assert "kill provider" in fake_egress.messages[0][1].lower()
+
+
+def test_system_kill_provider_invokes_killswitch(fake_connector, fake_egress, fake_store):
+    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
+
+    with patch.object(
+        orchestrator,
+        "_kill_provider_processes",
+        return_value="Killed 2 active Gemini provider process(es).",
+    ) as mock_kill:
+        result = orchestrator.handle_message(_make_message("system: kill provider"))
+
+    assert result.kind is CommandKind.SYSTEM
+    mock_kill.assert_called_once_with()
+    assert len(fake_egress.messages) == 1
+    assert "killed 2 active gemini provider process(es)." in fake_egress.messages[0][1].lower()
+
+
+def test_mark_inflight_runs_cancelled_marks_only_running_states(
+    fake_connector, fake_egress, fake_store
+):
+    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
+
+    fake_store.create_run("run_plan", "+15550000001", "task", "planning", "/tmp", "execute")
+    fake_store.create_run("run_queue", "+15550000001", "task", "queued", "/tmp", "execute")
+    fake_store.create_run("run_running", "+15550000001", "task", "running", "/tmp", "execute")
+    fake_store.create_run("run_exec", "+15550000001", "task", "executing", "/tmp", "execute")
+    fake_store.create_run("run_verify", "+15550000001", "task", "verifying", "/tmp", "execute")
+    fake_store.create_run(
+        "run_wait", "+15550000001", "task", "awaiting_approval", "/tmp", "execute"
+    )
+    fake_store.create_run("run_done", "+15550000001", "task", "completed", "/tmp", "execute")
+
+    updated = orchestrator._mark_inflight_runs_cancelled("test reason")
+    assert updated == 5
+    assert fake_store.get_run("run_plan")["state"] == "cancelled"
+    assert fake_store.get_run("run_queue")["state"] == "cancelled"
+    assert fake_store.get_run("run_running")["state"] == "cancelled"
+    assert fake_store.get_run("run_exec")["state"] == "cancelled"
+    assert fake_store.get_run("run_verify")["state"] == "cancelled"
+    assert fake_store.get_run("run_wait")["state"] == "awaiting_approval"
+    assert fake_store.get_run("run_done")["state"] == "completed"
 
 
 def test_system_no_callback_is_safe(fake_connector, fake_egress, fake_store):
     orchestrator = _make_orchestrator(
-        fake_connector, fake_egress, fake_store,
+        fake_connector,
+        fake_egress,
+        fake_store,
         shutdown_callback=None,
     )
     # Neither stop nor restart should raise when callback is None

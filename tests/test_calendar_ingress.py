@@ -35,8 +35,18 @@ def _mock_applescript_output(events):
 @patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_new_returns_messages(mock_run):
     events = [
-        {"id": "evt1", "summary": "Deploy staging", "description": "Push latest code", "start_date": "2026-02-17T10:00:00Z"},
-        {"id": "evt2", "summary": "Run tests", "description": "", "start_date": "2026-02-17T10:05:00Z"},
+        {
+            "id": "evt1",
+            "summary": "Deploy staging",
+            "description": "Push latest code",
+            "start_date": "2026-02-17T10:00:00Z",
+        },
+        {
+            "id": "evt2",
+            "summary": "Run tests",
+            "description": "",
+            "start_date": "2026-02-17T10:05:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(events)
 
@@ -53,7 +63,12 @@ def test_fetch_new_returns_messages(mock_run):
 @patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_skips_processed_ids(mock_run):
     events = [
-        {"id": "evt1", "summary": "Deploy", "description": "", "start_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "evt1",
+            "summary": "Deploy",
+            "description": "",
+            "start_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(events)
 
@@ -67,7 +82,12 @@ def test_fetch_skips_processed_ids(mock_run):
 @patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_adds_task_prefix_by_default(mock_run):
     events = [
-        {"id": "evt1", "summary": "Deploy", "description": "Details", "start_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "evt1",
+            "summary": "Deploy",
+            "description": "Details",
+            "start_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(events)
 
@@ -80,7 +100,12 @@ def test_fetch_adds_task_prefix_by_default(mock_run):
 @patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_adds_relay_prefix_when_auto_approve(mock_run):
     events = [
-        {"id": "evt1", "summary": "Deploy", "description": "Details", "start_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "evt1",
+            "summary": "Deploy",
+            "description": "Details",
+            "start_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(events)
 
@@ -146,6 +171,7 @@ def test_fetch_handles_applescript_error(mock_run):
 @patch("apple_flow.calendar_ingress.subprocess.run")
 def test_fetch_handles_timeout(mock_run):
     import subprocess
+
     mock_run.side_effect = subprocess.TimeoutExpired(cmd="osascript", timeout=30)
 
     ingress = _make_ingress()
@@ -184,7 +210,12 @@ def test_parse_tab_delimited():
 def test_trigger_tag_required_skips_without_tag(mock_run):
     """Events without the trigger tag should be skipped."""
     events = [
-        {"id": "evt1", "summary": "Team meeting", "description": "Discuss roadmap", "start_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "evt1",
+            "summary": "Team meeting",
+            "description": "Discuss roadmap",
+            "start_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(events)
 
@@ -201,7 +232,12 @@ def test_trigger_tag_required_skips_without_tag(mock_run):
 def test_trigger_tag_in_description_passes_and_stripped(mock_run):
     """Event with trigger tag in description should be returned with tag stripped."""
     events = [
-        {"id": "evt1", "summary": "Deploy app", "description": "!!agent push to production", "start_date": "2026-02-17T10:00:00Z"},
+        {
+            "id": "evt1",
+            "summary": "Deploy app",
+            "description": "!!agent push to production",
+            "start_date": "2026-02-17T10:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(events)
 
@@ -220,8 +256,18 @@ def test_trigger_tag_in_description_passes_and_stripped(mock_run):
 def test_trigger_tag_empty_processes_all(mock_run):
     """When trigger_tag is empty, all events are processed (backward compat)."""
     events = [
-        {"id": "evt1", "summary": "Meeting", "description": "No tag", "start_date": "2026-02-17T10:00:00Z"},
-        {"id": "evt2", "summary": "Deploy", "description": "Also no tag", "start_date": "2026-02-17T11:00:00Z"},
+        {
+            "id": "evt1",
+            "summary": "Meeting",
+            "description": "No tag",
+            "start_date": "2026-02-17T10:00:00Z",
+        },
+        {
+            "id": "evt2",
+            "summary": "Deploy",
+            "description": "Also no tag",
+            "start_date": "2026-02-17T11:00:00Z",
+        },
     ]
     mock_run.return_value = _mock_applescript_output(events)
 

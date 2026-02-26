@@ -20,12 +20,7 @@ class AppleCalendarEgress:
         Returns True on success, False on failure.
         """
         escaped_cal = self.calendar_name.replace('"', '\\"')
-        escaped_text = (
-            result_text
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-        )
+        escaped_text = result_text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         escaped_id = event_id.replace('"', '\\"')
 
         script = f'''

@@ -129,6 +129,7 @@ class AppleNotesIngress:
     @staticmethod
     def _compose_text(title: str, body: str, trigger_tag: str = "") -> str:
         """Compose the prompt text from note title and body, stripping the trigger tag."""
+
         def strip_tag(s: str) -> str:
             if trigger_tag:
                 s = s.replace(trigger_tag, "").strip()
@@ -225,7 +226,11 @@ class AppleNotesIngress:
                     timeout=self.fetch_timeout_seconds,
                 )
                 if result.returncode != 0:
-                    logger.warning("Notes AppleScript failed (rc=%s): %s", result.returncode, result.stderr.strip())
+                    logger.warning(
+                        "Notes AppleScript failed (rc=%s): %s",
+                        result.returncode,
+                        result.stderr.strip(),
+                    )
                     return []
                 output = result.stdout.strip()
                 if not output:
@@ -260,10 +265,12 @@ class AppleNotesIngress:
             parts = line.split("\t")
             if len(parts) < 4:
                 continue
-            notes.append({
-                "id": parts[0],
-                "name": parts[1],
-                "body": parts[2],
-                "modification_date": parts[3],
-            })
+            notes.append(
+                {
+                    "id": parts[0],
+                    "name": parts[1],
+                    "body": parts[2],
+                    "modification_date": parts[3],
+                }
+            )
         return notes

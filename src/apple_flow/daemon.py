@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import json
 import logging
 import shutil
 import signal
@@ -16,6 +18,7 @@ from .claude_cli_connector import ClaudeCliConnector
 from .cline_connector import ClineConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
+from .commanding import CommandKind, parse_command
 from .companion import CompanionLoop
 from .config import RelaySettings
 from .egress import IMessageEgress
@@ -33,10 +36,30 @@ from .policy import PolicyEngine
 from .protocols import ConnectorProtocol
 from .reminders_egress import AppleRemindersEgress
 from .reminders_ingress import AppleRemindersIngress
+from .run_executor import RunExecutor
 from .scheduler import FollowUpScheduler
 from .store import SQLiteStore
 
 logger = logging.getLogger("apple_flow.daemon")
+
+_FASTLANE_COMMANDS = {
+    CommandKind.STATUS,
+    CommandKind.HEALTH,
+    CommandKind.HISTORY,
+    CommandKind.USAGE,
+    CommandKind.LOGS,
+    CommandKind.DENY,
+    CommandKind.DENY_ALL,
+    CommandKind.CLEAR_CONTEXT,
+    CommandKind.SYSTEM,
+}
+
+
+def _normalize_echo_text(text: str) -> str:
+    normalized = text or ""
+    normalized = normalized.replace("\u2019", "'").replace("\u2018", "'")
+    normalized = normalized.replace('"', "'")
+    return " ".join(normalized.lower().split())
 
 
 def migrate_legacy_db_if_needed(
@@ -203,7 +226,9 @@ class RelayDaemon:
         # File-based memory (reads/writes agent-office MEMORY.md + 60_memory/)
         self.memory: FileMemory | None = None
         if settings.enable_memory and self._office_path:
-            self.memory = FileMemory(self._office_path, max_context_chars=settings.memory_max_context_chars)
+            self.memory = FileMemory(
+                self._office_path, max_context_chars=settings.memory_max_context_chars
+            )
             logger.info("File-based memory enabled (office=%s)", self._office_path)
 
         # Follow-up scheduler (SQLite-backed)
@@ -244,7 +269,11 @@ class RelayDaemon:
                     memory=self.memory,
                     syncer=self.office_syncer,
                 )
-                logger.info("Companion loop enabled (owner=%s, poll=%.0fs)", owner, settings.companion_poll_interval_seconds)
+                logger.info(
+                    "Companion loop enabled (owner=%s, poll=%.0fs)",
+                    owner,
+                    settings.companion_poll_interval_seconds,
+                )
             else:
                 logger.warning("Companion enabled but no allowed_senders configured — skipping")
 
@@ -255,7 +284,9 @@ class RelayDaemon:
                 memory=self.memory,
                 scan_interval_seconds=settings.ambient_scan_interval_seconds,
             )
-            logger.info("Ambient scanner enabled (interval=%.0fs)", settings.ambient_scan_interval_seconds)
+            logger.info(
+                "Ambient scanner enabled (interval=%.0fs)", settings.ambient_scan_interval_seconds
+            )
 
         # Create channel-specific egress objects first so they can be passed to main orchestrator
         # (for post-execution cleanup after approval)
@@ -291,6 +322,7 @@ class RelayDaemon:
             progress_update_interval_seconds=settings.progress_update_interval_seconds,
             execution_heartbeat_seconds=settings.execution_heartbeat_seconds,
             checkpoint_on_timeout=settings.checkpoint_on_timeout,
+            auto_resume_on_timeout=settings.auto_resume_on_timeout,
             max_resume_attempts=settings.max_resume_attempts,
             enable_verifier=settings.enable_verifier,
             enable_attachments=settings.enable_attachments,
@@ -300,6 +332,7 @@ class RelayDaemon:
             notes_log_folder_name=settings.notes_log_folder_name,
             memory=self.memory,
             scheduler=self.scheduler,
+            run_executor=None,
             office_syncer=self.office_syncer,
             log_file_path=settings.log_file_path,
         )
@@ -430,10 +463,31 @@ class RelayDaemon:
                 **orchestrator_kwargs,
             )
 
+        # Durable async run executor (approvals enqueue long execution jobs).
+        self.run_executor = RunExecutor(
+            store=self.store,
+            approval_handler=self.orchestrator._approval,
+            worker_count=settings.run_worker_count,
+            lease_seconds=settings.run_job_lease_seconds,
+            recovery_scan_seconds=settings.run_recovery_scan_seconds,
+        )
+        self.orchestrator.set_run_executor(self.run_executor)
+        if self.mail_orchestrator is not None:
+            self.mail_orchestrator.set_run_executor(self.run_executor)
+        if self.reminders_orchestrator is not None:
+            self.reminders_orchestrator.set_run_executor(self.run_executor)
+        if self.notes_orchestrator is not None:
+            self.notes_orchestrator.set_run_executor(self.run_executor)
+        if self.calendar_orchestrator is not None:
+            self.calendar_orchestrator.set_run_executor(self.run_executor)
+
         self._concurrency_sem = asyncio.Semaphore(settings.max_concurrent_ai_calls)
+        self._inflight_dispatch_tasks: set[asyncio.Task] = set()
 
         persisted_cursor = self.store.get_state("last_rowid")
-        self._last_rowid: int | None = int(persisted_cursor) if persisted_cursor is not None else None
+        self._last_rowid: int | None = (
+            int(persisted_cursor) if persisted_cursor is not None else None
+        )
         self._last_messages_db_error_at: float = 0.0
         self._last_state_db_error_at: float = 0.0
         self._shutdown_requested = False
@@ -442,7 +496,10 @@ class RelayDaemon:
             if self._last_rowid is None:
                 self._last_rowid = latest
                 self.store.set_state("last_rowid", str(latest))
-                logger.info("Initialized cursor to latest rowid=%s to avoid replaying historical messages.", latest)
+                logger.info(
+                    "Initialized cursor to latest rowid=%s to avoid replaying historical messages.",
+                    latest,
+                )
             elif (latest - self._last_rowid) > max(0, self.settings.max_startup_replay_rows):
                 logger.info(
                     "Fast-forwarding stale cursor from rowid=%s to latest rowid=%s (backlog=%s > max_startup_replay_rows=%s).",
@@ -484,6 +541,28 @@ class RelayDaemon:
         logger.info("Shutdown requested")
         self._shutdown_requested = True
 
+    def _spawn_dispatch_task(self, coro: asyncio.Future) -> None:
+        """Track a fire-and-forget dispatch task so polling stays responsive."""
+        if not hasattr(self, "_inflight_dispatch_tasks"):
+            self._inflight_dispatch_tasks = set()
+        task = asyncio.create_task(coro)
+        self._inflight_dispatch_tasks.add(task)
+
+        def _done_callback(done_task: asyncio.Task) -> None:
+            self._inflight_dispatch_tasks.discard(done_task)
+            with contextlib.suppress(BaseException):
+                done_task.result()
+
+        task.add_done_callback(_done_callback)
+
+    async def _flush_inflight_on_shutdown(self, timeout: float = 1.0) -> None:
+        if not getattr(self, "_shutdown_requested", False):
+            return
+        tasks = getattr(self, "_inflight_dispatch_tasks", set())
+        if not tasks:
+            return
+        await asyncio.wait(tasks, timeout=timeout)
+
     def shutdown(self) -> None:
         """Perform cleanup on shutdown."""
         logger.info("Shutting down...")
@@ -498,20 +577,45 @@ class RelayDaemon:
         logger.info("Shutdown complete")
 
     async def run_forever(self) -> None:
-        tasks = [self._poll_imessage_loop()]
+        tasks = [
+            asyncio.create_task(self._poll_imessage_loop()),
+            asyncio.create_task(self._run_executor_loop()),
+        ]
         if self.mail_ingress is not None:
-            tasks.append(self._poll_mail_loop())
+            tasks.append(asyncio.create_task(self._poll_mail_loop()))
         if self.reminders_ingress is not None:
-            tasks.append(self._poll_reminders_loop())
+            tasks.append(asyncio.create_task(self._poll_reminders_loop()))
         if self.notes_ingress is not None:
-            tasks.append(self._poll_notes_loop())
+            tasks.append(asyncio.create_task(self._poll_notes_loop()))
         if self.calendar_ingress is not None:
-            tasks.append(self._poll_calendar_loop())
+            tasks.append(asyncio.create_task(self._poll_calendar_loop()))
         if self.companion is not None:
-            tasks.append(self._companion_loop())
+            tasks.append(asyncio.create_task(self._companion_loop()))
         if self.ambient is not None:
-            tasks.append(self._ambient_loop())
-        await asyncio.gather(*tasks)
+            tasks.append(asyncio.create_task(self._ambient_loop()))
+        try:
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            return
+        if self._inflight_dispatch_tasks:
+            done, pending = await asyncio.wait(self._inflight_dispatch_tasks, timeout=5.0)
+            if pending:
+                logger.warning(
+                    "Shutdown with %d in-flight dispatch tasks still pending", len(pending)
+                )
+
+    async def _run_executor_loop(self) -> None:
+        """Background worker loop for durable run jobs."""
+        try:
+            await self.run_executor.run_forever(lambda: self._shutdown_requested)
+        except asyncio.CancelledError:
+            logger.info("Run executor loop cancelled during shutdown")
+            return
+        except Exception as exc:
+            logger.exception("Run executor loop error: %s", exc)
 
     async def _companion_loop(self) -> None:
         """Companion proactive observation loop."""
@@ -535,7 +639,11 @@ class RelayDaemon:
         """iMessage polling loop (original behaviour)."""
         while not self._shutdown_requested:
             try:
-                sender_allowlist = self.settings.allowed_senders if self.settings.only_poll_allowed_senders else None
+                sender_allowlist = (
+                    self.settings.allowed_senders
+                    if self.settings.only_poll_allowed_senders
+                    else None
+                )
                 if self.settings.only_poll_allowed_senders and not (sender_allowlist or []):
                     logger.warning(
                         "only_poll_allowed_senders=true but allowed_senders is empty; polling disabled until configured."
@@ -566,6 +674,13 @@ class RelayDaemon:
                     if not msg.text.strip():
                         logger.info("Ignoring empty inbound rowid=%s sender=%s", msg.id, msg.sender)
                         continue
+                    if self._consume_restart_echo_suppress(msg.sender, msg.text):
+                        logger.info(
+                            "Ignoring restart confirmation echo from %s (rowid=%s)",
+                            msg.sender,
+                            msg.id,
+                        )
+                        continue
                     logger.info(
                         "Inbound message rowid=%s sender=%s chars=%s text=%r",
                         msg.id,
@@ -574,7 +689,9 @@ class RelayDaemon:
                         msg.text[:120],
                     )
                     if self.egress.was_recent_outbound(msg.sender, msg.text):
-                        logger.info("Ignoring probable outbound echo from %s (rowid=%s)", msg.sender, msg.id)
+                        logger.info(
+                            "Ignoring probable outbound echo from %s (rowid=%s)", msg.sender, msg.id
+                        )
                         continue
                     # Startup catch-up window: skip messages older than N seconds at boot
                     if self.settings.startup_catchup_window_seconds > 0:
@@ -597,12 +714,17 @@ class RelayDaemon:
                     if not self.policy.is_sender_allowed(msg.sender):
                         logger.info("Blocked message from non-allowlisted sender: %s", msg.sender)
                         if self.settings.notify_blocked_senders:
-                            self.egress.send(msg.sender, "Apple Flow: sender not authorized for this relay.")
+                            self.egress.send(
+                                msg.sender, "Apple Flow: sender not authorized for this relay."
+                            )
                         continue
                     if not self.policy.is_under_rate_limit(msg.sender, datetime.now(UTC)):
                         logger.info("Rate limit triggered for sender: %s", msg.sender)
                         if self.settings.notify_rate_limited_senders:
-                            self.egress.send(msg.sender, "Apple Flow: rate limit exceeded, please retry in a minute.")
+                            self.egress.send(
+                                msg.sender,
+                                "Apple Flow: rate limit exceeded, please retry in a minute.",
+                            )
                         continue
                     dispatchable.append(msg)
 
@@ -616,7 +738,10 @@ class RelayDaemon:
                         )
 
                 async def _dispatch_imessage(msg):
-                    async with self._concurrency_sem:
+                    parsed = parse_command((msg.text or "").strip())
+                    use_fastlane = parsed.kind in _FASTLANE_COMMANDS
+
+                    async def _run_dispatch() -> None:
                         try:
                             started_at = time.monotonic()
                             result = await asyncio.to_thread(self.orchestrator.handle_message, msg)
@@ -657,10 +782,16 @@ class RelayDaemon:
                                     msg.sender,
                                 )
 
+                    if use_fastlane:
+                        await _run_dispatch()
+                        return
+                    async with self._concurrency_sem:
+                        await _run_dispatch()
+
                 if dispatchable:
-                    await asyncio.gather(
-                        *[asyncio.create_task(_dispatch_imessage(msg)) for msg in dispatchable]
-                    )
+                    for msg in dispatchable:
+                        self._spawn_dispatch_task(_dispatch_imessage(msg))
+                    await self._flush_inflight_on_shutdown()
             except sqlite3.OperationalError as exc:
                 if "unable to open database file" in str(exc).lower():
                     self._throttled_messages_db_warning(
@@ -674,6 +805,31 @@ class RelayDaemon:
                 logger.exception("Relay loop error: %s", exc)
 
             await asyncio.sleep(self.settings.poll_interval_seconds)
+        await self._flush_inflight_on_shutdown(timeout=2.0)
+
+    def _consume_restart_echo_suppress(self, sender: str, text: str) -> bool:
+        """Consume one short-lived restart echo suppress marker, if present and matching."""
+        raw_marker = self.store.get_state("system_restart_echo_suppress")
+        if not raw_marker:
+            return False
+        try:
+            marker = json.loads(raw_marker)
+            expires_at = float(marker.get("expires_at", 0.0))
+            if time.time() > expires_at:
+                self.store.set_state("system_restart_echo_suppress", "")
+                return False
+            marker_sender = str(marker.get("sender", ""))
+            marker_text = str(marker.get("text", ""))
+            if marker_sender == sender and _normalize_echo_text(
+                marker_text
+            ) == _normalize_echo_text(text):
+                self.store.set_state("system_restart_echo_suppress", "")
+                return True
+        except Exception:
+            # Clear malformed marker to avoid repeated parse failures.
+            self.store.set_state("system_restart_echo_suppress", "")
+            return False
+        return False
 
     async def _poll_mail_loop(self) -> None:
         """Apple Mail polling loop — runs alongside iMessage when enabled."""
@@ -694,7 +850,9 @@ class RelayDaemon:
                     if self._shutdown_requested:
                         break
                     if not msg.text.strip():
-                        logger.info("Ignoring empty inbound email id=%s sender=%s", msg.id, msg.sender)
+                        logger.info(
+                            "Ignoring empty inbound email id=%s sender=%s", msg.id, msg.sender
+                        )
                         continue
                     logger.info(
                         "Inbound email id=%s sender=%s chars=%s text=%r",
@@ -704,7 +862,9 @@ class RelayDaemon:
                         msg.text[:120],
                     )
                     if self.mail_egress.was_recent_outbound(msg.sender, msg.text):
-                        logger.info("Ignoring probable outbound echo from %s (id=%s)", msg.sender, msg.id)
+                        logger.info(
+                            "Ignoring probable outbound echo from %s (id=%s)", msg.sender, msg.id
+                        )
                         continue
                     dispatchable_mail.append(msg)
 
@@ -712,9 +872,15 @@ class RelayDaemon:
                     async with self._concurrency_sem:
                         try:
                             started_at = time.monotonic()
-                            result = await asyncio.to_thread(self.mail_orchestrator.handle_message, msg)
+                            result = await asyncio.to_thread(
+                                self.mail_orchestrator.handle_message, msg
+                            )
                             duration = time.monotonic() - started_at
-                            if result.response in {"ignored_empty", "ignored_missing_chat_prefix", "duplicate"}:
+                            if result.response in {
+                                "ignored_empty",
+                                "ignored_missing_chat_prefix",
+                                "duplicate",
+                            }:
                                 if result.response == "duplicate":
                                     logger.info(
                                         "Ignoring duplicate inbound email id=%s sender=%s",
@@ -760,13 +926,14 @@ class RelayDaemon:
                             )
 
                 if dispatchable_mail:
-                    await asyncio.gather(
-                        *[asyncio.create_task(_dispatch_mail(msg)) for msg in dispatchable_mail]
-                    )
+                    for msg in dispatchable_mail:
+                        self._spawn_dispatch_task(_dispatch_mail(msg))
+                    await self._flush_inflight_on_shutdown()
             except Exception as exc:
                 logger.exception("Mail polling loop error: %s", exc)
 
             await asyncio.sleep(self.settings.poll_interval_seconds)
+        await self._flush_inflight_on_shutdown(timeout=2.0)
 
     async def _poll_reminders_loop(self) -> None:
         """Apple Reminders polling loop — runs alongside iMessage/Mail when enabled."""
@@ -774,7 +941,9 @@ class RelayDaemon:
         assert self.reminders_egress is not None
         assert self.reminders_orchestrator is not None
 
-        logger.info("Apple Reminders polling loop started (list=%r)", self.settings.reminders_list_name)
+        logger.info(
+            "Apple Reminders polling loop started (list=%r)", self.settings.reminders_list_name
+        )
         while not self._shutdown_requested:
             try:
                 messages = self.reminders_ingress.fetch_new()
@@ -803,7 +972,9 @@ class RelayDaemon:
                     async with self._concurrency_sem:
                         try:
                             started_at = time.monotonic()
-                            result = await asyncio.to_thread(self.reminders_orchestrator.handle_message, msg)
+                            result = await asyncio.to_thread(
+                                self.reminders_orchestrator.handle_message, msg
+                            )
                             duration = time.monotonic() - started_at
                             reminder_id = msg.context.get("reminder_id", "")
                             logger.info(
@@ -820,7 +991,9 @@ class RelayDaemon:
                                         f"[Apple Flow] Awaiting approval — check iMessage.\n\n{result.response[:500]}",
                                     )
                                 else:
-                                    list_name = msg.context.get("list_name", self.settings.reminders_list_name)
+                                    list_name = msg.context.get(
+                                        "list_name", self.settings.reminders_list_name
+                                    )
                                     self.reminders_egress.move_to_archive(
                                         reminder_id=reminder_id,
                                         result_text=f"[Apple Flow Result]\n\n{result.response}",
@@ -836,9 +1009,9 @@ class RelayDaemon:
                             )
 
                 if dispatchable_reminders:
-                    await asyncio.gather(
-                        *[asyncio.create_task(_dispatch_reminder(msg)) for msg in dispatchable_reminders]
-                    )
+                    for msg in dispatchable_reminders:
+                        self._spawn_dispatch_task(_dispatch_reminder(msg))
+                    await self._flush_inflight_on_shutdown()
             except Exception as exc:
                 logger.exception("Reminders polling loop error: %s", exc)
 
@@ -862,19 +1035,30 @@ class RelayDaemon:
                         continue
 
                     note_title = msg.context.get("note_title", "")
-                    logger.info("Inbound note id=%s title=%r chars=%s", msg.id, note_title, len(msg.text))
+                    logger.info(
+                        "Inbound note id=%s title=%r chars=%s", msg.id, note_title, len(msg.text)
+                    )
                     dispatchable_notes.append(msg)
 
                 async def _dispatch_note(msg):
                     async with self._concurrency_sem:
                         try:
                             started_at = time.monotonic()
-                            result = await asyncio.to_thread(self.notes_orchestrator.handle_message, msg)
+                            result = await asyncio.to_thread(
+                                self.notes_orchestrator.handle_message, msg
+                            )
                             duration = time.monotonic() - started_at
                             note_id = msg.context.get("note_id", "")
-                            logger.info("Handled note id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
+                            logger.info(
+                                "Handled note id=%s kind=%s duration=%.2fs",
+                                msg.id,
+                                result.kind.value,
+                                duration,
+                            )
                             if result.response and note_id:
-                                folder_name = msg.context.get("folder_name", self.settings.notes_folder_name)
+                                folder_name = msg.context.get(
+                                    "folder_name", self.settings.notes_folder_name
+                                )
                                 if result.kind.value in ("task", "project"):
                                     self.notes_egress.append_result(
                                         note_id,
@@ -899,9 +1083,9 @@ class RelayDaemon:
                             )
 
                 if dispatchable_notes:
-                    await asyncio.gather(
-                        *[asyncio.create_task(_dispatch_note(msg)) for msg in dispatchable_notes]
-                    )
+                    for msg in dispatchable_notes:
+                        self._spawn_dispatch_task(_dispatch_note(msg))
+                    await self._flush_inflight_on_shutdown()
             except Exception as exc:
                 logger.exception("Notes polling loop error: %s", exc)
 
@@ -913,7 +1097,9 @@ class RelayDaemon:
         assert self.calendar_egress is not None
         assert self.calendar_orchestrator is not None
 
-        logger.info("Apple Calendar polling loop started (calendar=%r)", self.settings.calendar_name)
+        logger.info(
+            "Apple Calendar polling loop started (calendar=%r)", self.settings.calendar_name
+        )
         while not self._shutdown_requested:
             try:
                 messages = self.calendar_ingress.fetch_new()
@@ -926,7 +1112,12 @@ class RelayDaemon:
 
                     event_id = msg.context.get("event_id", "")
                     event_summary = msg.context.get("event_summary", "")
-                    logger.info("Inbound calendar event id=%s summary=%r chars=%s", msg.id, event_summary, len(msg.text))
+                    logger.info(
+                        "Inbound calendar event id=%s summary=%r chars=%s",
+                        msg.id,
+                        event_summary,
+                        len(msg.text),
+                    )
 
                     self.calendar_ingress.mark_processed(event_id)
                     dispatchable_calendar.append(msg)
@@ -935,10 +1126,17 @@ class RelayDaemon:
                     async with self._concurrency_sem:
                         try:
                             started_at = time.monotonic()
-                            result = await asyncio.to_thread(self.calendar_orchestrator.handle_message, msg)
+                            result = await asyncio.to_thread(
+                                self.calendar_orchestrator.handle_message, msg
+                            )
                             duration = time.monotonic() - started_at
                             event_id = msg.context.get("event_id", "")
-                            logger.info("Handled calendar event id=%s kind=%s duration=%.2fs", msg.id, result.kind.value, duration)
+                            logger.info(
+                                "Handled calendar event id=%s kind=%s duration=%.2fs",
+                                msg.id,
+                                result.kind.value,
+                                duration,
+                            )
                             if result.response and event_id:
                                 if result.kind.value in ("task", "project"):
                                     self.calendar_egress.annotate_event(
@@ -956,9 +1154,9 @@ class RelayDaemon:
                             )
 
                 if dispatchable_calendar:
-                    await asyncio.gather(
-                        *[asyncio.create_task(_dispatch_calendar(msg)) for msg in dispatchable_calendar]
-                    )
+                    for msg in dispatchable_calendar:
+                        self._spawn_dispatch_task(_dispatch_calendar(msg))
+                    await self._flush_inflight_on_shutdown()
             except Exception as exc:
                 logger.exception("Calendar polling loop error: %s", exc)
 
@@ -1001,7 +1199,7 @@ class RelayDaemon:
             f"ℹ️  {mode_hint}",
             "✅ approve <id>  |  ❌ deny <id>  |  ❌❌ deny all  |  📊 status",
             "🏥 health  |  🔍 history: [query]  |  📈 usage  |  📋 logs  |  🔄 clear context",
-            "🔧 system: stop  |  system: restart",
+            "🔧 system: stop  |  restart  |  kill provider  |  cancel run <run_id>",
             "",
             "Power users:",
             "⚡ task: <cmd>        execute  (needs ✅)",
@@ -1025,8 +1223,7 @@ class RelayDaemon:
             gateway_section = (
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "🌐 GATEWAYS\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                + "\n".join(gateways) + "\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(gateways) + "\n"
             )
 
         intro = (
@@ -1040,8 +1237,7 @@ class RelayDaemon:
             + gateway_section
             + "━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "⚡ COMMANDS\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            + "\n".join(commands)
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(commands)
         )
         try:
             self.egress.send(recipient, intro)
@@ -1102,6 +1298,8 @@ async def run() -> None:
 
     try:
         await daemon.run_forever()
+    except asyncio.CancelledError:
+        logger.info("Daemon run loop cancelled during shutdown")
     finally:
         daemon.shutdown()
 

@@ -6,6 +6,7 @@ import threading
 from typing import Any
 
 from .apple_tools import TOOLS_CONTEXT
+from .process_registry import ManagedProcessRegistry
 
 logger = logging.getLogger("apple_flow.cli_connector")
 
@@ -44,6 +45,7 @@ class CodexCliConnector:
         self.model = model.strip()
         self.inject_tools_context = inject_tools_context
         self.soul_prompt: str = ""
+        self._processes = ManagedProcessRegistry("codex-cli")
 
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
@@ -111,29 +113,33 @@ class CodexCliConnector:
             ctx_len,
         )
 
+        proc: subprocess.Popen[str] | None = None
+        proc: subprocess.Popen[str] | None = None
         try:
-            # Execute subprocess with timeout
-            result = subprocess.run(
+            proc = subprocess.Popen(
                 cmd,
                 cwd=self.workspace,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=self.timeout,
-                check=False,  # Don't raise on non-zero exit
+                start_new_session=True,
             )
+            self._processes.register(sender, proc)
+            stdout, stderr = proc.communicate(timeout=self.timeout)
+            returncode = int(proc.returncode or 0)
 
             # Check for errors
-            if result.returncode != 0:
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            if returncode != 0:
+                error_msg = stderr.strip() if stderr else "Unknown error"
                 logger.error(
                     "Codex exec failed: returncode=%d stderr=%s",
-                    result.returncode,
+                    returncode,
                     error_msg,
                 )
-                return f"Error: Codex execution failed (exit code {result.returncode}). Check logs for details."
+                return f"Error: Codex execution failed (exit code {returncode}). Check logs for details."
 
             # Get response
-            response = result.stdout.strip()
+            response = stdout.strip()
 
             if not response:
                 logger.warning("Codex exec returned empty response")
@@ -151,6 +157,8 @@ class CodexCliConnector:
             return response
 
         except subprocess.TimeoutExpired:
+            if proc is not None:
+                self._processes.terminate(proc)
             logger.error(
                 "Codex exec timed out after %.1fs for sender=%s",
                 self.timeout,
@@ -163,6 +171,9 @@ class CodexCliConnector:
         except Exception as exc:
             logger.exception("Unexpected error during codex exec: %s", exc)
             return f"Error: {type(exc).__name__}: {exc}"
+        finally:
+            if proc is not None:
+                self._processes.unregister(proc)
 
     def run_turn_streaming(self, thread_id: str, prompt: str, on_progress: Any = None) -> str:
         """Execute a turn with line-by-line streaming, calling on_progress for each line.
@@ -185,7 +196,9 @@ class CodexCliConnector:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                start_new_session=True,
             )
+            self._processes.register(sender, proc)
 
             output_lines: list[str] = []
             assert proc.stdout is not None
@@ -209,17 +222,25 @@ class CodexCliConnector:
             return response
 
         except subprocess.TimeoutExpired:
-            proc.kill()
+            if proc is not None:
+                self._processes.terminate(proc)
             logger.error("Codex exec (streaming) timed out after %.1fs", self.timeout)
             return f"Error: Request timed out after {int(self.timeout)}s."
         except Exception as exc:
             logger.exception("Streaming exec error: %s", exc)
             # Fall back to regular execution
             return self.run_turn(thread_id, prompt)
+        finally:
+            if proc is not None:
+                self._processes.unregister(proc)
 
     def shutdown(self) -> None:
         """No-op: no persistent process to shut down."""
         logger.info("CLI connector shutdown (no-op)")
+
+    def cancel_active_processes(self, thread_id: str | None = None) -> int:
+        """Cancel active codex subprocesses for one sender or globally."""
+        return self._processes.cancel(thread_id)
 
     def _build_prompt_with_context(self, sender: str, prompt: str) -> str:
         """Build a prompt that includes recent conversation context.
@@ -243,7 +264,7 @@ class CodexCliConnector:
             parts.append(TOOLS_CONTEXT)
 
         if history:
-            recent_context = history[-self.context_window:]
+            recent_context = history[-self.context_window :]
             context_text = "\n\n".join(recent_context)
             parts.append(f"Previous conversation context:\n{context_text}")
 

@@ -72,6 +72,7 @@ class FakeStore:
         self.sessions: dict[str, dict[str, Any]] = {}
         self.events: list[dict[str, Any]] = []
         self.state: dict[str, str] = {}
+        self.run_jobs: dict[str, dict[str, Any]] = {}
 
     def bootstrap(self) -> None:
         pass
@@ -134,8 +135,10 @@ class FakeStore:
 
     def list_active_runs(self, limit: int = 20) -> list[dict[str, Any]]:
         active = [
-            run for run in self.runs.values()
-            if run.get("state") in {"planning", "awaiting_approval", "executing", "verifying"}
+            run
+            for run in self.runs.values()
+            if run.get("state")
+            in {"planning", "awaiting_approval", "queued", "running", "executing", "verifying"}
         ]
         return active[:limit]
 
@@ -216,6 +219,38 @@ class FakeStore:
     def get_state(self, key: str) -> str | None:
         return self.state.get(key)
 
+    def enqueue_run_job(
+        self,
+        *,
+        job_id: str,
+        run_id: str,
+        sender: str,
+        phase: str,
+        attempt: int,
+        payload: dict[str, Any] | None = None,
+        status: str = "queued",
+    ) -> None:
+        self.run_jobs[job_id] = {
+            "job_id": job_id,
+            "run_id": run_id,
+            "sender": sender,
+            "phase": phase,
+            "attempt": attempt,
+            "payload": payload or {},
+            "status": status,
+        }
+
+    def cancel_run_jobs(self, run_id: str) -> int:
+        count = 0
+        for job in self.run_jobs.values():
+            if job.get("run_id") != run_id:
+                continue
+            if job.get("status") not in {"queued", "running"}:
+                continue
+            job["status"] = "cancelled"
+            count += 1
+        return count
+
     def get_stats(self) -> dict[str, Any]:
         runs_by_state: dict[str, int] = {}
         for run in self.runs.values():
@@ -230,14 +265,13 @@ class FakeStore:
         }
 
     def recent_messages(self, sender: str, limit: int = 10) -> list[dict[str, Any]]:
-        sender_msgs = [
-            m for mid, m in self.messages.items() if m.get("sender") == sender
-        ]
+        sender_msgs = [m for mid, m in self.messages.items() if m.get("sender") == sender]
         return sender_msgs[:limit]
 
     def search_messages(self, sender: str, query: str, limit: int = 10) -> list[dict[str, Any]]:
         results = [
-            m for mid, m in self.messages.items()
+            m
+            for mid, m in self.messages.items()
             if m.get("sender") == sender and query.lower() in (m.get("text", "")).lower()
         ]
         return results[:limit]

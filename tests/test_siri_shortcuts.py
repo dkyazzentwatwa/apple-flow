@@ -55,6 +55,7 @@ def test_task_endpoint_returns_503_without_orchestrator():
 
 def test_task_endpoint_processes_message():
     import os
+
     # Temporarily clear allowed_senders so no sender check blocks us
     old_val = os.environ.get("apple_flow_allowed_senders")
     old_token = os.environ.get("apple_flow_admin_api_token")
@@ -92,6 +93,7 @@ def test_task_endpoint_processes_message():
 def test_task_endpoint_validates_sender():
     """When allowed_senders is set, non-allowlisted senders get 403."""
     import os
+
     old_val = os.environ.get("apple_flow_allowed_senders")
     old_token = os.environ.get("apple_flow_admin_api_token")
     os.environ["apple_flow_allowed_senders"] = "+15551234567"

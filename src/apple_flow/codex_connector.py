@@ -91,7 +91,9 @@ class CodexAppServerConnector:
     def _format_rpc_error(error_obj: Any) -> str:
         return f"Codex RPC error: {error_obj}"
 
-    def _send_jsonrpc_locked(self, method: str, params: dict[str, Any], timeout_seconds: float = 15.0) -> dict[str, Any]:
+    def _send_jsonrpc_locked(
+        self, method: str, params: dict[str, Any], timeout_seconds: float = 15.0
+    ) -> dict[str, Any]:
         self.ensure_started()
         assert self._process is not None
         assert self._process.stdin is not None

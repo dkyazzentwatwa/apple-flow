@@ -1,4 +1,5 @@
 """Tests for the `logs` command — tail daemon log via iMessage."""
+
 from __future__ import annotations
 
 from apple_flow.commanding import CommandKind, parse_command
@@ -124,7 +125,9 @@ def test_logs_capped_at_50(fake_store, fake_connector, fake_egress, tmp_path):
 
 def test_logs_file_not_found(fake_store, fake_connector, fake_egress, tmp_path):
     orch = _make_orchestrator(
-        fake_store, fake_connector, fake_egress,
+        fake_store,
+        fake_connector,
+        fake_egress,
         log_file_path=str(tmp_path / "nonexistent.log"),
     )
     result = orch.handle_message(_msg("logs"))

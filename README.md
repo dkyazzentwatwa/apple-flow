@@ -13,7 +13,7 @@
 
 **[apple-flow-site.vercel.app](https://apple-flow-site.vercel.app/)**
 
-*A local-first macOS daemon that bridges iMessage, Mail, Reminders, Notes, and Calendar to your favorite AI assistant. No apps. No cloud. Just your Apple Apps.*
+*A local-first macOS daemon that bridges iMessage, Mail, Reminders, Notes, and Calendar to your favorite AI assistant. No cloud. Optional local Swift app. Just your Apple Apps.*
 
 </div>
 
@@ -52,9 +52,19 @@ Your AI companion watches your life and sends proactive iMessage updates:
 
 **The best part?** It's 100% local-first. Your data never leaves your Mac.
 
+### 🖥️ Optional Swift Onboarding + Dashboard App
+Prefer a desktop UI? Apple Flow includes a native macOS Swift app for guided onboarding plus runtime operations:
+- Intro + system checks (Python, connector, iMessage DB, token)
+- Full `.env` preview and apply flow
+- Gateway setup (Mail, Reminders, Notes, Calendar)
+- Runtime control panel tabs (Overview, Approvals, Sessions, Events, Logs, Config)
+- Exportable standalone app bundle/zip (`AppleFlowApp.app`, `AppleFlowApp-macOS.zip`)
+
 ---
 
 ## 📸 Screenshots
+
+### Dashboard + Operations
 
 <table>
   <tr>
@@ -75,6 +85,43 @@ Your AI companion watches your life and sends proactive iMessage updates:
   <tr>
     <td><img src="docs/screenshots/calendar-event.png" alt="Calendar" width="250"/></td>
     <td><img src="docs/screenshots/office-brainstorm.png" alt="Brainstorm" width="250"/></td>
+    <td></td>
+  </tr>
+</table>
+
+### Swift Onboarding Flow
+
+<table>
+  <tr>
+    <td align="center"><b>Audit Events Timeline</b></td>
+    <td align="center"><b>Log Stream Viewer</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/onboarding-apple-flow1.png" alt="Swift Dashboard Events Tab" width="420"/></td>
+    <td><img src="docs/screenshots/onboarding-apple-flow2.png" alt="Swift Dashboard Logs Tab" width="420"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Control Panel Overview</b></td>
+    <td align="center"><b>Config Editor</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/onboarding-apple-flow3.png" alt="Swift Dashboard Overview Tab" width="420"/></td>
+    <td><img src="docs/screenshots/onboarding-apple-flow4.png" alt="Swift Dashboard Config Tab" width="420"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Onboarding Error (Doctor Checks)</b></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/apple-flow-onboarding-error..png" alt="Swift Onboarding Error: Full Disk Access Needed" width="420"/></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Setup Configuration + Env Preview</b></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/AppleFlowApp-setup-configuration-screen..png" alt="Swift Onboarding Setup Configuration and Env Preview" width="420"/></td>
     <td></td>
   </tr>
 </table>
@@ -166,7 +213,22 @@ This AI-led flow safely:
 - ensures gateway resources
 - validates config and restarts service
 
-Optional after install: build the SwiftUI control board from [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md).
+Optional after install: use the Swift onboarding/dashboard app guide at [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md).
+
+### Step 4b — Optional Swift Onboarding + Dashboard App
+
+If you prefer a local desktop UI for setup and operations, the app is already included under `dashboard-app/`:
+
+```bash
+# Open the bundled app directly
+open ./dashboard-app/AppleFlowApp.app
+```
+
+After opening, grant permissions when prompted:
+- Full Disk Access for your terminal/app running Apple Flow (System Settings → Privacy & Security → Full Disk Access)
+- Accessibility/Automation prompts (if macOS requests control permissions for Apple apps)
+
+`dashboard-app/AppleFlowApp-macOS.zip` is also included if you want to share/install it elsewhere.
 
 ### Step 5 — Configure Manually (Optional)
 
@@ -250,7 +312,9 @@ You should get a reply within seconds.
 | `usage` | 📈 Token usage stats |
 | `clear context` | 🔄 Reset conversation |
 | `system: mute/unmute` | 🔇 Control companion messages |
-| `system: stop/restart` | ⏹️ Daemon controls |
+| `system: stop/restart/kill provider` | ⏹️ Daemon/provider controls |
+| `system: cancel run <run_id>` | 🧨 Cancel one active run and kill its CLI process |
+| `system: killswitch` | 🚨 Emergency stop for all active provider CLI processes |
 
 ### Multi-Workspace Routing
 
@@ -301,10 +365,12 @@ apple_flow_codex_cli_model=  # uses Codex default
 ```env
 apple_flow_connector=gemini-cli
 apple_flow_gemini_cli_model=gemini-3-flash-preview  # default
+apple_flow_gemini_cli_approval_mode=yolo            # default
 ```
 
 - Uses `gemini -p` for stateless execution
 - Default model: `gemini-3-flash-preview`
+- Default approval mode: `yolo` (auto-approve tool actions)
 - Requires Google Gemini account
 
 ### Cline CLI (Multi-Provider)

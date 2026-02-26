@@ -39,7 +39,9 @@ def test_tools_mail_list_mailboxes_dispatches(monkeypatch, capsys):
     monkeypatch.setattr(
         app_main,
         "mail_list_mailboxes",
-        lambda account, include_system, as_text: [{"mailbox": "Action", "account": account, "is_system_mailbox": False}],
+        lambda account, include_system, as_text: [
+            {"mailbox": "Action", "account": account, "is_system_mailbox": False}
+        ],
     )
 
     app_main._run_tools_subcommand(
@@ -56,9 +58,7 @@ def test_tools_mail_list_mailboxes_dispatches(monkeypatch, capsys):
 
 def test_tools_mail_move_to_label_requires_label_and_ids(capsys):
     with pytest.raises(SystemExit) as exc:
-        app_main._run_tools_subcommand(
-            _args(tool_args=["mail_move_to_label"])
-        )
+        app_main._run_tools_subcommand(_args(tool_args=["mail_move_to_label"]))
     assert exc.value.code == 1
     assert "Usage: apple-flow tools mail_move_to_label" in capsys.readouterr().err
 

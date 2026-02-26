@@ -96,11 +96,30 @@ class SQLiteStore:
                     value TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS run_jobs (
+                    job_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    sender TEXT NOT NULL,
+                    phase TEXT NOT NULL,
+                    attempt INTEGER NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'queued',
+                    lease_owner TEXT DEFAULT NULL,
+                    lease_expires_at TEXT DEFAULT NULL,
+                    error_text TEXT DEFAULT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (run_id) REFERENCES runs (run_id)
+                );
+
                 -- Performance indexes
                 CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender);
                 CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
                 CREATE INDEX IF NOT EXISTS idx_runs_sender ON runs(sender);
                 CREATE INDEX IF NOT EXISTS idx_events_run_id ON events(run_id);
+                CREATE INDEX IF NOT EXISTS idx_run_jobs_status_created ON run_jobs(status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_run_jobs_run_status ON run_jobs(run_id, status);
+                CREATE INDEX IF NOT EXISTS idx_run_jobs_lease ON run_jobs(status, lease_expires_at);
                 """
             )
             conn.commit()
@@ -147,7 +166,9 @@ class SQLiteStore:
             rows = conn.execute("SELECT * FROM sessions ORDER BY last_seen_at DESC").fetchall()
             return [self._row_to_dict(row) for row in rows if row is not None]
 
-    def record_message(self, message_id: str, sender: str, text: str, received_at: str, dedupe_hash: str) -> bool:
+    def record_message(
+        self, message_id: str, sender: str, text: str, received_at: str, dedupe_hash: str
+    ) -> bool:
         conn = self._connect()
         with self._lock:
             cursor = conn.execute(
@@ -203,6 +224,8 @@ class SQLiteStore:
         active_states = (
             RunState.PLANNING.value,
             RunState.AWAITING_APPROVAL.value,
+            RunState.QUEUED.value,
+            RunState.RUNNING.value,
             RunState.EXECUTING.value,
             RunState.VERIFYING.value,
         )
@@ -210,7 +233,7 @@ class SQLiteStore:
             rows = conn.execute(
                 """
                 SELECT * FROM runs
-                WHERE state IN (?, ?, ?, ?)
+                WHERE state IN (?, ?, ?, ?, ?, ?)
                 ORDER BY updated_at DESC
                 LIMIT ?
                 """,
@@ -232,7 +255,13 @@ class SQLiteStore:
             return None
 
     def create_approval(
-        self, request_id: str, run_id: str, summary: str, command_preview: str, expires_at: str, sender: str
+        self,
+        request_id: str,
+        run_id: str,
+        summary: str,
+        command_preview: str,
+        expires_at: str,
+        sender: str,
     ) -> None:
         conn = self._connect()
         with self._lock:
@@ -248,7 +277,9 @@ class SQLiteStore:
     def get_approval(self, request_id: str) -> dict[str, Any] | None:
         conn = self._connect()
         with self._lock:
-            row = conn.execute("SELECT * FROM approvals WHERE request_id = ?", (request_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM approvals WHERE request_id = ?", (request_id,)
+            ).fetchone()
             return self._row_to_dict(row)
 
     def list_pending_approvals(self) -> list[dict[str, Any]]:
@@ -299,7 +330,9 @@ class SQLiteStore:
             conn.commit()
             return cursor.rowcount > 0
 
-    def create_event(self, event_id: str, run_id: str, step: str, event_type: str, payload: dict[str, Any]) -> None:
+    def create_event(
+        self, event_id: str, run_id: str, step: str, event_type: str, payload: dict[str, Any]
+    ) -> None:
         conn = self._connect()
         with self._lock:
             conn.execute(
@@ -379,6 +412,178 @@ class SQLiteStore:
                 ).fetchone()
             return int(row[0]) if row is not None else 0
 
+    # --- Durable run job queue ---
+
+    def enqueue_run_job(
+        self,
+        *,
+        job_id: str,
+        run_id: str,
+        sender: str,
+        phase: str,
+        attempt: int,
+        payload: dict[str, Any] | None = None,
+        status: str = "queued",
+    ) -> None:
+        conn = self._connect()
+        with self._lock:
+            conn.execute(
+                """
+                INSERT INTO run_jobs(job_id, run_id, sender, phase, attempt, payload_json, status)
+                VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    run_id,
+                    sender,
+                    phase,
+                    int(attempt),
+                    json.dumps(payload or {}),
+                    status,
+                ),
+            )
+            conn.commit()
+
+    def claim_next_run_job(self, *, worker_id: str, lease_seconds: int) -> dict[str, Any] | None:
+        """Atomically claim the oldest queued job for a worker lease window."""
+        conn = self._connect()
+        with self._lock:
+            row = conn.execute(
+                """
+                SELECT job_id
+                FROM run_jobs
+                WHERE status = 'queued'
+                ORDER BY created_at ASC
+                LIMIT 1
+                """
+            ).fetchone()
+            if row is None:
+                return None
+
+            job_id = str(row["job_id"])
+            cursor = conn.execute(
+                """
+                UPDATE run_jobs
+                SET status = 'running',
+                    lease_owner = ?,
+                    lease_expires_at = datetime('now', ?),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE job_id = ? AND status = 'queued'
+                """,
+                (worker_id, f"+{int(max(1, lease_seconds))} seconds", job_id),
+            )
+            if cursor.rowcount == 0:
+                conn.commit()
+                return None
+
+            claimed = conn.execute("SELECT * FROM run_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            conn.commit()
+            data = self._row_to_dict(claimed)
+            if data is None:
+                return None
+            try:
+                data["payload"] = json.loads(data.pop("payload_json", "{}"))
+            except json.JSONDecodeError:
+                data["payload"] = {}
+            return data
+
+    def renew_run_job_lease(self, *, job_id: str, worker_id: str, lease_seconds: int) -> bool:
+        conn = self._connect()
+        with self._lock:
+            cursor = conn.execute(
+                """
+                UPDATE run_jobs
+                SET lease_expires_at = datetime('now', ?), updated_at = CURRENT_TIMESTAMP
+                WHERE job_id = ? AND status = 'running' AND lease_owner = ?
+                """,
+                (f"+{int(max(1, lease_seconds))} seconds", job_id, worker_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def complete_run_job(self, *, job_id: str, status: str, error_text: str | None = None) -> bool:
+        conn = self._connect()
+        with self._lock:
+            cursor = conn.execute(
+                """
+                UPDATE run_jobs
+                SET status = ?,
+                    error_text = ?,
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE job_id = ?
+                """,
+                (status, error_text, job_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def list_run_jobs(
+        self, *, run_id: str | None = None, status: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        conn = self._connect()
+        with self._lock:
+            query = "SELECT * FROM run_jobs WHERE 1=1"
+            params: list[Any] = []
+            if run_id is not None:
+                query += " AND run_id = ?"
+                params.append(run_id)
+            if status is not None:
+                query += " AND status = ?"
+                params.append(status)
+            query += " ORDER BY created_at DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(query, params).fetchall()
+
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            data = self._row_to_dict(row)
+            if data is None:
+                continue
+            try:
+                data["payload"] = json.loads(data.pop("payload_json", "{}"))
+            except json.JSONDecodeError:
+                data["payload"] = {}
+            out.append(data)
+        return out
+
+    def cancel_run_jobs(self, run_id: str) -> int:
+        conn = self._connect()
+        with self._lock:
+            cursor = conn.execute(
+                """
+                UPDATE run_jobs
+                SET status = 'cancelled',
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE run_id = ? AND status IN ('queued', 'running')
+                """,
+                (run_id,),
+            )
+            conn.commit()
+            return int(cursor.rowcount)
+
+    def requeue_expired_run_jobs(self) -> int:
+        """Requeue running jobs whose lease has expired."""
+        conn = self._connect()
+        with self._lock:
+            cursor = conn.execute(
+                """
+                UPDATE run_jobs
+                SET status = 'queued',
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE status = 'running'
+                  AND lease_expires_at IS NOT NULL
+                  AND lease_expires_at <= CURRENT_TIMESTAMP
+                """
+            )
+            conn.commit()
+            return int(cursor.rowcount)
+
     def set_state(self, key: str, value: str) -> None:
         conn = self._connect()
         with self._lock:
@@ -416,9 +621,7 @@ class SQLiteStore:
             ).fetchone()[0]
 
             # Runs by state
-            rows = conn.execute(
-                "SELECT state, COUNT(*) as cnt FROM runs GROUP BY state"
-            ).fetchall()
+            rows = conn.execute("SELECT state, COUNT(*) as cnt FROM runs GROUP BY state").fetchall()
             runs_by_state = {row["state"]: row["cnt"] for row in rows}
 
             # Most recent event

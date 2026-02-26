@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import apple_flow.daemon as daemon_module
 from apple_flow.commanding import CommandKind
 from apple_flow.daemon import (
     RelayDaemon,
@@ -41,7 +42,9 @@ def test_gateway_resource_statuses_respect_enabled_gateways(monkeypatch):
     monkeypatch.setattr("apple_flow.daemon.ensure_gateway_resources", fake_ensure_gateway_resources)
 
     gateway_resource_statuses_for_settings(
-        _settings(enable_reminders_polling=True, enable_notes_logging=True, enable_calendar_polling=True)
+        _settings(
+            enable_reminders_polling=True, enable_notes_logging=True, enable_calendar_polling=True
+        )
     )
 
     assert captured["enable_reminders"] is True
@@ -57,7 +60,9 @@ def test_relaydaemon_logs_gateway_resource_statuses(caplog, monkeypatch):
     monkeypatch.setattr(
         "apple_flow.daemon.gateway_resource_statuses_for_settings",
         lambda _settings: [
-            GatewayResourceStatus("Reminders task list", "agent-task", EnsureResult(status="created")),
+            GatewayResourceStatus(
+                "Reminders task list", "agent-task", EnsureResult(status="created")
+            ),
             GatewayResourceStatus(
                 "Calendar",
                 "agent-schedule",
@@ -70,7 +75,10 @@ def test_relaydaemon_logs_gateway_resource_statuses(caplog, monkeypatch):
     daemon._ensure_gateway_resources()
 
     assert "Gateway resource ensure: Reminders task list 'agent-task': created" in caplog.text
-    assert "Gateway resource ensure failed: Calendar 'agent-schedule': failed (Calendar permission denied)" in caplog.text
+    assert (
+        "Gateway resource ensure failed: Calendar 'agent-schedule': failed (Calendar permission denied)"
+        in caplog.text
+    )
 
 
 def test_migrate_legacy_db_when_safe(tmp_path):
@@ -216,7 +224,10 @@ async def test_imessage_poll_loop_worker_exception_sends_fallback_notice(caplog,
         is_sender_allowed=lambda sender: True,
         is_under_rate_limit=lambda sender, now: True,
     )
-    daemon.store = SimpleNamespace(set_state=lambda key, value: None)
+    daemon.store = SimpleNamespace(
+        set_state=lambda key, value: None,
+        get_state=lambda key: None,
+    )
     sent: list[tuple[str, str]] = []
     daemon.egress = SimpleNamespace(
         was_recent_outbound=lambda sender, text: False,
@@ -233,7 +244,203 @@ async def test_imessage_poll_loop_worker_exception_sends_fallback_notice(caplog,
     caplog.set_level("ERROR")
     await daemon._poll_imessage_loop()
 
-    assert any("Unhandled iMessage dispatch failure rowid=1 sender=+15551234567" in rec.message for rec in caplog.records)
+    assert any(
+        "Unhandled iMessage dispatch failure rowid=1 sender=+15551234567" in rec.message
+        for rec in caplog.records
+    )
     assert len(sent) == 1
     assert sent[0][0] == "+15551234567"
     assert "internal error" in sent[0][1].lower()
+
+
+@pytest.mark.asyncio
+async def test_status_command_fastlane_bypasses_busy_concurrency_semaphore(tmp_path):
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    daemon._shutdown_requested = False
+    daemon._concurrency_sem = asyncio.Semaphore(1)
+    await daemon._concurrency_sem.acquire()  # Simulate a long task occupying the worker slot.
+    daemon._last_rowid = None
+    daemon._startup_time = datetime.now(UTC)
+    daemon._last_messages_db_error_at = 0.0
+    daemon._last_state_db_error_at = 0.0
+
+    chat_db = tmp_path / "chat.db"
+    chat_db.write_text("", encoding="utf-8")
+
+    daemon.settings = SimpleNamespace(
+        allowed_senders=["+15551234567"],
+        only_poll_allowed_senders=True,
+        poll_interval_seconds=0,
+        messages_db_path=chat_db,
+        startup_catchup_window_seconds=0,
+        notify_blocked_senders=False,
+        notify_rate_limited_senders=False,
+    )
+    daemon.ingress = SimpleNamespace(
+        fetch_new=lambda **kwargs: [
+            InboundMessage(
+                id="2",
+                sender="+15551234567",
+                text="status",
+                received_at="2026-02-17T12:00:01Z",
+                is_from_me=False,
+            )
+        ]
+    )
+    daemon.policy = SimpleNamespace(
+        is_sender_allowed=lambda sender: True,
+        is_under_rate_limit=lambda sender, now: True,
+    )
+    daemon.store = SimpleNamespace(
+        set_state=lambda key, value: None,
+        get_state=lambda key: None,
+    )
+    sent: list[tuple[str, str]] = []
+    daemon.egress = SimpleNamespace(
+        was_recent_outbound=lambda sender, text: False,
+        send=lambda recipient, text: sent.append((recipient, text)),
+    )
+
+    class _StatusOrchestrator:
+        def handle_message(self, msg):
+            daemon._shutdown_requested = True
+            daemon.egress.send(msg.sender, "No pending approvals.")
+            return SimpleNamespace(
+                kind=CommandKind.STATUS, response="No pending approvals.", run_id=None
+            )
+
+    daemon.orchestrator = _StatusOrchestrator()
+
+    await asyncio.wait_for(daemon._poll_imessage_loop(), timeout=0.5)
+    assert any("No pending approvals." in body for _, body in sent)
+
+
+def test_consume_restart_echo_suppress_matches_and_clears():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    marker_store = {
+        "value": (
+            '{"sender":"+15551234567","text":"Apple Flow restarting... (text \\"health\\" to confirm it\'s back)",'
+            '"expires_at":9999999999}'
+        ),
+        "clears": 0,
+    }
+
+    def _get_state(_key):
+        return marker_store["value"]
+
+    def _set_state(_key, value):
+        marker_store["value"] = value
+        marker_store["clears"] += 1
+
+    daemon.store = SimpleNamespace(get_state=_get_state, set_state=_set_state)
+
+    assert daemon._consume_restart_echo_suppress(
+        "+15551234567",
+        "Apple Flow restarting... (text 'health' to confirm it's back)",
+    )
+    assert marker_store["clears"] == 1
+    assert marker_store["value"] == ""
+
+
+def test_consume_restart_echo_suppress_ignores_non_matching_text():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    marker_store = {
+        "value": (
+            '{"sender":"+15551234567","text":"Apple Flow restarting... (text \\"health\\" to confirm it\'s back)",'
+            '"expires_at":9999999999}'
+        ),
+        "clears": 0,
+    }
+
+    def _set_state(_key, value):
+        marker_store["value"] = value
+        marker_store["clears"] += 1
+
+    daemon.store = SimpleNamespace(
+        get_state=lambda _key: marker_store["value"],
+        set_state=_set_state,
+    )
+
+    assert not daemon._consume_restart_echo_suppress("+15551234567", "hello there")
+    assert marker_store["clears"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_executor_loop_cancelled_is_not_logged_as_error(caplog):
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    daemon.run_executor = SimpleNamespace(
+        run_forever=lambda _is_shutdown: (_ for _ in ()).throw(asyncio.CancelledError())
+    )
+    daemon._shutdown_requested = True
+
+    caplog.set_level("INFO")
+    await daemon._run_executor_loop()
+
+    assert "Run executor loop cancelled during shutdown" in caplog.text
+    assert "Run executor loop error" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_run_forever_shutdown_does_not_raise_cancellederror():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    daemon._inflight_dispatch_tasks = set()
+    daemon._shutdown_requested = False
+    daemon.mail_ingress = None
+    daemon.reminders_ingress = None
+    daemon.notes_ingress = None
+    daemon.calendar_ingress = None
+    daemon.companion = None
+    daemon.ambient = None
+
+    async def _loop():
+        await asyncio.sleep(60)
+
+    daemon._poll_imessage_loop = _loop
+    daemon._run_executor_loop = _loop
+
+    task = asyncio.create_task(daemon.run_forever())
+    await asyncio.sleep(0)
+    task.cancel()
+    await task
+
+    assert task.done()
+    assert not task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_top_level_run_handles_cancellederror_gracefully(monkeypatch):
+    shutdown_called = {"value": False}
+
+    class _FakeDaemon:
+        def __init__(self, _settings):
+            self.settings = _settings
+
+        async def run_forever(self):
+            raise asyncio.CancelledError()
+
+        def shutdown(self):
+            shutdown_called["value"] = True
+
+        def request_shutdown(self):
+            pass
+
+        def send_startup_intro(self):
+            pass
+
+    settings = SimpleNamespace(
+        allowed_senders=[],
+        only_poll_allowed_senders=True,
+        enable_mail_polling=False,
+        enable_reminders_polling=False,
+        enable_notes_polling=False,
+        enable_calendar_polling=False,
+        enable_companion=False,
+        send_startup_intro=False,
+    )
+
+    monkeypatch.setattr(daemon_module, "RelaySettings", lambda: settings)
+    monkeypatch.setattr(daemon_module, "migrate_legacy_db_if_needed", lambda _settings: False)
+    monkeypatch.setattr(daemon_module, "RelayDaemon", _FakeDaemon)
+
+    await daemon_module.run()
+    assert shutdown_called["value"] is True

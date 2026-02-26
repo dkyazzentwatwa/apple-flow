@@ -68,6 +68,7 @@ def _acquire_daemon_lock() -> tuple[int, Path]:
 # Tools subcommand dispatcher
 # ---------------------------------------------------------------------------
 
+
 def _run_tools_subcommand(args: argparse.Namespace) -> None:
     """Dispatch to apple_tools functions based on CLI args."""
     tool_args: list[str] = args.tool_args or []
@@ -136,7 +137,10 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
 
     elif command == "notes_search":
         if not positional:
-            print("Usage: apple-flow tools notes_search <query> [--folder X] [--limit N]", file=sys.stderr)
+            print(
+                "Usage: apple-flow tools notes_search <query> [--folder X] [--limit N]",
+                file=sys.stderr,
+            )
             raise SystemExit(1)
         _output(notes_search(positional[0], folder=args.folder or "", limit=limit, as_text=as_text))
 
@@ -148,35 +152,66 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
 
     elif command == "notes_create":
         if len(positional) < 2:
-            print("Usage: apple-flow tools notes_create <title> <body> [--folder X]", file=sys.stderr)
+            print(
+                "Usage: apple-flow tools notes_create <title> <body> [--folder X]", file=sys.stderr
+            )
             raise SystemExit(1)
         _output(notes_create(positional[0], positional[1], folder=args.folder or ""))
 
     elif command == "notes_append":
         if len(positional) < 2:
-            print("Usage: apple-flow tools notes_append <title> <text> [--folder X]", file=sys.stderr)
+            print(
+                "Usage: apple-flow tools notes_append <title> <text> [--folder X]", file=sys.stderr
+            )
             raise SystemExit(1)
         _output(notes_append(positional[0], positional[1], folder=args.folder or ""))
 
     # ── Mail ───────────────────────────────────────────────────────────────
     elif command == "mail_list_unread":
-        _output(mail_list_unread(account=args.account or "", mailbox=args.mailbox or "INBOX", limit=limit, as_text=as_text))
+        _output(
+            mail_list_unread(
+                account=args.account or "",
+                mailbox=args.mailbox or "INBOX",
+                limit=limit,
+                as_text=as_text,
+            )
+        )
 
     elif command == "mail_search":
         if not positional:
-            print("Usage: apple-flow tools mail_search <query> [--days N] [--limit N]", file=sys.stderr)
+            print(
+                "Usage: apple-flow tools mail_search <query> [--days N] [--limit N]",
+                file=sys.stderr,
+            )
             raise SystemExit(1)
-        _output(mail_search(positional[0], account=args.account or "", mailbox=args.mailbox or "INBOX", limit=limit, max_age_days=args.days or 30, as_text=as_text))
+        _output(
+            mail_search(
+                positional[0],
+                account=args.account or "",
+                mailbox=args.mailbox or "INBOX",
+                limit=limit,
+                max_age_days=args.days or 30,
+                as_text=as_text,
+            )
+        )
 
     elif command == "mail_list_mailboxes":
         include_system = _boolish(args.include_system, default=False)
-        _output(mail_list_mailboxes(account=args.account or "", include_system=include_system, as_text=as_text))
+        _output(
+            mail_list_mailboxes(
+                account=args.account or "", include_system=include_system, as_text=as_text
+            )
+        )
 
     elif command == "mail_get_content":
         if not positional:
             print("Usage: apple-flow tools mail_get_content <message_id>", file=sys.stderr)
             raise SystemExit(1)
-        _output(mail_get_content(positional[0], account=args.account or "", mailbox=args.mailbox or "INBOX"))
+        _output(
+            mail_get_content(
+                positional[0], account=args.account or "", mailbox=args.mailbox or "INBOX"
+            )
+        )
 
     elif command == "mail_send":
         if len(positional) < 3:
@@ -206,23 +241,44 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
         _output(reminders_list_lists())
 
     elif command == "reminders_list":
-        _output(reminders_list(list_name=args.list or "", filter=args.filter or "incomplete", limit=limit, as_text=as_text))
+        _output(
+            reminders_list(
+                list_name=args.list or "",
+                filter=args.filter or "incomplete",
+                limit=limit,
+                as_text=as_text,
+            )
+        )
 
     elif command == "reminders_search":
         if not positional:
-            print("Usage: apple-flow tools reminders_search <query> [--list X] [--limit N]", file=sys.stderr)
+            print(
+                "Usage: apple-flow tools reminders_search <query> [--list X] [--limit N]",
+                file=sys.stderr,
+            )
             raise SystemExit(1)
-        _output(reminders_search(positional[0], list_name=args.list or "", limit=limit, as_text=as_text))
+        _output(
+            reminders_search(positional[0], list_name=args.list or "", limit=limit, as_text=as_text)
+        )
 
     elif command == "reminders_create":
         if not positional:
-            print("Usage: apple-flow tools reminders_create <name> [--list X] [--due YYYY-MM-DD]", file=sys.stderr)
+            print(
+                "Usage: apple-flow tools reminders_create <name> [--list X] [--due YYYY-MM-DD]",
+                file=sys.stderr,
+            )
             raise SystemExit(1)
-        _output(reminders_create(positional[0], list_name=args.list or "Reminders", due_date=args.due or ""))
+        _output(
+            reminders_create(
+                positional[0], list_name=args.list or "Reminders", due_date=args.due or ""
+            )
+        )
 
     elif command == "reminders_complete":
         if not positional or not args.list:
-            print("Usage: apple-flow tools reminders_complete <id> --list <ListName>", file=sys.stderr)
+            print(
+                "Usage: apple-flow tools reminders_complete <id> --list <ListName>", file=sys.stderr
+            )
             raise SystemExit(1)
         _output(reminders_complete(positional[0], list_name=args.list))
 
@@ -232,21 +288,33 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
 
     elif command == "calendar_list_events":
         cal = args.cal or args.calendar_name or ""
-        _output(calendar_list_events(calendar=cal, days_ahead=args.days or 7, limit=limit, as_text=as_text))
+        _output(
+            calendar_list_events(
+                calendar=cal, days_ahead=args.days or 7, limit=limit, as_text=as_text
+            )
+        )
 
     elif command == "calendar_search":
         if not positional:
-            print("Usage: apple-flow tools calendar_search <query> [--cal X] [--limit N]", file=sys.stderr)
+            print(
+                "Usage: apple-flow tools calendar_search <query> [--cal X] [--limit N]",
+                file=sys.stderr,
+            )
             raise SystemExit(1)
         cal = args.cal or args.calendar_name or ""
         _output(calendar_search(positional[0], calendar=cal, limit=limit, as_text=as_text))
 
     elif command == "calendar_create":
         if len(positional) < 2:
-            print("Usage: apple-flow tools calendar_create <title> <start_date> [--end X] [--cal X]", file=sys.stderr)
+            print(
+                "Usage: apple-flow tools calendar_create <title> <start_date> [--end X] [--cal X]",
+                file=sys.stderr,
+            )
             raise SystemExit(1)
         cal = args.cal or args.calendar_name or ""
-        _output(calendar_create(positional[0], positional[1], end_date=args.end or "", calendar=cal))
+        _output(
+            calendar_create(positional[0], positional[1], end_date=args.end or "", calendar=cal)
+        )
 
     # ── Messages ───────────────────────────────────────────────────────────
     elif command == "messages_list_recent_chats":
@@ -281,7 +349,9 @@ def main() -> None:
         default="daemon",
     )
     parser.add_argument("--version", "-V", action="store_true", help="Show version and exit")
-    parser.add_argument("--json", dest="json_output", action="store_true", help="Emit machine-readable JSON")
+    parser.add_argument(
+        "--json", dest="json_output", action="store_true", help="Emit machine-readable JSON"
+    )
     parser.add_argument(
         "--start-daemon",
         dest="start_daemon",
@@ -302,32 +372,65 @@ def main() -> None:
     )
 
     # Tools-specific flags (only used when mode=tools)
-    parser.add_argument("tool_args", nargs="*", help="Tool name followed by its positional arguments")
+    parser.add_argument(
+        "tool_args", nargs="*", help="Tool name followed by its positional arguments"
+    )
     parser.add_argument("--list", dest="list", metavar="LIST", help="Reminders list name")
     parser.add_argument("--folder", dest="folder", metavar="FOLDER", help="Notes folder name")
     parser.add_argument("--cal", dest="cal", metavar="CALENDAR", help="Calendar name")
     parser.add_argument("--account", dest="account", metavar="ACCOUNT", help="Mail account name")
     parser.add_argument("--mailbox", dest="mailbox", metavar="MAILBOX", help="Mail mailbox name")
-    parser.add_argument("--include-system", dest="include_system", metavar="BOOL", help="Include system mailboxes (true|false)")
-    parser.add_argument("--label", dest="label", metavar="LABEL", help="Destination label/mailbox name")
-    parser.add_argument("--message-id", dest="message_ids", action="append", help="Mail message ID (repeatable)")
-    parser.add_argument("--input-file", dest="input_file", metavar="PATH", help="JSON file containing message IDs")
-    parser.add_argument("--limit", dest="limit", type=int, default=20, metavar="N", help="Maximum results")
-    parser.add_argument("--days", dest="days", type=int, default=None, metavar="N", help="Day range")
+    parser.add_argument(
+        "--include-system",
+        dest="include_system",
+        metavar="BOOL",
+        help="Include system mailboxes (true|false)",
+    )
+    parser.add_argument(
+        "--label", dest="label", metavar="LABEL", help="Destination label/mailbox name"
+    )
+    parser.add_argument(
+        "--message-id", dest="message_ids", action="append", help="Mail message ID (repeatable)"
+    )
+    parser.add_argument(
+        "--input-file", dest="input_file", metavar="PATH", help="JSON file containing message IDs"
+    )
+    parser.add_argument(
+        "--limit", dest="limit", type=int, default=20, metavar="N", help="Maximum results"
+    )
+    parser.add_argument(
+        "--days", dest="days", type=int, default=None, metavar="N", help="Day range"
+    )
     parser.add_argument("--filter", dest="filter", metavar="FILTER", help="incomplete|complete|all")
     parser.add_argument("--due", dest="due", metavar="DATE", help="Due date (YYYY-MM-DD)")
-    parser.add_argument("--end", dest="end", metavar="DATETIME", help="End datetime for calendar events")
-    parser.add_argument("--text", dest="text", action="store_true", help="Output human-readable text")
-    parser.add_argument("--pretty", dest="pretty", action="store_true", help="Pretty-print JSON output")
-    parser.add_argument("--list-tools", dest="list_tools", action="store_true", help="Print available tools")
+    parser.add_argument(
+        "--end", dest="end", metavar="DATETIME", help="End datetime for calendar events"
+    )
+    parser.add_argument(
+        "--text", dest="text", action="store_true", help="Output human-readable text"
+    )
+    parser.add_argument(
+        "--pretty", dest="pretty", action="store_true", help="Pretty-print JSON output"
+    )
+    parser.add_argument(
+        "--list-tools", dest="list_tools", action="store_true", help="Print available tools"
+    )
     # Internal alias used by calendar_list_events/calendar_search
-    parser.add_argument("--calendar", dest="calendar_name", metavar="CALENDAR", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--calendar", dest="calendar_name", metavar="CALENDAR", help=argparse.SUPPRESS
+    )
 
     # Wizard/config/service machine-mode options
     parser.add_argument("--env-file", dest="env_file", default=".env", help="Path to .env file")
-    parser.add_argument("--set", dest="set_values", action="append", help="Set key=value pairs in .env")
-    parser.add_argument("--key", dest="keys", action="append", help="Read specific key(s) from .env")
-    parser.add_argument("--stream", dest="stream_name", choices=["stderr", "stdout"], default="stderr")
+    parser.add_argument(
+        "--set", dest="set_values", action="append", help="Set key=value pairs in .env"
+    )
+    parser.add_argument(
+        "--key", dest="keys", action="append", help="Read specific key(s) from .env"
+    )
+    parser.add_argument(
+        "--stream", dest="stream_name", choices=["stderr", "stdout"], default="stderr"
+    )
     parser.add_argument("--lines", dest="lines", type=int, default=200)
 
     parser.add_argument("--phone", dest="phone", default="")
@@ -352,8 +455,12 @@ def main() -> None:
         default="agent-archive",
     )
     parser.add_argument("--notes-folder-name", dest="notes_folder_name", default="agent-task")
-    parser.add_argument("--notes-archive-folder-name", dest="notes_archive_folder_name", default="agent-archive")
-    parser.add_argument("--notes-log-folder-name", dest="notes_log_folder_name", default="agent-logs")
+    parser.add_argument(
+        "--notes-archive-folder-name", dest="notes_archive_folder_name", default="agent-archive"
+    )
+    parser.add_argument(
+        "--notes-log-folder-name", dest="notes_log_folder_name", default="agent-logs"
+    )
     parser.add_argument("--calendar-name", dest="calendar_name_override", default="agent-schedule")
 
     args = parser.parse_args()
@@ -388,7 +495,9 @@ def main() -> None:
         raise SystemExit(run_cli_control(args.mode, args))
 
     settings = RelaySettings()
-    uvicorn.run("apple_flow.main:app", host=settings.admin_host, port=settings.admin_port, reload=False)
+    uvicorn.run(
+        "apple_flow.main:app", host=settings.admin_host, port=settings.admin_port, reload=False
+    )
 
 
 if __name__ == "__main__":

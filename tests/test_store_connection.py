@@ -90,9 +90,7 @@ def test_store_indexes_created(tmp_path: Path):
     store.bootstrap()
 
     conn = store._connect()
-    cursor = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'"
-    )
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'")
     indexes = [row[0] for row in cursor.fetchall()]
 
     expected_indexes = [

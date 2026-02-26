@@ -4,7 +4,9 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -12,7 +14,7 @@ from uuid import uuid4
 
 from .approval import ApprovalHandler, OrchestrationResult
 from .commanding import CommandKind, ParsedCommand, is_likely_mutating, parse_command
-from .models import InboundMessage
+from .models import InboundMessage, RunState
 from .notes_logging import log_to_notes
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
 
@@ -21,6 +23,7 @@ logger = logging.getLogger("apple_flow.orchestrator")
 if TYPE_CHECKING:
     from .memory import FileMemory
     from .office_sync import OfficeSyncer
+    from .run_executor import RunExecutor
     from .scheduler import FollowUpScheduler
 
 _SEP = "━" * 30
@@ -44,6 +47,7 @@ class RelayOrchestrator:
         progress_update_interval_seconds: float = 30.0,
         execution_heartbeat_seconds: float = 120.0,
         checkpoint_on_timeout: bool = True,
+        auto_resume_on_timeout: bool = False,
         max_resume_attempts: int = 5,
         enable_verifier: bool = False,
         enable_attachments: bool = False,
@@ -58,6 +62,7 @@ class RelayOrchestrator:
         notes_log_folder_name: str = "agent-logs",
         memory: FileMemory | None = None,
         scheduler: FollowUpScheduler | None = None,
+        run_executor: RunExecutor | None = None,
         office_syncer: OfficeSyncer | None = None,
         log_file_path: str | None = None,
         approval_sender_override: str = "",
@@ -92,6 +97,7 @@ class RelayOrchestrator:
             progress_update_interval_seconds=progress_update_interval_seconds,
             execution_heartbeat_seconds=execution_heartbeat_seconds,
             checkpoint_on_timeout=checkpoint_on_timeout,
+            auto_resume_on_timeout=auto_resume_on_timeout,
             max_resume_attempts=max_resume_attempts,
             enable_verifier=enable_verifier,
             reminders_egress=reminders_egress,
@@ -100,10 +106,15 @@ class RelayOrchestrator:
             notes_archive_folder_name=notes_archive_folder_name,
             calendar_egress=calendar_egress,
             scheduler=scheduler,
+            run_executor=run_executor,
             log_notes_egress=log_notes_egress,
             notes_log_folder_name=notes_log_folder_name,
             approval_sender_override=approval_sender_override,
         )
+
+    def set_run_executor(self, run_executor: Any) -> None:
+        """Attach a background run executor after orchestrator construction."""
+        self._approval.run_executor = run_executor
 
     # --- Workspace Resolution ---
 
@@ -138,7 +149,9 @@ class RelayOrchestrator:
         command = parse_command(raw_text)
         if command.kind is CommandKind.CHAT and self.require_chat_prefix:
             if not raw_text.lower().startswith(self.chat_prefix.lower()):
-                return OrchestrationResult(kind=CommandKind.CHAT, response="ignored_missing_chat_prefix")
+                return OrchestrationResult(
+                    kind=CommandKind.CHAT, response="ignored_missing_chat_prefix"
+                )
             command = ParsedCommand(
                 kind=CommandKind.CHAT,
                 payload=raw_text[len(self.chat_prefix) :].strip(),
@@ -153,7 +166,9 @@ class RelayOrchestrator:
         elif command.kind is CommandKind.CHAT and not self.require_chat_prefix:
             if raw_text.lower().startswith(self.chat_prefix.lower()):
                 stripped = raw_text[len(self.chat_prefix) :].strip()
-                command = ParsedCommand(kind=CommandKind.CHAT, payload=stripped, workspace=command.workspace)
+                command = ParsedCommand(
+                    kind=CommandKind.CHAT, payload=stripped, workspace=command.workspace
+                )
 
         if command.kind is CommandKind.HEALTH:
             return self._handle_health(message.sender)
@@ -175,7 +190,11 @@ class RelayOrchestrator:
                 response = "deny all not supported by this store."
             else:
                 count = self.store.deny_all_approvals()
-                response = f"Cancelled {count} pending approval{'s' if count != 1 else ''}." if count else "No pending approvals to cancel."
+                response = (
+                    f"Cancelled {count} pending approval{'s' if count != 1 else ''}."
+                    if count
+                    else "No pending approvals to cancel."
+                )
             self.egress.send(message.sender, response)
             return OrchestrationResult(kind=command.kind, response=response)
 
@@ -201,7 +220,9 @@ class RelayOrchestrator:
             and not self.require_chat_prefix
             and is_likely_mutating(command.payload)
         ):
-            command = ParsedCommand(kind=CommandKind.TASK, payload=command.payload, workspace=command.workspace)
+            command = ParsedCommand(
+                kind=CommandKind.TASK, payload=command.payload, workspace=command.workspace
+            )
 
         workspace = self._resolve_workspace(command.workspace)
 
@@ -210,7 +231,11 @@ class RelayOrchestrator:
 
         if command.kind in {CommandKind.TASK, CommandKind.PROJECT}:
             return self._approval.handle_approval_required(
-                message, command.kind, thread_id, command.payload, workspace,
+                message,
+                command.kind,
+                thread_id,
+                command.payload,
+                workspace,
                 default_workspace=self.default_workspace,
                 is_workspace_allowed=self._is_workspace_allowed,
             )
@@ -258,7 +283,14 @@ class RelayOrchestrator:
             runs_by_state = self.store.get_stats().get("runs_by_state", {})
             active_count = sum(
                 runs_by_state.get(state, 0)
-                for state in ["planning", "executing", "verifying", "awaiting_approval"]
+                for state in [
+                    "planning",
+                    "queued",
+                    "running",
+                    "executing",
+                    "verifying",
+                    "awaiting_approval",
+                ]
             )
             if active_count:
                 lines.append(f"\nActive runs: {active_count} (details unavailable in this store)")
@@ -337,7 +369,12 @@ class RelayOrchestrator:
                 payload = event.get("payload", {})
                 snippet = ""
                 if isinstance(payload, dict):
-                    snippet = payload.get("snippet") or payload.get("reason") or payload.get("request_id") or ""
+                    snippet = (
+                        payload.get("snippet")
+                        or payload.get("reason")
+                        or payload.get("request_id")
+                        or ""
+                    )
                 lines.append(
                     f"  - {event.get('created_at', '?')} {event.get('step', '?')}:"
                     f"{event.get('event_type', '?')} {str(snippet)[:80]}"
@@ -484,7 +521,11 @@ class RelayOrchestrator:
                     tokens = row["totalTokens"]
                     cost = row["totalCost"]
                     total_cost += cost
-                    tok_str = f"{tokens / 1_000_000:.2f}M" if tokens >= 1_000_000 else f"{tokens / 1_000:.0f}K"
+                    tok_str = (
+                        f"{tokens / 1_000_000:.2f}M"
+                        if tokens >= 1_000_000
+                        else f"{tokens / 1_000:.0f}K"
+                    )
                     lines.append(f"  {row['date']}: {tok_str} tokens  ${cost:.2f}")
                 lines.append(f"Total: ${total_cost:.2f}")
 
@@ -498,7 +539,11 @@ class RelayOrchestrator:
                     month = row.get("month", row.get("date", "?"))
                     tokens = row["totalTokens"]
                     cost = row["totalCost"]
-                    tok_str = f"{tokens / 1_000_000:.2f}M" if tokens >= 1_000_000 else f"{tokens / 1_000:.0f}K"
+                    tok_str = (
+                        f"{tokens / 1_000_000:.2f}M"
+                        if tokens >= 1_000_000
+                        else f"{tokens / 1_000:.0f}K"
+                    )
                     lines.append(f"  {month}: {tok_str}  ${cost:.2f}")
 
         elif mode == "blocks":
@@ -512,7 +557,11 @@ class RelayOrchestrator:
                     cost = block.get("costUSD", 0)
                     tokens = block.get("totalTokens", 0)
                     active_tag = " [ACTIVE]" if block.get("isActive") else ""
-                    tok_str = f"{tokens / 1_000_000:.2f}M" if tokens >= 1_000_000 else f"{tokens / 1_000:.0f}K"
+                    tok_str = (
+                        f"{tokens / 1_000_000:.2f}M"
+                        if tokens >= 1_000_000
+                        else f"{tokens / 1_000:.0f}K"
+                    )
                     lines.append(f"  {start}: {tok_str}  ${cost:.2f}{active_tag}")
 
         response = "\n".join(lines)
@@ -575,6 +624,281 @@ class RelayOrchestrator:
             logger.warning("Failed to trigger launchctl kickstart for %s: %s", target, exc)
         return False
 
+    def _provider_label(self) -> str:
+        name = self.connector.__class__.__name__.lower()
+        if "gemini" in name:
+            return "Gemini"
+        if "claude" in name:
+            return "Claude"
+        if "cline" in name:
+            return "Cline"
+        if "codex" in name:
+            return "Codex"
+        return self.connector.__class__.__name__
+
+    def _provider_command_patterns(self) -> list[str]:
+        patterns: list[str] = []
+        for attr in ("gemini_command", "claude_command", "codex_command", "cline_command"):
+            raw = getattr(self.connector, attr, "")
+            if not isinstance(raw, str):
+                continue
+            value = raw.strip().lower()
+            if not value:
+                continue
+            patterns.append(value)
+            patterns.append(Path(value).name)
+        provider = self._provider_label().lower()
+        if provider:
+            patterns.append(provider)
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for pattern in patterns:
+            if pattern and pattern not in seen:
+                seen.add(pattern)
+                deduped.append(pattern)
+        return deduped
+
+    @staticmethod
+    def _load_process_table() -> dict[int, tuple[int, str]]:
+        """Return process table as {pid: (ppid, command)}."""
+        table: dict[int, tuple[int, str]] = {}
+        try:
+            result = subprocess.run(
+                ["ps", "-axo", "pid=,ppid=,command="],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=8,
+            )
+        except Exception:
+            return table
+        if result.returncode != 0:
+            return table
+        for line in result.stdout.splitlines():
+            parts = line.strip().split(None, 2)
+            if len(parts) < 3:
+                continue
+            try:
+                pid = int(parts[0])
+                ppid = int(parts[1])
+            except ValueError:
+                continue
+            table[pid] = (ppid, parts[2])
+        return table
+
+    @staticmethod
+    def _collect_descendants(table: dict[int, tuple[int, str]], root_pid: int) -> set[int]:
+        descendants: set[int] = set()
+        frontier = [root_pid]
+        while frontier:
+            parent = frontier.pop()
+            for pid, (ppid, _) in table.items():
+                if ppid == parent and pid not in descendants:
+                    descendants.add(pid)
+                    frontier.append(pid)
+        return descendants
+
+    @staticmethod
+    def _pid_alive(pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    def _mark_inflight_runs_cancelled(self, reason: str) -> int:
+        if not hasattr(self.store, "list_active_runs") or not hasattr(
+            self.store, "update_run_state"
+        ):
+            return 0
+        runs = self.store.list_active_runs(limit=200)
+        if not runs:
+            return 0
+        inflight_states = {
+            RunState.PLANNING.value,
+            RunState.QUEUED.value,
+            RunState.RUNNING.value,
+            RunState.EXECUTING.value,
+            RunState.VERIFYING.value,
+        }
+        updated = 0
+        for run in runs:
+            run_id = run.get("run_id")
+            state = str(run.get("state", ""))
+            if not run_id or state not in inflight_states:
+                continue
+            if hasattr(self.store, "cancel_run_jobs"):
+                self.store.cancel_run_jobs(run_id)
+            self.store.update_run_state(run_id, RunState.CANCELLED.value)
+            self._create_event(
+                run_id=run_id,
+                step="executor",
+                event_type="execution_cancelled",
+                payload={"reason": reason, "source": "system_killswitch"},
+            )
+            updated += 1
+        return updated
+
+    def _kill_provider_processes(self) -> str:
+        provider = self._provider_label()
+        killed_tracked = 0
+        if hasattr(self.connector, "cancel_active_processes"):
+            try:
+                killed_tracked = int(self.connector.cancel_active_processes())
+            except Exception:
+                logger.exception("Connector cancel_active_processes failed")
+
+        patterns = self._provider_command_patterns()
+        table = self._load_process_table()
+        if not patterns or not table:
+            reconciled = self._mark_inflight_runs_cancelled(
+                "killswitch requested (process inspection unavailable)"
+            )
+            if killed_tracked:
+                base = f"Killed {killed_tracked} tracked {provider} process(es)."
+                if reconciled:
+                    return f"{base} Cancelled {reconciled} in-flight run(s)."
+                return base
+            if reconciled:
+                return (
+                    f"Could not inspect running {provider} processes. "
+                    f"Cancelled {reconciled} in-flight run(s)."
+                )
+            return f"Could not inspect running {provider} processes."
+
+        daemon_pid = os.getpid()
+        descendants = self._collect_descendants(table, daemon_pid)
+        if not descendants:
+            reconciled = self._mark_inflight_runs_cancelled(
+                "killswitch requested (no subprocess descendants)"
+            )
+            if killed_tracked or reconciled:
+                return (
+                    f"Killed {killed_tracked} tracked {provider} process(es). "
+                    f"Cancelled {reconciled} in-flight run(s)."
+                )
+            return f"No active {provider} provider subprocesses found."
+
+        matching_roots = {
+            pid
+            for pid in descendants
+            if any(pattern in table[pid][1].lower() for pattern in patterns)
+        }
+        if not matching_roots:
+            reconciled = self._mark_inflight_runs_cancelled(
+                "killswitch requested (no matching subprocesses)"
+            )
+            if killed_tracked or reconciled:
+                return (
+                    f"Killed {killed_tracked} tracked {provider} process(es). "
+                    f"Cancelled {reconciled} in-flight run(s)."
+                )
+            return f"No active {provider} provider subprocesses found."
+
+        # Kill matching provider processes and any descendants they spawned.
+        to_kill = set(matching_roots)
+        frontier = list(matching_roots)
+        while frontier:
+            parent = frontier.pop()
+            for pid, (ppid, _) in table.items():
+                if ppid == parent and pid not in to_kill:
+                    to_kill.add(pid)
+                    frontier.append(pid)
+
+        terminated = 0
+        for pid in sorted(to_kill, reverse=True):
+            try:
+                os.kill(pid, signal.SIGTERM)
+                terminated += 1
+            except ProcessLookupError:
+                continue
+            except PermissionError:
+                logger.warning("Permission denied sending SIGTERM to pid=%s", pid)
+
+        time.sleep(0.2)
+
+        force_killed = 0
+        for pid in sorted(to_kill, reverse=True):
+            if not self._pid_alive(pid):
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                force_killed += 1
+            except ProcessLookupError:
+                continue
+            except PermissionError:
+                logger.warning("Permission denied sending SIGKILL to pid=%s", pid)
+
+        reconciled = self._mark_inflight_runs_cancelled("provider process killed by system command")
+        total_killed = killed_tracked + terminated + force_killed
+        if total_killed == 0:
+            if reconciled:
+                return f"No active {provider} provider subprocesses found. Cancelled {reconciled} in-flight run(s)."
+            return f"No active {provider} provider subprocesses found."
+        if force_killed:
+            base = (
+                f"Killed {total_killed} active {provider} provider process(es) "
+                f"({force_killed} required SIGKILL)."
+            )
+            if reconciled:
+                return f"{base} Cancelled {reconciled} in-flight run(s)."
+            return base
+        base = f"Killed {total_killed} active {provider} provider process(es)."
+        if reconciled:
+            return f"{base} Cancelled {reconciled} in-flight run(s)."
+        return base
+
+    def _cancel_run_by_id(self, run_id: str) -> str:
+        run_id = run_id.strip()
+        if not run_id:
+            return "Usage: `system: cancel run <run_id>`"
+        run = self.store.get_run(run_id) if hasattr(self.store, "get_run") else None
+        if not run:
+            return f"Run `{run_id}` not found."
+
+        state = str(run.get("state", ""))
+        terminal_states = {
+            RunState.COMPLETED.value,
+            RunState.FAILED.value,
+            RunState.DENIED.value,
+            RunState.CANCELLED.value,
+        }
+        if state in terminal_states:
+            return f"Run `{run_id}` is already `{state}`."
+
+        sender = str(run.get("sender", "")).strip()
+        killed = 0
+        if hasattr(self.connector, "cancel_active_processes"):
+            try:
+                killed = int(self.connector.cancel_active_processes(sender or None))
+            except Exception:
+                logger.exception("Connector cancel_active_processes failed for run_id=%s", run_id)
+
+        cancelled_jobs = 0
+        if hasattr(self.store, "cancel_run_jobs"):
+            cancelled_jobs = int(self.store.cancel_run_jobs(run_id))
+
+        if hasattr(self.store, "update_run_state"):
+            self.store.update_run_state(run_id, RunState.CANCELLED.value)
+        self._create_event(
+            run_id=run_id,
+            step="executor",
+            event_type="execution_cancelled",
+            payload={
+                "reason": "cancel run requested by system command",
+                "source": "system_cancel_run",
+                "killed_processes": killed,
+                "cancelled_jobs": cancelled_jobs,
+            },
+        )
+        return (
+            f"Cancelled run `{run_id}`. "
+            f"Killed {killed} process(es), cancelled {cancelled_jobs} queued/running job(s)."
+        )
+
     def _handle_system(self, sender: str, subcommand: str) -> OrchestrationResult:
         sub = subcommand.strip().lower()
         if sub == "stop":
@@ -584,12 +908,22 @@ class RelayOrchestrator:
                 self.shutdown_callback()
         elif sub == "restart":
             response = "Apple Flow restarting... (text 'health' to confirm it's back)"
+            self._mark_restart_echo_suppress(sender, response)
             self.egress.send(sender, response)
             restarted = self._restart_launchd_service()
             if not restarted and self.shutdown_callback is not None:
                 # Fallback for non-launchd runs: perform a graceful shutdown and let
                 # the external caller/supervisor bring the process back up.
                 self.shutdown_callback()
+        elif sub in {"kill provider", "killswitch", "kill ai"}:
+            response = self._kill_provider_processes()
+            self.egress.send(sender, response)
+        elif sub.startswith("cancel run "):
+            response = self._cancel_run_by_id(sub.split(" ", 2)[2])
+            self.egress.send(sender, response)
+        elif sub.startswith("cancel "):
+            response = self._cancel_run_by_id(sub.split(" ", 1)[1])
+            self.egress.send(sender, response)
         elif sub == "mute":
             self.store.set_state("companion_muted", "true")
             response = "Companion muted. Send 'system: unmute' to re-enable proactive messages."
@@ -609,9 +943,29 @@ class RelayOrchestrator:
                 response = "Office sync not enabled. Set apple_flow_enable_office_sync=true and apple_flow_supabase_service_key."
             self.egress.send(sender, response)
         else:
-            response = "Unknown system command. Use: system: stop | restart | mute | unmute | sync office"
+            response = (
+                "Unknown system command. Use: "
+                "system: stop | restart | kill provider | cancel run <run_id> | mute | unmute | sync office"
+            )
             self.egress.send(sender, response)
         return OrchestrationResult(kind=CommandKind.SYSTEM, response=sub)
+
+    def _mark_restart_echo_suppress(self, sender: str, text: str) -> None:
+        """Persist a short-lived marker to suppress restart-message echo after reboot."""
+        try:
+            self.store.set_state(
+                "system_restart_echo_suppress",
+                json.dumps(
+                    {
+                        "sender": sender,
+                        "text": text,
+                        # launchd restart should occur quickly; keep this window tight.
+                        "expires_at": time.time() + 120.0,
+                    }
+                ),
+            )
+        except Exception:
+            logger.debug("Failed to persist restart echo suppress marker", exc_info=True)
 
     def _inject_auto_context(self, sender: str, prompt: str) -> str:
         if self.auto_context_messages <= 0:
@@ -660,14 +1014,18 @@ class RelayOrchestrator:
     # --- Notes Logging (delegated) ---
 
     def _log_to_notes(self, kind: str, sender: str, request: str, response: str) -> None:
-        log_to_notes(self.log_notes_egress, self.notes_log_folder_name, kind, sender, request, response)
+        log_to_notes(
+            self.log_notes_egress, self.notes_log_folder_name, kind, sender, request, response
+        )
 
     # --- Prompt Building ---
 
     def _build_unified_prompt(self, payload: str, workspace: str | None = None) -> str:
         return payload
 
-    def _build_non_mutating_prompt(self, kind: CommandKind, payload: str, workspace: str | None = None) -> str:
+    def _build_non_mutating_prompt(
+        self, kind: CommandKind, payload: str, workspace: str | None = None
+    ) -> str:
         if kind is CommandKind.IDEA:
             return f"brainstorm mode: generate options, trade-offs, and recommendation. request={payload}"
         if kind is CommandKind.PLAN:
@@ -694,7 +1052,9 @@ class RelayOrchestrator:
         except ValueError:
             return None
 
-    def _create_event(self, run_id: str, step: str, event_type: str, payload: dict[str, Any]) -> None:
+    def _create_event(
+        self, run_id: str, step: str, event_type: str, payload: dict[str, Any]
+    ) -> None:
         if hasattr(self.store, "create_event"):
             self.store.create_event(
                 event_id=f"evt_{uuid4().hex[:12]}",

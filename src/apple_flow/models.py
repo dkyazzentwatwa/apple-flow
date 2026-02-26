@@ -11,11 +11,15 @@ class RunState(str, Enum):
     RECEIVED = "received"
     PLANNING = "planning"
     AWAITING_APPROVAL = "awaiting_approval"
+    QUEUED = "queued"
+    RUNNING = "running"
     EXECUTING = "executing"
     VERIFYING = "verifying"
+    CHECKPOINTED = "checkpointed"
     COMPLETED = "completed"
     FAILED = "failed"
     DENIED = "denied"
+    CANCELLED = "cancelled"
 
 
 class ApprovalStatus(str, Enum):

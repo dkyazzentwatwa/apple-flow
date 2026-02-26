@@ -37,10 +37,13 @@ def scanner(memory):
 
 class TestScanNotes:
     def test_returns_observations(self, scanner):
-        with patch("apple_flow.apple_tools.notes_list", return_value=[
-            {"name": "Meeting Notes", "preview": "Discussed Q2 plan"},
-            {"name": "Shopping List", "preview": "Milk, eggs"},
-        ]):
+        with patch(
+            "apple_flow.apple_tools.notes_list",
+            return_value=[
+                {"name": "Meeting Notes", "preview": "Discussed Q2 plan"},
+                {"name": "Shopping List", "preview": "Milk, eggs"},
+            ],
+        ):
             obs = scanner._scan_notes()
         assert len(obs) == 2
         assert "Meeting Notes" in obs[0]
@@ -58,9 +61,12 @@ class TestScanNotes:
 
 class TestScanCalendar:
     def test_returns_observations(self, scanner):
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[
-            {"summary": "Team Standup", "start_date": "2026-02-18 09:00", "calendar": "Work"},
-        ]):
+        with patch(
+            "apple_flow.apple_tools.calendar_list_events",
+            return_value=[
+                {"summary": "Team Standup", "start_date": "2026-02-18 09:00", "calendar": "Work"},
+            ],
+        ):
             obs = scanner._scan_calendar()
         assert len(obs) == 1
         assert "Team Standup" in obs[0]
@@ -73,9 +79,12 @@ class TestScanCalendar:
 
 class TestScanMail:
     def test_returns_observations(self, scanner):
-        with patch("apple_flow.apple_tools.mail_list_unread", return_value=[
-            {"subject": "PR Review Needed", "sender": "dev@example.com"},
-        ]):
+        with patch(
+            "apple_flow.apple_tools.mail_list_unread",
+            return_value=[
+                {"subject": "PR Review Needed", "sender": "dev@example.com"},
+            ],
+        ):
             obs = scanner._scan_mail_subjects()
         assert len(obs) == 1
         assert "PR Review" in obs[0]
@@ -88,10 +97,16 @@ class TestScanMail:
 
 class TestScan:
     def test_writes_ambient_context_to_memory(self, scanner, office):
-        with patch("apple_flow.apple_tools.notes_list", return_value=[
-            {"name": "Test Note", "preview": "Content"},
-        ]), patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.mail_list_unread", return_value=[]):
+        with (
+            patch(
+                "apple_flow.apple_tools.notes_list",
+                return_value=[
+                    {"name": "Test Note", "preview": "Content"},
+                ],
+            ),
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.mail_list_unread", return_value=[]),
+        ):
             scanner._scan()
 
         topic_file = office / "60_memory" / "ambient-context.md"
@@ -101,9 +116,11 @@ class TestScan:
         assert "Ambient Context" in content
 
     def test_no_write_when_empty(self, scanner, office):
-        with patch("apple_flow.apple_tools.notes_list", return_value=[]), \
-             patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.mail_list_unread", return_value=[]):
+        with (
+            patch("apple_flow.apple_tools.notes_list", return_value=[]),
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.mail_list_unread", return_value=[]),
+        ):
             scanner._scan()
 
         topic_file = office / "60_memory" / "ambient-context.md"
@@ -123,6 +140,7 @@ class TestRunForever:
         scanner.scan_interval_seconds = 0.01
 
         import asyncio
+
         shutdown = False
 
         async def stop_after_short_delay():

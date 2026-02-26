@@ -60,6 +60,7 @@ class AmbientScanner:
         observations: list[str] = []
         try:
             from . import apple_tools
+
             notes = apple_tools.notes_list(limit=20)
             if isinstance(notes, list):
                 for note in notes:
@@ -76,6 +77,7 @@ class AmbientScanner:
         observations: list[str] = []
         try:
             from . import apple_tools
+
             events = apple_tools.calendar_list_events(days_ahead=7, limit=20)
             if isinstance(events, list):
                 for evt in events:
@@ -93,6 +95,7 @@ class AmbientScanner:
         observations: list[str] = []
         try:
             from . import apple_tools
+
             messages = apple_tools.mail_list_unread(limit=10)
             if isinstance(messages, list):
                 for msg in messages:

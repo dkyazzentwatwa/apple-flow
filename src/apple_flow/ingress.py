@@ -12,7 +12,9 @@ from .utils import normalize_sender
 class IMessageIngress:
     """Reads inbound message rows from the local Messages SQLite database."""
 
-    def __init__(self, db_path: Path, enable_attachments: bool = False, max_attachment_size_mb: int = 10):
+    def __init__(
+        self, db_path: Path, enable_attachments: bool = False, max_attachment_size_mb: int = 10
+    ):
         self.db_path = Path(db_path)
         self.enable_attachments = enable_attachments
         self.max_attachment_size_mb = max_attachment_size_mb
@@ -73,7 +75,9 @@ class IMessageIngress:
             return []
         if sender_candidates:
             placeholders = ",".join(["?"] * len(sender_candidates))
-            predicate_parts.append(f"COALESCE(h.id, m.destination_caller_id, 'unknown') IN ({placeholders})")
+            predicate_parts.append(
+                f"COALESCE(h.id, m.destination_caller_id, 'unknown') IN ({placeholders})"
+            )
             params.extend(sender_candidates)
 
         predicate = ""
@@ -142,12 +146,14 @@ class IMessageIngress:
             if size > max_bytes:
                 continue
             mime = row["mime_type"] or "application/octet-stream"
-            attachments.append({
-                "path": filename,
-                "filename": Path(filename).name if filename else "unknown",
-                "mime_type": mime,
-                "size_bytes": str(size),
-            })
+            attachments.append(
+                {
+                    "path": filename,
+                    "filename": Path(filename).name if filename else "unknown",
+                    "mime_type": mime,
+                    "size_bytes": str(size),
+                }
+            )
         return attachments
 
     def latest_rowid(self) -> int | None:

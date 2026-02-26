@@ -41,9 +41,7 @@ def _make_config(**overrides):
     return SimpleNamespace(**defaults)
 
 
-def _make_companion(
-    connector=None, egress=None, store=None, office_path=None, config=None, **kw
-):
+def _make_companion(connector=None, egress=None, store=None, office_path=None, config=None, **kw):
     return CompanionLoop(
         connector=connector or FakeConnector(),
         egress=egress or FakeEgress(),
@@ -91,10 +89,12 @@ class TestQuietHours:
 
     def test_same_day_range_inside(self):
         """14:00 should be quiet when range is 13:00-17:00."""
-        comp = _make_companion(config=_make_config(
-            companion_quiet_hours_start="13:00",
-            companion_quiet_hours_end="17:00",
-        ))
+        comp = _make_companion(
+            config=_make_config(
+                companion_quiet_hours_start="13:00",
+                companion_quiet_hours_end="17:00",
+            )
+        )
         fake_now = datetime(2026, 2, 18, 14, 0, 0)
         with patch("apple_flow.companion.datetime") as mock_dt:
             mock_dt.now.return_value = fake_now
@@ -103,10 +103,12 @@ class TestQuietHours:
 
     def test_same_day_range_outside(self):
         """10:00 should NOT be quiet when range is 13:00-17:00."""
-        comp = _make_companion(config=_make_config(
-            companion_quiet_hours_start="13:00",
-            companion_quiet_hours_end="17:00",
-        ))
+        comp = _make_companion(
+            config=_make_config(
+                companion_quiet_hours_start="13:00",
+                companion_quiet_hours_end="17:00",
+            )
+        )
         fake_now = datetime(2026, 2, 18, 10, 0, 0)
         with patch("apple_flow.companion.datetime") as mock_dt:
             mock_dt.now.return_value = fake_now
@@ -115,10 +117,12 @@ class TestQuietHours:
 
     def test_invalid_format_returns_false(self):
         """Invalid time format should not crash, returns False."""
-        comp = _make_companion(config=_make_config(
-            companion_quiet_hours_start="not-a-time",
-            companion_quiet_hours_end="also-bad",
-        ))
+        comp = _make_companion(
+            config=_make_config(
+                companion_quiet_hours_start="not-a-time",
+                companion_quiet_hours_end="also-bad",
+            )
+        )
         assert comp._is_quiet_hours() is False
 
 
@@ -211,8 +215,10 @@ class TestObservations:
             "created_at": old_time,
         }
         comp = _make_companion(store=store)
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             obs = comp._gather_observations()
         assert any("Stale approval" in o for o in obs)
 
@@ -230,27 +236,36 @@ class TestObservations:
             "created_at": recent_time,
         }
         comp = _make_companion(store=store)
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             obs = comp._gather_observations()
         assert not any("Stale approval" in o for o in obs)
 
     def test_gather_calendar_events(self):
         comp = _make_companion()
         soon = (datetime.now() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M")
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[
-            {"start_date": soon, "summary": "Standup"}
-        ]), patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch(
+                "apple_flow.apple_tools.calendar_list_events",
+                return_value=[{"start_date": soon, "summary": "Standup"}],
+            ),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             obs = comp._gather_observations()
         assert any("Standup" in o for o in obs)
 
     def test_gather_reminders(self):
         comp = _make_companion()
         overdue = (datetime.now() - timedelta(hours=2)).isoformat()
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[
-                 {"name": "Buy milk", "due_date": overdue, "list": "agent-task"}
-             ]):
+        with (
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch(
+                "apple_flow.apple_tools.reminders_list",
+                return_value=[{"name": "Buy milk", "due_date": overdue, "list": "agent-task"}],
+            ),
+        ):
             obs = comp._gather_observations()
         assert any("Buy milk" in o for o in obs)
 
@@ -259,8 +274,10 @@ class TestObservations:
         inbox_dir.mkdir()
         (inbox_dir / "inbox.md").write_text("- [ ] Item one\n- [ ] Item two\n- [x] Done\n")
         comp = _make_companion(office_path=tmp_path)
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             obs = comp._gather_observations()
         assert any("2 untriaged" in o for o in obs)
 
@@ -268,14 +285,13 @@ class TestObservations:
         inbox_dir = tmp_path / "00_inbox"
         inbox_dir.mkdir()
         (inbox_dir / "inbox.md").write_text(
-            "# Inbox\n\n"
-            "## Entry Format\n"
-            "- [ ] YYYY-MM-DD HH:MM | source | note\n\n"
-            "## Entries\n"
+            "# Inbox\n\n## Entry Format\n- [ ] YYYY-MM-DD HH:MM | source | note\n\n## Entries\n"
         )
         comp = _make_companion(office_path=tmp_path)
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             obs = comp._gather_observations()
         assert not any("untriaged item(s) in agent-office inbox" in o for o in obs)
 
@@ -292,15 +308,19 @@ class TestObservations:
             "- [ ] Real item two\n"
         )
         comp = _make_companion(office_path=tmp_path)
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             obs = comp._gather_observations()
         assert any("2 untriaged" in o for o in obs)
 
     def test_gather_empty_when_nothing_notable(self):
         comp = _make_companion()
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             obs = comp._gather_observations()
         assert isinstance(obs, list)
 
@@ -310,8 +330,10 @@ class TestObservations:
         comp = _make_companion(store=store)
         soon = (datetime.now() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M")
         event = [{"start_date": soon, "summary": "Standup"}]
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=event), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=event),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             obs1 = comp._gather_observations()
             obs2 = comp._gather_observations()
         assert any("Standup" in o for o in obs1)
@@ -323,8 +345,10 @@ class TestObservations:
         comp = _make_companion(store=store)
         overdue = (datetime.now() - timedelta(hours=1)).isoformat()
         reminder = [{"name": "Fix bug", "due_date": overdue, "list": "agent-task"}]
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=reminder):
+        with (
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=reminder),
+        ):
             obs1 = comp._gather_observations()
             obs2 = comp._gather_observations()
         assert any("Fix bug" in o for o in obs1)
@@ -404,8 +428,10 @@ class TestSynthesis:
 
     def test_synthesis_error_returns_empty(self):
         connector = FakeConnector()
+
         def _fail(tid, prompt):
             raise RuntimeError("fail")
+
         connector.run_turn = _fail
         comp = _make_companion(connector=connector)
         result = comp._synthesize_message(["some obs"])
@@ -463,10 +489,12 @@ class TestCheckAndNotify:
             "created_at": old_time,
         }
         comp = _make_companion(connector=connector, egress=egress, store=store)
-        with patch.object(comp, "_is_quiet_hours", return_value=False), \
-             patch.object(comp, "_is_rate_limited", return_value=False), \
-             patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch.object(comp, "_is_quiet_hours", return_value=False),
+            patch.object(comp, "_is_rate_limited", return_value=False),
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             comp._check_and_notify()
         assert len(egress.messages) >= 1
         assert egress.messages[0][0] == "+15551234567"
@@ -488,10 +516,12 @@ class TestCheckAndNotify:
             "created_at": old_time,
         }
         comp = _make_companion(connector=connector, egress=egress, store=store)
-        with patch.object(comp, "_is_quiet_hours", return_value=False), \
-             patch.object(comp, "_is_rate_limited", return_value=False), \
-             patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch.object(comp, "_is_quiet_hours", return_value=False),
+            patch.object(comp, "_is_rate_limited", return_value=False),
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             comp._check_and_notify()
         assert len(egress.messages) == 0
 
@@ -512,10 +542,12 @@ class TestCheckAndNotify:
             "created_at": old_time,
         }
         comp = _make_companion(connector=connector, egress=egress, store=store)
-        with patch.object(comp, "_is_quiet_hours", return_value=False), \
-             patch.object(comp, "_is_rate_limited", return_value=False), \
-             patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch.object(comp, "_is_quiet_hours", return_value=False),
+            patch.object(comp, "_is_rate_limited", return_value=False),
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             comp._check_and_notify()
         count = store.get_state("companion_proactive_hour_count")
         assert count is not None and int(count) >= 1
@@ -529,10 +561,12 @@ class TestCheckAndNotify:
             {"action_id": "a1", "action_type": "check_in", "payload": {"summary": "deploy check"}}
         ]
         comp = _make_companion(connector=connector, egress=egress, scheduler=scheduler)
-        with patch.object(comp, "_is_quiet_hours", return_value=False), \
-             patch.object(comp, "_is_rate_limited", return_value=False), \
-             patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch.object(comp, "_is_quiet_hours", return_value=False),
+            patch.object(comp, "_is_rate_limited", return_value=False),
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             comp._check_and_notify()
         scheduler.mark_fired.assert_called_once_with("a1")
         assert len(egress.messages) >= 1
@@ -581,9 +615,13 @@ class TestDailyDigest:
         connector = FakeConnector()
         connector.run_turn = lambda tid, prompt: "Good morning! Here's your briefing."
         comp = _make_companion(connector=connector)
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[
-            {"start_date": "2026-02-18 09:00", "summary": "Standup"}
-        ]), patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch(
+                "apple_flow.apple_tools.calendar_list_events",
+                return_value=[{"start_date": "2026-02-18 09:00", "summary": "Standup"}],
+            ),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             result = comp._build_daily_digest()
         assert isinstance(result, str)
         assert len(result) > 0
@@ -591,8 +629,10 @@ class TestDailyDigest:
     def test_build_digest_empty_when_nothing(self):
         connector = FakeConnector()
         comp = _make_companion(connector=connector)
-        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             result = comp._build_daily_digest()
         assert isinstance(result, str)
 
@@ -617,10 +657,12 @@ class TestWeeklyReview:
         assert comp._weekly_review_sent_this_week() is False
 
     def test_weekly_review_time_wrong_day(self):
-        comp = _make_companion(config=_make_config(
-            companion_weekly_review_day="monday",
-            companion_weekly_review_time="20:00",
-        ))
+        comp = _make_companion(
+            config=_make_config(
+                companion_weekly_review_day="monday",
+                companion_weekly_review_time="20:00",
+            )
+        )
         fake_now = datetime(2026, 2, 18, 20, 0, 0)  # Wednesday
         with patch("apple_flow.companion.datetime") as mock_dt:
             mock_dt.now.return_value = fake_now
@@ -791,10 +833,12 @@ class TestCheckAndNotifyTelemetry:
         """With no observations, check_at, obs_count, and skip_reason are written."""
         store = FakeStore()
         comp = _make_companion(store=store)
-        with patch.object(comp, "_is_quiet_hours", return_value=False), \
-             patch.object(comp, "_is_rate_limited", return_value=False), \
-             patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch.object(comp, "_is_quiet_hours", return_value=False),
+            patch.object(comp, "_is_rate_limited", return_value=False),
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             comp._check_and_notify()
         assert store.get_state("companion_last_check_at") is not None
         assert store.get_state("companion_last_obs_count") == "0"
@@ -826,16 +870,22 @@ class TestCheckAndNotifyTelemetry:
         # Give it a stale approval to trigger an observation
         old_time = (datetime.now(timezone.utc) - timedelta(minutes=60)).isoformat()
         store.approvals["req_1"] = {
-            "request_id": "req_1", "run_id": "r1", "sender": "+1",
-            "summary": "test", "command_preview": "do stuff",
-            "expires_at": "2099-01-01T00:00:00", "status": "pending",
+            "request_id": "req_1",
+            "run_id": "r1",
+            "sender": "+1",
+            "summary": "test",
+            "command_preview": "do stuff",
+            "expires_at": "2099-01-01T00:00:00",
+            "status": "pending",
             "created_at": old_time,
         }
         comp = _make_companion(connector=connector, egress=egress, store=store)
-        with patch.object(comp, "_is_quiet_hours", return_value=False), \
-             patch.object(comp, "_is_rate_limited", return_value=False), \
-             patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_list", return_value=[]):
+        with (
+            patch.object(comp, "_is_quiet_hours", return_value=False),
+            patch.object(comp, "_is_rate_limited", return_value=False),
+            patch("apple_flow.apple_tools.calendar_list_events", return_value=[]),
+            patch("apple_flow.apple_tools.reminders_list", return_value=[]),
+        ):
             comp._check_and_notify()
         assert store.get_state("companion_last_sent_at") is not None
         assert store.get_state("companion_last_skip_reason") == ""

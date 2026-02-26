@@ -180,7 +180,11 @@ def _python_context(project_dir: Path) -> tuple[str, str]:
     resolved_python = python_executable.resolve()
 
     version_out = subprocess.run(
-        [str(python_executable), "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
+        [
+            str(python_executable),
+            "-c",
+            "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -237,9 +241,9 @@ def _render_service_plist(
     <key>EnvironmentVariables</key>
     <dict>
       <key>PATH</key>
-      <string>{venv_dir / 'bin'}:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <string>{venv_dir / "bin"}:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
       <key>PYTHONPATH</key>
-      <string>{site_packages}:{project_dir / 'src'}</string>
+      <string>{site_packages}:{project_dir / "src"}</string>
       <key>VIRTUAL_ENV</key>
       <string>{venv_dir}</string>
     </dict>
@@ -284,8 +288,12 @@ def _install_service(project_dir: Path) -> dict[str, Any]:
         plist_path.write_text(plist, encoding="utf-8")
         plist_paths[label] = str(plist_path)
 
-        subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True, text=True, check=False)
-        load = subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True, text=True, check=False)
+        subprocess.run(
+            ["launchctl", "unload", str(plist_path)], capture_output=True, text=True, check=False
+        )
+        load = subprocess.run(
+            ["launchctl", "load", str(plist_path)], capture_output=True, text=True, check=False
+        )
         if load.returncode != 0:
             return _response_error(
                 "launchctl_load_failed",
@@ -396,7 +404,9 @@ def _wizard_doctor(args: Any) -> dict[str, Any]:
     if not readable:
         errors.append(read_reason)
     if not connector_binary_found:
-        errors.append(f"Connector binary not found for {connector}: {connector_binary or '(empty)'}")
+        errors.append(
+            f"Connector binary not found for {connector}: {connector_binary or '(empty)'}"
+        )
     if not token_present:
         if "adminApiTokenPresent" in env:
             errors.append(
@@ -458,10 +468,14 @@ def _wizard_generate_env(args: Any) -> dict[str, Any]:
 
     mail_address = (args.mail_address or "").strip()
     if "mail" in gateways and not validate_email(mail_address):
-        validation_errors.append("mail-address is required and must be valid when mail gateway is enabled")
+        validation_errors.append(
+            "mail-address is required and must be valid when mail gateway is enabled"
+        )
 
     reminders_list_name = (args.reminders_list_name or "").strip() or "agent-task"
-    reminders_archive_list_name = (args.reminders_archive_list_name or "").strip() or "agent-archive"
+    reminders_archive_list_name = (
+        args.reminders_archive_list_name or ""
+    ).strip() or "agent-archive"
     notes_folder_name = (args.notes_folder_name or "").strip() or "agent-task"
     notes_archive_folder_name = (args.notes_archive_folder_name or "").strip() or "agent-archive"
     notes_log_folder_name = (args.notes_log_folder_name or "").strip() or "agent-logs"

@@ -85,7 +85,7 @@ def _extract_workspace_alias(payload: str) -> tuple[str, str]:
     match = _WORKSPACE_ALIAS_RE.match(payload)
     if match:
         alias = match.group(1)
-        remaining = payload[match.end():].strip()
+        remaining = payload[match.end() :].strip()
         return alias, remaining
     return "", payload
 
@@ -124,7 +124,7 @@ def parse_command(raw_text: str) -> ParsedCommand:
     for prefix, kind in _PREFIX_TO_KIND.items():
         marker = f"{prefix}:"
         if lowered.startswith(marker):
-            payload = text[len(marker):].strip()
+            payload = text[len(marker) :].strip()
             workspace, clean_payload = _extract_workspace_alias(payload)
             return ParsedCommand(kind=kind, payload=clean_payload, workspace=workspace)
 

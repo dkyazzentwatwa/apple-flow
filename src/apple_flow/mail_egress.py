@@ -45,7 +45,10 @@ class AppleMailEgress:
         """
         outbound_fingerprint = self._fingerprint(recipient, text)
         last_ts = self._recent_fingerprints.get(outbound_fingerprint)
-        if last_ts is not None and (time.time() - last_ts) <= self.suppress_duplicate_outbound_seconds:
+        if (
+            last_ts is not None
+            and (time.time() - last_ts) <= self.suppress_duplicate_outbound_seconds
+        ):
             logger.info(
                 "Suppressing duplicate outbound email to %s (%s chars) within %.1fs window",
                 recipient,
@@ -76,7 +79,9 @@ class AppleMailEgress:
                     logger.warning("Email send retry %s failed for %s: %s", attempt, recipient, exc)
                     time.sleep(0.5 * attempt)
             if last_error is not None:
-                raise RuntimeError(f"Failed to send email after retries: {last_error}") from last_error
+                raise RuntimeError(
+                    f"Failed to send email after retries: {last_error}"
+                ) from last_error
 
         # Mark outbound using original text (without signature) for fingerprint consistency
         # This ensures the dedup check at the top of send() matches what we record here
@@ -200,7 +205,9 @@ class AppleMailEgress:
     def _gc_recent(self) -> None:
         now = time.time()
         expired = [
-            fp for fp, ts in self._recent_fingerprints.items() if (now - ts) > self.echo_window_seconds
+            fp
+            for fp, ts in self._recent_fingerprints.items()
+            if (now - ts) > self.echo_window_seconds
         ]
         for fp in expired:
             self._recent_fingerprints.pop(fp, None)
@@ -221,4 +228,6 @@ class AppleMailEgress:
         self._recent_fingerprints[self._fingerprint(recipient, text)] = time.time()
         if self.signature:
             # Also fingerprint text+signature so bounced replies are detected
-            self._recent_fingerprints[self._fingerprint(recipient, text + self.signature)] = time.time()
+            self._recent_fingerprints[self._fingerprint(recipient, text + self.signature)] = (
+                time.time()
+            )

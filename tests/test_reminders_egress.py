@@ -20,6 +20,7 @@ def test_complete_reminder_builds_correct_script(monkeypatch):
         return Result()
 
     import subprocess
+
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     egress = AppleRemindersEgress(list_name="agent-task")
@@ -43,6 +44,7 @@ def test_complete_reminder_returns_false_on_error(monkeypatch):
         return Result()
 
     import subprocess
+
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     egress = AppleRemindersEgress(list_name="agent-task")
@@ -93,6 +95,7 @@ def test_annotate_reminder_builds_correct_script(monkeypatch):
         return Result()
 
     import subprocess
+
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     egress = AppleRemindersEgress(list_name="agent-task")
@@ -117,6 +120,7 @@ def test_annotate_reminder_returns_false_on_error(monkeypatch):
         return Result()
 
     import subprocess
+
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     egress = AppleRemindersEgress(list_name="agent-task")
@@ -139,6 +143,7 @@ def test_escapes_special_characters_in_text(monkeypatch):
         return Result()
 
     import subprocess
+
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     egress = AppleRemindersEgress()
@@ -164,6 +169,7 @@ def test_move_to_archive_builds_correct_script(monkeypatch):
         return Result()
 
     import subprocess
+
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     egress = AppleRemindersEgress(list_name="agent-task")
@@ -194,6 +200,7 @@ def test_move_to_archive_returns_false_on_error(monkeypatch):
         return Result()
 
     import subprocess
+
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     egress = AppleRemindersEgress(list_name="agent-task")

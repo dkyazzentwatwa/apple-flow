@@ -5,7 +5,9 @@ from apple_flow.main import build_app
 
 class InMemoryStore:
     def __init__(self):
-        self._sessions = [{"sender": "+1", "thread_id": "t1", "mode": "chat", "last_seen_at": "now"}]
+        self._sessions = [
+            {"sender": "+1", "thread_id": "t1", "mode": "chat", "last_seen_at": "now"}
+        ]
         self._approvals = [{"request_id": "req1", "status": "pending"}]
         self._runs = {"run1": {"run_id": "run1", "state": "running"}}
 
@@ -22,7 +24,6 @@ class InMemoryStore:
         return True
 
 
-
 def test_admin_endpoints_expose_state():
     import os
 
@@ -36,7 +37,9 @@ def test_admin_endpoints_expose_state():
         assert client.get("/sessions").status_code == 200
         assert client.get("/approvals/pending").status_code == 200
         assert client.get("/runs/run1").status_code == 200
-        assert client.post("/approvals/req1/override", json={"status": "approved"}).status_code == 200
+        assert (
+            client.post("/approvals/req1/override", json={"status": "approved"}).status_code == 200
+        )
     finally:
         if old_token is not None:
             os.environ["apple_flow_admin_api_token"] = old_token

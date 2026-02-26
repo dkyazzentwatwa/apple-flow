@@ -84,7 +84,10 @@ class FollowUpScheduler:
 
         logger.info(
             "Scheduled %s for run=%s sender=%s trigger_at=%s",
-            action_type, run_id, sender, trigger_at,
+            action_type,
+            run_id,
+            sender,
+            trigger_at,
         )
         return action_id
 
@@ -109,14 +112,16 @@ class FollowUpScheduler:
                 payload = json.loads(row["payload_json"])
             except (json.JSONDecodeError, TypeError):
                 payload = {}
-            results.append({
-                "action_id": row["action_id"],
-                "sender": row["sender"],
-                "action_type": row["action_type"],
-                "trigger_at": row["trigger_at"],
-                "payload": payload,
-                "status": row["status"],
-            })
+            results.append(
+                {
+                    "action_id": row["action_id"],
+                    "sender": row["sender"],
+                    "action_type": row["action_type"],
+                    "trigger_at": row["trigger_at"],
+                    "payload": payload,
+                    "status": row["status"],
+                }
+            )
         return results
 
     def mark_fired(self, action_id: str) -> None:
@@ -169,11 +174,13 @@ class FollowUpScheduler:
                 payload = json.loads(row["payload_json"])
             except (json.JSONDecodeError, TypeError):
                 payload = {}
-            results.append({
-                "action_id": row["action_id"],
-                "sender": row["sender"],
-                "action_type": row["action_type"],
-                "trigger_at": row["trigger_at"],
-                "payload": payload,
-            })
+            results.append(
+                {
+                    "action_id": row["action_id"],
+                    "sender": row["sender"],
+                    "action_type": row["action_type"],
+                    "trigger_at": row["trigger_at"],
+                    "payload": payload,
+                }
+            )
         return results

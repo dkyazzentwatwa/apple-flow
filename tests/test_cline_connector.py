@@ -54,6 +54,7 @@ def test_shutdown_is_noop():
 # _build_cmd
 # ---------------------------------------------------------------------------
 
+
 def test_build_cmd_defaults():
     """Default command includes -y and prompt."""
     connector = ClineConnector(use_json=False)
@@ -130,6 +131,7 @@ def test_build_cmd_full():
 # _parse_json_output
 # ---------------------------------------------------------------------------
 
+
 def _ndjson(*objs: dict) -> str:
     return "\n".join(json.dumps(o) for o in objs)
 
@@ -149,7 +151,12 @@ def test_parse_json_output_prefers_completion_result():
     raw = _ndjson(
         {"type": "say", "say": "text", "text": "Searching emails...", "ts": 1},
         {"type": "say", "say": "text", "text": "Found 3 emails.", "ts": 2},
-        {"type": "say", "say": "completion_result", "text": "Here are your 3 unread emails.", "ts": 3},
+        {
+            "type": "say",
+            "say": "completion_result",
+            "text": "Here are your 3 unread emails.",
+            "ts": 3,
+        },
     )
     connector = ClineConnector()
     assert connector._parse_json_output(raw) == "Here are your 3 unread emails."
@@ -220,30 +227,43 @@ def test_parse_json_output_empty_input():
 # run_turn — subprocess mocking
 # ---------------------------------------------------------------------------
 
-def _make_mock_result(returncode: int = 0, stdout: str = "", stderr: str = "") -> Mock:
-    m = Mock()
-    m.returncode = returncode
-    m.stdout = stdout
-    m.stderr = stderr
-    return m
+
+def _make_mock_proc(
+    *,
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+    communicate_side_effect: Exception | None = None,
+) -> Mock:
+    proc = Mock()
+    proc.pid = 12345
+    proc.returncode = returncode
+    proc.poll = Mock(return_value=returncode)
+    proc.communicate = Mock(return_value=(stdout, stderr))
+    if communicate_side_effect is not None:
+        proc.communicate.side_effect = communicate_side_effect
+    return proc
 
 
 def test_run_turn_success_plain_text():
     """Successful plain-text run returns stdout."""
-    connector = ClineConnector(cline_command="cline", workspace="/tmp", timeout=30.0, use_json=False)
-    mock_result = _make_mock_result(stdout="Task complete.")
+    connector = ClineConnector(
+        cline_command="cline", workspace="/tmp", timeout=30.0, use_json=False
+    )
+    mock_proc = _make_mock_proc(stdout="Task complete.")
 
-    with patch("subprocess.run", return_value=mock_result) as mock_run:
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
         response = connector.run_turn("+15551234567", "do the thing")
 
-        mock_run.assert_called_once()
-        args, kwargs = mock_run.call_args
+        mock_popen.assert_called_once()
+        args, kwargs = mock_popen.call_args
         assert args[0][0] == "cline"
         assert "-y" in args[0]
         assert kwargs["cwd"] == "/tmp"
-        assert kwargs["timeout"] == 30.0
-        assert kwargs["capture_output"] is True
+        assert kwargs["stdout"] == subprocess.PIPE
+        assert kwargs["stderr"] == subprocess.PIPE
         assert kwargs["text"] is True
+        mock_proc.communicate.assert_called_once_with(timeout=30.0)
         assert response == "Task complete."
 
 
@@ -253,9 +273,9 @@ def test_run_turn_success_json_mode():
     ndjson_output = _ndjson(
         {"type": "say", "say": "text", "text": "Here is your answer.", "ts": 1},
     )
-    mock_result = _make_mock_result(stdout=ndjson_output)
+    mock_proc = _make_mock_proc(stdout=ndjson_output)
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("subprocess.Popen", return_value=mock_proc):
         response = connector.run_turn("+15551234567", "test")
         assert response == "Here is your answer."
 
@@ -263,11 +283,11 @@ def test_run_turn_success_json_mode():
 def test_run_turn_with_model_flag():
     """-m flag is passed when model is configured."""
     connector = ClineConnector(model="gpt-4o", use_json=False)
-    mock_result = _make_mock_result(stdout="response")
+    mock_proc = _make_mock_proc(stdout="response")
 
-    with patch("subprocess.run", return_value=mock_result) as mock_run:
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
         connector.run_turn("+15551234567", "test")
-        args, _ = mock_run.call_args
+        args, _ = mock_popen.call_args
         assert "-m" in args[0]
         assert "gpt-4o" in args[0]
 
@@ -277,14 +297,14 @@ def test_run_turn_with_context():
     connector = ClineConnector(context_window=2, use_json=False)
     sender = "+15551234567"
 
-    mock_result = _make_mock_result(stdout="Response 1")
-    with patch("subprocess.run", return_value=mock_result):
+    mock_proc = _make_mock_proc(stdout="Response 1")
+    with patch("subprocess.Popen", return_value=mock_proc):
         connector.run_turn(sender, "Message 1")
 
-    mock_result.stdout = "Response 2"
-    with patch("subprocess.run", return_value=mock_result) as mock_run:
+    mock_proc.communicate = Mock(return_value=("Response 2", ""))
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
         connector.run_turn(sender, "Message 2")
-        args, _ = mock_run.call_args
+        args, _ = mock_popen.call_args
         prompt_arg = args[0][-1]
         assert "Previous conversation context" in prompt_arg
         assert "Message 1" in prompt_arg
@@ -296,9 +316,9 @@ def test_run_turn_with_context():
 def test_run_turn_empty_response_fallback():
     """Empty response falls back to 'No response generated.'"""
     connector = ClineConnector(use_json=False)
-    mock_result = _make_mock_result(stdout="   ")
+    mock_proc = _make_mock_proc(stdout="   ")
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("subprocess.Popen", return_value=mock_proc):
         response = connector.run_turn("+15551234567", "test")
         assert response == "No response generated."
 
@@ -306,9 +326,9 @@ def test_run_turn_empty_response_fallback():
 def test_run_turn_error_exit_code():
     """Non-zero exit code returns an error string."""
     connector = ClineConnector()
-    mock_result = _make_mock_result(returncode=1, stderr="Something went wrong")
+    mock_proc = _make_mock_proc(returncode=1, stderr="Something went wrong")
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("subprocess.Popen", return_value=mock_proc):
         response = connector.run_turn("+15551234567", "test")
         assert "Error" in response
         assert "exit code 1" in response
@@ -318,7 +338,8 @@ def test_run_turn_timeout():
     """TimeoutExpired returns a timeout error message."""
     connector = ClineConnector(timeout=5.0, use_json=False)
 
-    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("cline", 5.0)):
+    timeout_proc = _make_mock_proc(communicate_side_effect=subprocess.TimeoutExpired("cline", 5.0))
+    with patch("subprocess.Popen", return_value=timeout_proc):
         response = connector.run_turn("+15551234567", "test")
         assert "timed out" in response.lower()
         assert "5s" in response
@@ -328,7 +349,7 @@ def test_run_turn_binary_not_found():
     """FileNotFoundError returns an install hint."""
     connector = ClineConnector(cline_command="/nonexistent/cline")
 
-    with patch("subprocess.run", side_effect=FileNotFoundError):
+    with patch("subprocess.Popen", side_effect=FileNotFoundError):
         response = connector.run_turn("+15551234567", "test")
         assert "not found" in response.lower()
         assert "npm install -g cline" in response
@@ -338,7 +359,7 @@ def test_run_turn_unexpected_error():
     """Unexpected exceptions are caught and reported."""
     connector = ClineConnector()
 
-    with patch("subprocess.run", side_effect=RuntimeError("boom")):
+    with patch("subprocess.Popen", side_effect=RuntimeError("boom")):
         response = connector.run_turn("+15551234567", "test")
         assert "RuntimeError" in response
         assert "boom" in response
@@ -348,15 +369,16 @@ def test_run_turn_unexpected_error():
 # Context window limiting
 # ---------------------------------------------------------------------------
 
+
 def test_context_window_limiting():
     """History is pruned to 2x context_window entries."""
     connector = ClineConnector(context_window=2, use_json=False)
     sender = "+15551234567"
-    mock_result = _make_mock_result(stdout="ok")
+    mock_proc = _make_mock_proc(stdout="ok")
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("subprocess.Popen", return_value=mock_proc):
         for i in range(5):
-            mock_result.stdout = f"Response {i}"
+            mock_proc.communicate = Mock(return_value=(f"Response {i}", ""))
             connector.run_turn(sender, f"Message {i}")
 
     # max_history = context_window * 2 = 4
@@ -369,11 +391,14 @@ def test_context_window_limiting():
 # run_turn_streaming
 # ---------------------------------------------------------------------------
 
+
 def test_run_turn_streaming_plain_text():
     """Streaming collects lines and returns joined output."""
     connector = ClineConnector(use_json=False)
 
     mock_proc = Mock()
+    mock_proc.pid = 12345
+    mock_proc.poll = Mock(return_value=0)
     mock_proc.stdout = iter(["line one\n", "line two\n"])
     mock_proc.returncode = 0
     mock_proc.stderr = Mock()
@@ -391,6 +416,8 @@ def test_run_turn_streaming_calls_on_progress():
     progress_calls: list[str] = []
 
     mock_proc = Mock()
+    mock_proc.pid = 12345
+    mock_proc.poll = Mock(return_value=0)
     mock_proc.stdout = iter(["chunk 1\n", "chunk 2\n"])
     mock_proc.returncode = 0
     mock_proc.stderr = Mock()
@@ -411,6 +438,8 @@ def test_run_turn_streaming_json_on_progress():
     json_line = json.dumps({"type": "say", "say": "text", "text": "step done", "ts": 1}) + "\n"
 
     mock_proc = Mock()
+    mock_proc.pid = 12345
+    mock_proc.poll = Mock(return_value=0)
     mock_proc.stdout = iter([json_line])
     mock_proc.returncode = 0
     mock_proc.stderr = Mock()

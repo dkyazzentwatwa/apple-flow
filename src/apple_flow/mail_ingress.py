@@ -20,7 +20,13 @@ logger = logging.getLogger("apple_flow.mail_ingress")
 class AppleMailIngress:
     """Reads inbound emails from the macOS Mail.app via AppleScript."""
 
-    def __init__(self, account: str = "", mailbox: str = "INBOX", max_age_days: int = 2, trigger_tag: str = ""):
+    def __init__(
+        self,
+        account: str = "",
+        mailbox: str = "INBOX",
+        max_age_days: int = 2,
+        trigger_tag: str = "",
+    ):
         self.account = account
         self.mailbox = mailbox
         self.max_age_days = max_age_days
@@ -100,7 +106,9 @@ class AppleMailIngress:
         """Not applicable for Mail (uses unread status). Returns 0 as sentinel."""
         return 0
 
-    def _fetch_unread_via_applescript(self, limit: int, sender_filter: list[str] | None = None) -> list[dict[str, str]]:
+    def _fetch_unread_via_applescript(
+        self, limit: int, sender_filter: list[str] | None = None
+    ) -> list[dict[str, str]]:
         """Run AppleScript to get unread emails as tab-delimited records.
 
         Args:
@@ -127,7 +135,7 @@ class AppleMailIngress:
 
         where_clause = f"whose {' and '.join(conditions)}"
 
-        script = f'''
+        script = f"""
         on sanitise(txt)
             -- Replace tabs with spaces
             set AppleScript's text item delimiters to (ASCII character 9)
@@ -188,7 +196,7 @@ class AppleMailIngress:
             set AppleScript's text item delimiters to (ASCII character 10)
             return (outputLines as text)
         end tell
-        '''
+        """
 
         try:
             result = subprocess.run(
@@ -198,7 +206,9 @@ class AppleMailIngress:
                 timeout=30,
             )
             if result.returncode != 0:
-                logger.warning("AppleScript fetch failed (rc=%s): %s", result.returncode, result.stderr.strip())
+                logger.warning(
+                    "AppleScript fetch failed (rc=%s): %s", result.returncode, result.stderr.strip()
+                )
                 return []
             output = result.stdout.strip()
             if not output:
@@ -222,13 +232,15 @@ class AppleMailIngress:
             parts = line.split("\t")
             if len(parts) < 5:
                 continue
-            messages.append({
-                "id": parts[0],
-                "sender": parts[1],
-                "subject": parts[2],
-                "body": parts[3],
-                "date": parts[4],
-            })
+            messages.append(
+                {
+                    "id": parts[0],
+                    "sender": parts[1],
+                    "subject": parts[2],
+                    "body": parts[3],
+                    "date": parts[4],
+                }
+            )
         return messages
 
     def _mark_as_read(self, message_ids: list[str]) -> None:
@@ -259,11 +271,11 @@ class AppleMailIngress:
             ]
         )
 
-        script = f'''
+        script = f"""
         tell application "Mail"
 {id_lines}
         end tell
-        '''
+        """
 
         try:
             subprocess.run(

@@ -90,8 +90,12 @@ def generate_env(
         "apple_flow_default_workspace": workspace,
         "apple_flow_connector": connector,
         "apple_flow_codex_cli_command": connector_command if connector == "codex-cli" else "codex",
-        "apple_flow_claude_cli_command": connector_command if connector == "claude-cli" else "claude",
-        "apple_flow_gemini_cli_command": connector_command if connector == "gemini-cli" else "gemini",
+        "apple_flow_claude_cli_command": connector_command
+        if connector == "claude-cli"
+        else "claude",
+        "apple_flow_gemini_cli_command": connector_command
+        if connector == "gemini-cli"
+        else "gemini",
         "apple_flow_cline_command": connector_command if connector == "cline" else "cline",
         "apple_flow_only_poll_allowed_senders": "true",
         "apple_flow_require_chat_prefix": "false",
@@ -109,7 +113,9 @@ def generate_env(
         "apple_flow_notes_folder_name": notes_folder_name,
         "apple_flow_notes_archive_folder_name": notes_archive_folder_name,
         "apple_flow_notes_owner": phone if "notes" in gateways else "",
-        "apple_flow_enable_notes_logging": "true" if "notes" in gateways and enable_notes_logging else "false",
+        "apple_flow_enable_notes_logging": "true"
+        if "notes" in gateways and enable_notes_logging
+        else "false",
         "apple_flow_notes_log_folder_name": notes_log_folder_name,
         "apple_flow_enable_calendar_polling": "true" if "calendar" in gateways else "false",
         "apple_flow_calendar_name": calendar_name,
@@ -326,7 +332,9 @@ def run_wizard(
         print("Messages DB access check: OK")
     else:
         print(f"Messages DB access check: {reason}")
-        print("Grant Full Disk Access to your terminal app in System Settings > Privacy & Security.")
+        print(
+            "Grant Full Disk Access to your terminal app in System Settings > Privacy & Security."
+        )
 
     if start_daemon:
         print("\nStarting daemon...\n")

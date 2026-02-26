@@ -264,13 +264,15 @@ class AppleRemindersIngress:
             parts = line.split("\t")
             if len(parts) < 5:
                 continue
-            reminders.append({
-                "id": parts[0],
-                "name": parts[1],
-                "body": parts[2],
-                "creation_date": parts[3],
-                "due_date": parts[4],
-            })
+            reminders.append(
+                {
+                    "id": parts[0],
+                    "name": parts[1],
+                    "body": parts[2],
+                    "creation_date": parts[3],
+                    "due_date": parts[4],
+                }
+            )
         return reminders
 
     @staticmethod
@@ -283,7 +285,16 @@ class AppleRemindersIngress:
             parts.append(f"[due: {due_date}]")
         if body:
             parts.append(f"\n\n{body}")
-        return " ".join(parts) if len(parts) <= 2 and not body else "\n".join(filter(None, [
-            f"{name} [due: {due_date}]" if name and due_date else name,
-            body,
-        ]))
+        return (
+            " ".join(parts)
+            if len(parts) <= 2 and not body
+            else "\n".join(
+                filter(
+                    None,
+                    [
+                        f"{name} [due: {due_date}]" if name and due_date else name,
+                        body,
+                    ],
+                )
+            )
+        )

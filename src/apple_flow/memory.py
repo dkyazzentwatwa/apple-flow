@@ -52,10 +52,7 @@ class FileMemory:
         if not self.memory_dir.exists():
             return []
         try:
-            return sorted(
-                f.stem for f in self.memory_dir.glob("*.md")
-                if f.stem != "intro"
-            )
+            return sorted(f.stem for f in self.memory_dir.glob("*.md") if f.stem != "intro")
         except Exception:
             return []
 
@@ -69,7 +66,7 @@ class FileMemory:
             if section_header in text:
                 # Find the section and the next section header
                 start = text.index(section_header)
-                rest = text[start + len(section_header):]
+                rest = text[start + len(section_header) :]
                 next_section = rest.find("\n## ")
                 if next_section >= 0:
                     end = start + len(section_header) + next_section
@@ -125,5 +122,5 @@ class FileMemory:
 
         combined = "\n\n".join(parts)
         if len(combined) > self.max_context_chars:
-            combined = combined[:self.max_context_chars] + "\n[...truncated]"
+            combined = combined[: self.max_context_chars] + "\n[...truncated]"
         return combined

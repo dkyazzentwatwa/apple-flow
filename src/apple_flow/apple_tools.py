@@ -46,6 +46,7 @@ MESSAGES:  messages_list_recent_chats [--limit N]  |  messages_search "q" [--lim
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def _run_script(script: str, timeout: float = 30.0) -> str | None:
     """Run an osascript -e command. Returns stdout string or None on any failure."""
     try:
@@ -56,7 +57,9 @@ def _run_script(script: str, timeout: float = 30.0) -> str | None:
             timeout=timeout,
         )
         if result.returncode != 0:
-            logger.warning("AppleScript failed (rc=%s): %s", result.returncode, result.stderr.strip())
+            logger.warning(
+                "AppleScript failed (rc=%s): %s", result.returncode, result.stderr.strip()
+            )
             return None
         return result.stdout.strip("\r\n")
     except subprocess.TimeoutExpired:
@@ -129,9 +132,10 @@ def _normalize_text_key(value: str) -> str:
 # Apple Notes
 # ---------------------------------------------------------------------------
 
+
 def notes_list_folders() -> list[str]:
     """Return a list of all Notes folder names."""
-    script = '''
+    script = """
     tell application "Notes"
         set folderNames to {}
         repeat with f in every folder
@@ -140,7 +144,7 @@ def notes_list_folders() -> list[str]:
         set AppleScript's text item delimiters to "|||"
         return folderNames as text
     end tell
-    '''
+    """
     raw = _run_script(script)
     if not raw:
         return []
@@ -162,7 +166,7 @@ def _notes_fetch_raw(folder: str = "", limit: int = 50) -> list[dict]:
     else:
         fetch_block = "set allNotes to every note"
 
-    script = f'''
+    script = f"""
     on sanitise(txt)
         set AppleScript's text item delimiters to (ASCII character 9)
         set parts to text items of txt
@@ -209,8 +213,10 @@ def _notes_fetch_raw(folder: str = "", limit: int = 50) -> list[dict]:
         set AppleScript's text item delimiters to (ASCII character 10)
         return (outputLines as text)
     end tell
-    '''
-    return _parse_delimited_output(_run_script(script, timeout=60.0), ["id", "name", "preview", "modification_date"])
+    """
+    return _parse_delimited_output(
+        _run_script(script, timeout=60.0), ["id", "name", "preview", "modification_date"]
+    )
 
 
 def notes_list(folder: str = "", limit: int = 20, as_text: bool = False) -> list | str:
@@ -245,7 +251,8 @@ def notes_search(
     all_notes = _notes_fetch_raw(folder=folder, limit=200)
     q = query.lower()
     matches = [
-        n for n in all_notes
+        n
+        for n in all_notes
         if q in (n.get("name") or "").lower() or q in (n.get("preview") or "").lower()
     ][:limit]
     return _format_output(
@@ -285,7 +292,7 @@ def notes_get_content(note_name_or_id: str, folder: str = "") -> str:
             end repeat
         '''
 
-    script = f'''
+    script = f"""
     tell application "Notes"
         {find_block}
         if matchedNote is missing value then return ""
@@ -295,13 +302,14 @@ def notes_get_content(note_name_or_id: str, folder: str = "") -> str:
             return ""
         end try
     end tell
-    '''
+    """
     result = _run_script(script, timeout=30.0)
     return result or ""
 
 
 def notes_create(title: str, body: str, folder: str = "") -> str | None:
     """Create a new note. Returns the new note's ID string or None on failure."""
+
     def _esc(text: str) -> str:
         return text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
@@ -321,7 +329,7 @@ def notes_create(title: str, body: str, folder: str = "") -> str | None:
     else:
         placement = f'set newNote to make new note with properties {{name:"{et}", body:"{eb}"}}'
 
-    script = f'''
+    script = f"""
     tell application "Notes"
         try
             {placement}
@@ -330,7 +338,7 @@ def notes_create(title: str, body: str, folder: str = "") -> str | None:
             return "error: " & errMsg
         end try
     end tell
-    '''
+    """
     result = _run_script(script, timeout=30.0)
     if not result or result.startswith("error:"):
         logger.warning("notes_create failed: %s", result)
@@ -340,6 +348,7 @@ def notes_create(title: str, body: str, folder: str = "") -> str | None:
 
 def notes_append(note_name_or_id: str, text: str, folder: str = "") -> bool:
     """Append text to an existing note. Returns True on success."""
+
     def _esc(s: str) -> str:
         return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
@@ -397,6 +406,7 @@ def notes_append(note_name_or_id: str, text: str, folder: str = "") -> bool:
 # Apple Mail
 # ---------------------------------------------------------------------------
 
+
 def _mail_fetch_raw(
     account: str = "",
     mailbox: str = "INBOX",
@@ -414,7 +424,7 @@ def _mail_fetch_raw(
 
     read_clause = "whose read status is false" if unread_only else ""
 
-    script = f'''
+    script = f"""
     on sanitise(txt)
         set AppleScript's text item delimiters to (ASCII character 9)
         set parts to text items of txt
@@ -471,8 +481,11 @@ def _mail_fetch_raw(
         set AppleScript's text item delimiters to (ASCII character 10)
         return (outputLines as text)
     end tell
-    '''
-    return _parse_delimited_output(_run_script(script, timeout=60.0), ["id", "sender", "subject", "body_preview", "date", "read"])
+    """
+    return _parse_delimited_output(
+        _run_script(script, timeout=60.0),
+        ["id", "sender", "subject", "body_preview", "date", "read"],
+    )
 
 
 def mail_list_unread(
@@ -496,7 +509,9 @@ def mail_list_unread(
     return _format_output(
         data,
         as_text=as_text,
-        format_fn=lambda x: f"{x.get('sender', '')}  |  {x.get('subject', '')}  [{x.get('date', '')}]",
+        format_fn=lambda x: (
+            f"{x.get('sender', '')}  |  {x.get('subject', '')}  [{x.get('date', '')}]"
+        ),
     )
 
 
@@ -512,10 +527,13 @@ def mail_search(
 
     Fetches up to 200 messages then filters in Python.
     """
-    all_msgs = _mail_fetch_raw(account=account, mailbox=mailbox, limit=200, max_age_days=max_age_days)
+    all_msgs = _mail_fetch_raw(
+        account=account, mailbox=mailbox, limit=200, max_age_days=max_age_days
+    )
     q = query.lower()
     matches = [
-        m for m in all_msgs
+        m
+        for m in all_msgs
         if q in (m.get("sender") or "").lower()
         or q in (m.get("subject") or "").lower()
         or q in (m.get("body_preview") or "").lower()
@@ -523,7 +541,9 @@ def mail_search(
     return _format_output(
         matches,
         as_text=as_text,
-        format_fn=lambda x: f"{x.get('sender', '')}  |  {x.get('subject', '')}  [{x.get('date', '')}]",
+        format_fn=lambda x: (
+            f"{x.get('sender', '')}  |  {x.get('subject', '')}  [{x.get('date', '')}]"
+        ),
     )
 
 
@@ -553,6 +573,7 @@ def mail_get_content(message_id: str, account: str = "", mailbox: str = "INBOX")
 
 def mail_send(to_address: str, subject: str, body: str, account: str = "") -> bool:
     """Send an email via Apple Mail. Returns True on success."""
+
     def _esc(s: str) -> str:
         return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
@@ -631,7 +652,7 @@ def mail_list_mailboxes(
     else:
         fetch_block = "set allMailboxes to every mailbox"
 
-    script = f'''
+    script = f"""
     on sanitise(txt)
         set AppleScript's text item delimiters to (ASCII character 9)
         set parts to text items of txt
@@ -664,7 +685,7 @@ def mail_list_mailboxes(
         set AppleScript's text item delimiters to (ASCII character 10)
         return outputLines as text
     end tell
-    '''
+    """
 
     raw = _run_script(script, timeout=60.0)
     parsed = _parse_delimited_output(raw, ["mailbox", "account"])
@@ -690,7 +711,12 @@ def mail_list_mailboxes(
             }
         )
 
-    deduped.sort(key=lambda item: (_normalize_text_key(item.get("account", "")), _normalize_text_key(item["mailbox"])))
+    deduped.sort(
+        key=lambda item: (
+            _normalize_text_key(item.get("account", "")),
+            _normalize_text_key(item["mailbox"]),
+        )
+    )
     return _format_output(
         deduped,
         as_text=as_text,
@@ -728,18 +754,21 @@ def _resolve_mail_label(
             return normalized_candidates[alias_norm], [], None
 
     partial_matches = [
-        name for name in candidates
-        if query and (
-            query in _normalize_text_key(name)
-            or _normalize_text_key(name).startswith(query)
-        )
+        name
+        for name in candidates
+        if query
+        and (query in _normalize_text_key(name) or _normalize_text_key(name).startswith(query))
     ]
     # Keep deterministic, case-insensitive ordering for suggestions.
     partial_matches = sorted(set(partial_matches), key=_normalize_text_key)
     if len(partial_matches) == 1:
         return partial_matches[0], [], None
 
-    suggestions = partial_matches[:5] if partial_matches else sorted(set(candidates), key=_normalize_text_key)[:5]
+    suggestions = (
+        partial_matches[:5]
+        if partial_matches
+        else sorted(set(candidates), key=_normalize_text_key)[:5]
+    )
     if not partial_matches:
         return None, suggestions, f"no mailbox matches label '{label}'"
     return None, suggestions, f"label '{label}' is ambiguous"
@@ -838,9 +867,10 @@ def mail_move_to_label(
 # Apple Reminders
 # ---------------------------------------------------------------------------
 
+
 def reminders_list_lists() -> list[str]:
     """Return a list of all Reminders list names."""
-    script = '''
+    script = """
     tell application "Reminders"
         set listNames to {}
         repeat with lst in every list
@@ -849,14 +879,16 @@ def reminders_list_lists() -> list[str]:
         set AppleScript's text item delimiters to "|||"
         return listNames as text
     end tell
-    '''
+    """
     raw = _run_script(script)
     if not raw:
         return []
     return [name.strip() for name in raw.split("|||") if name.strip()]
 
 
-def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplete", limit: int = 100) -> list[dict]:
+def _reminders_fetch_raw(
+    list_name: str = "", filter_completed: str = "incomplete", limit: int = 100
+) -> list[dict]:
     """Internal: fetch reminders via AppleScript."""
     if filter_completed == "incomplete":
         completion_clause = "whose completed is false"
@@ -877,14 +909,14 @@ def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplet
         '''
     else:
         # Iterate all lists
-        fetch_block = f'''
+        fetch_block = f"""
             set allReminders to {{}}
             repeat with lst in every list
                 set allReminders to allReminders & (every reminder of lst {completion_clause})
             end repeat
-        '''
+        """
 
-    script = f'''
+    script = f"""
     on sanitise(txt)
         set AppleScript's text item delimiters to (ASCII character 9)
         set parts to text items of txt
@@ -939,8 +971,10 @@ def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplet
         set AppleScript's text item delimiters to (ASCII character 10)
         return (outputLines as text)
     end tell
-    '''
-    return _parse_delimited_output(_run_script(script, timeout=60.0), ["id", "name", "body", "due_date", "completed", "list"])
+    """
+    return _parse_delimited_output(
+        _run_script(script, timeout=60.0), ["id", "name", "body", "due_date", "completed", "list"]
+    )
 
 
 def reminders_list(
@@ -984,7 +1018,8 @@ def reminders_search(
     all_reminders = _reminders_fetch_raw(list_name=list_name, filter_completed="all", limit=200)
     q = query.lower()
     matches = [
-        r for r in all_reminders
+        r
+        for r in all_reminders
         if q in (r.get("name") or "").lower() or q in (r.get("body") or "").lower()
     ][:limit]
     return _format_output(
@@ -1014,6 +1049,7 @@ def reminders_create(
     Returns:
         Reminder ID string or None
     """
+
     def _esc(s: str) -> str:
         return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
@@ -1084,9 +1120,10 @@ def reminders_complete(reminder_id: str, list_name: str) -> bool:
 # Apple Calendar
 # ---------------------------------------------------------------------------
 
+
 def calendar_list_calendars() -> list[str]:
     """Return a list of all Calendar names."""
-    script = '''
+    script = """
     tell application "Calendar"
         set calNames to {}
         repeat with cal in every calendar
@@ -1095,7 +1132,7 @@ def calendar_list_calendars() -> list[str]:
         set AppleScript's text item delimiters to "|||"
         return calNames as text
     end tell
-    '''
+    """
     raw = _run_script(script)
     if not raw:
         return []
@@ -1115,14 +1152,14 @@ def _calendar_fetch_raw(calendar: str = "", days_ahead: int = 7, limit: int = 50
             set allEvents to (every event of targetCal whose start date >= nowDate and start date <= futureDate)
         '''
     else:
-        fetch_block = '''
+        fetch_block = """
             set allEvents to {}
             repeat with cal in every calendar
                 set allEvents to allEvents & (every event of cal whose start date >= nowDate and start date <= futureDate)
             end repeat
-        '''
+        """
 
-    script = f'''
+    script = f"""
     on sanitise(txt)
         set AppleScript's text item delimiters to (ASCII character 9)
         set parts to text items of txt
@@ -1181,8 +1218,11 @@ def _calendar_fetch_raw(calendar: str = "", days_ahead: int = 7, limit: int = 50
         set AppleScript's text item delimiters to (ASCII character 10)
         return (outputLines as text)
     end tell
-    '''
-    return _parse_delimited_output(_run_script(script, timeout=60.0), ["id", "summary", "description", "start_date", "end_date", "calendar"])
+    """
+    return _parse_delimited_output(
+        _run_script(script, timeout=60.0),
+        ["id", "summary", "description", "start_date", "end_date", "calendar"],
+    )
 
 
 def calendar_list_events(
@@ -1223,7 +1263,8 @@ def calendar_search(
     all_events = _calendar_fetch_raw(calendar=calendar, days_ahead=90, limit=200)
     q = query.lower()
     matches = [
-        e for e in all_events
+        e
+        for e in all_events
         if q in (e.get("summary") or "").lower() or q in (e.get("description") or "").lower()
     ][:limit]
     return _format_output(
@@ -1267,8 +1308,20 @@ def calendar_create(
 
     def _dt_to_as(dt: datetime) -> str:
         """Build an AppleScript snippet that produces a date object."""
-        month_names = ["January","February","March","April","May","June",
-                       "July","August","September","October","November","December"]
+        month_names = [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ]
         mo = month_names[dt.month - 1]
         h12 = dt.hour % 12 or 12
         ampm = "AM" if dt.hour < 12 else "PM"
@@ -1422,7 +1475,10 @@ def messages_search(
             ORDER BY m.ROWID DESC
             LIMIT ?
             """,
-            (f"%{query.replace(chr(92), chr(92)*2).replace('%', chr(92)+'%').replace('_', chr(92)+'_')}%", limit),
+            (
+                f"%{query.replace(chr(92), chr(92) * 2).replace('%', chr(92) + '%').replace('_', chr(92) + '_')}%",
+                limit,
+            ),
         ).fetchall()
         data = [
             {"handle": row["handle"], "text": row["text"] or "", "date": str(row["date"])}

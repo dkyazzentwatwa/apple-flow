@@ -6,6 +6,7 @@ import threading
 from typing import Any
 
 from .apple_tools import TOOLS_CONTEXT
+from .process_registry import ManagedProcessRegistry
 
 logger = logging.getLogger("apple_flow.gemini_cli_connector")
 
@@ -20,6 +21,7 @@ class GeminiCliConnector:
         timeout: float = 300.0,
         context_window: int = 10,
         model: str = "gemini-3-flash-preview",
+        approval_mode: str = "yolo",
         inject_tools_context: bool = True,
         system_prompt: str = "",
     ):
@@ -28,9 +30,11 @@ class GeminiCliConnector:
         self.timeout = timeout
         self.context_window = context_window
         self.model = model.strip()
+        self.approval_mode = approval_mode.strip().lower()
         self.inject_tools_context = inject_tools_context
         self.system_prompt = system_prompt.strip()
         self.soul_prompt: str = ""
+        self._processes = ManagedProcessRegistry("gemini-cli")
 
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}
         self._sender_contexts: dict[str, list[str]] = {}
@@ -60,6 +64,8 @@ class GeminiCliConnector:
         cmd = [self.gemini_command]
         if self.model:
             cmd.extend(["--model", self.model])
+        if self.approval_mode:
+            cmd.extend(["--approval-mode", self.approval_mode])
         cmd.extend(["-p", full_prompt])
         return cmd
 
@@ -79,26 +85,30 @@ class GeminiCliConnector:
             ctx_len,
         )
 
+        proc: subprocess.Popen[str] | None = None
         try:
-            result = subprocess.run(
+            proc = subprocess.Popen(
                 cmd,
                 cwd=self.workspace,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=self.timeout,
-                check=False,
+                start_new_session=True,
             )
+            self._processes.register(sender, proc)
+            stdout, stderr = proc.communicate(timeout=self.timeout)
+            returncode = int(proc.returncode or 0)
 
-            if result.returncode != 0:
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            if returncode != 0:
+                error_msg = stderr.strip() if stderr else "Unknown error"
                 logger.error(
                     "Gemini exec failed: returncode=%d stderr=%s",
-                    result.returncode,
+                    returncode,
                     error_msg,
                 )
-                return f"Error: Gemini execution failed (exit code {result.returncode}). Check logs for details."
+                return f"Error: Gemini execution failed (exit code {returncode}). Check logs for details."
 
-            response = result.stdout.strip()
+            response = stdout.strip()
             if not response:
                 logger.warning("Gemini exec returned empty response")
                 response = "No response generated."
@@ -112,6 +122,8 @@ class GeminiCliConnector:
             return response
 
         except subprocess.TimeoutExpired:
+            if proc is not None:
+                self._processes.terminate(proc)
             logger.error(
                 "Gemini exec timed out after %.1fs for sender=%s",
                 self.timeout,
@@ -127,6 +139,9 @@ class GeminiCliConnector:
         except Exception as exc:
             logger.exception("Unexpected error during Gemini exec: %s", exc)
             return f"Error: {type(exc).__name__}: {exc}"
+        finally:
+            if proc is not None:
+                self._processes.unregister(proc)
 
     def run_turn_streaming(self, thread_id: str, prompt: str, on_progress: Any = None) -> str:
         """Execute a turn with line-by-line streaming."""
@@ -136,6 +151,7 @@ class GeminiCliConnector:
 
         logger.info("Executing Gemini CLI (streaming): sender=%s", sender)
 
+        proc: subprocess.Popen[str] | None = None
         try:
             proc = subprocess.Popen(
                 cmd,
@@ -143,7 +159,9 @@ class GeminiCliConnector:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                start_new_session=True,
             )
+            self._processes.register(sender, proc)
 
             output_lines: list[str] = []
             assert proc.stdout is not None
@@ -167,16 +185,24 @@ class GeminiCliConnector:
             return response
 
         except subprocess.TimeoutExpired:
-            proc.kill()
+            if proc is not None:
+                self._processes.terminate(proc)
             logger.error("Gemini exec (streaming) timed out after %.1fs", self.timeout)
             return f"Error: Request timed out after {int(self.timeout)}s."
         except Exception as exc:
             logger.exception("Gemini streaming exec error: %s", exc)
             return self.run_turn(thread_id, prompt)
+        finally:
+            if proc is not None:
+                self._processes.unregister(proc)
 
     def shutdown(self) -> None:
         """No-op: no persistent process to shut down."""
         logger.info("Gemini CLI connector shutdown (no-op)")
+
+    def cancel_active_processes(self, thread_id: str | None = None) -> int:
+        """Cancel active Gemini subprocesses for one sender or globally."""
+        return self._processes.cancel(thread_id)
 
     def _build_prompt_with_context(self, sender: str, prompt: str) -> str:
         with self._contexts_lock:
@@ -204,7 +230,7 @@ class GeminiCliConnector:
             parts.append(TOOLS_CONTEXT)
 
         if history:
-            recent_context = history[-self.context_window:]
+            recent_context = history[-self.context_window :]
             context_text = "\n\n".join(recent_context)
             parts.append(f"Previous conversation context:\n{context_text}")
 

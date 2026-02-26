@@ -23,12 +23,7 @@ class AppleNotesEgress:
         Returns True on success, False on failure.
         """
         escaped_folder = self.folder_name.replace('"', '\\"')
-        escaped_text = (
-            result_text
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-        )
+        escaped_text = result_text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         escaped_id = note_id.replace('"', '\\"')
 
         script = f'''
@@ -88,12 +83,7 @@ class AppleNotesEgress:
         """
         escaped_source_folder = source_folder_name.replace('"', '\\"')
         escaped_archive_folder = archive_subfolder_name.replace('"', '\\"')
-        escaped_text = (
-            result_text
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-        )
+        escaped_text = result_text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         escaped_id = note_id.replace('"', '\\"')
 
         script = f'''
@@ -153,10 +143,10 @@ class AppleNotesEgress:
         The folder is created automatically if it does not exist.
         Returns True on success, False on any failure (never raises).
         """
+
         def _esc(text: str) -> str:
             return (
-                text
-                .replace("\\", "\\\\")
+                text.replace("\\", "\\\\")
                 .replace('"', '\\"')
                 .replace("\n", "\\n")
                 .replace("\r", "")
@@ -191,8 +181,13 @@ class AppleNotesEgress:
             )
             output = result.stdout.strip()
             if result.returncode != 0 or output.startswith("error:"):
-                logger.warning("Failed to create log note in %r: rc=%s out=%s err=%s",
-                               folder_name, result.returncode, output, result.stderr.strip())
+                logger.warning(
+                    "Failed to create log note in %r: rc=%s out=%s err=%s",
+                    folder_name,
+                    result.returncode,
+                    output,
+                    result.stderr.strip(),
+                )
                 return False
             logger.info("Created log note %r in folder %r", title[:60], folder_name)
             return True

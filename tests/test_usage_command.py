@@ -23,12 +23,16 @@ def _make_orchestrator():
 
 def _msg(text: str) -> InboundMessage:
     return InboundMessage(
-        id="m1", sender="+15551234567", text=text,
-        received_at="2026-02-18T12:00:00Z", is_from_me=False,
+        id="m1",
+        sender="+15551234567",
+        text=text,
+        received_at="2026-02-18T12:00:00Z",
+        is_from_me=False,
     )
 
 
 # --- Command parsing ---
+
 
 def test_bare_usage_parses():
     cmd = parse_command("usage")
@@ -56,28 +60,30 @@ def test_usage_blocks_parses():
 
 # --- Handler: daily (default) ---
 
-_DAILY_JSON = json.dumps({
-    "daily": [
-        {
-            "date": "2026-02-17",
-            "inputTokens": 1000,
-            "outputTokens": 500,
-            "cacheCreationTokens": 0,
-            "cacheReadTokens": 0,
-            "totalTokens": 1500,
-            "totalCost": 0.75,
-        },
-        {
-            "date": "2026-02-18",
-            "inputTokens": 2000,
-            "outputTokens": 800,
-            "cacheCreationTokens": 0,
-            "cacheReadTokens": 0,
-            "totalTokens": 2800,
-            "totalCost": 1.20,
-        },
-    ]
-})
+_DAILY_JSON = json.dumps(
+    {
+        "daily": [
+            {
+                "date": "2026-02-17",
+                "inputTokens": 1000,
+                "outputTokens": 500,
+                "cacheCreationTokens": 0,
+                "cacheReadTokens": 0,
+                "totalTokens": 1500,
+                "totalCost": 0.75,
+            },
+            {
+                "date": "2026-02-18",
+                "inputTokens": 2000,
+                "outputTokens": 800,
+                "cacheCreationTokens": 0,
+                "cacheReadTokens": 0,
+                "totalTokens": 2800,
+                "totalCost": 1.20,
+            },
+        ]
+    }
+)
 
 
 def test_usage_daily_default():
@@ -115,18 +121,21 @@ def test_usage_today():
     assert "--since" in args
     # since == today (no -6 day offset)
     from datetime import UTC, datetime
+
     today = datetime.now(UTC).strftime("%Y%m%d")
     assert today in args
 
 
 # --- Handler: monthly ---
 
-_MONTHLY_JSON = json.dumps({
-    "monthly": [
-        {"month": "2026-01", "totalTokens": 5_000_000, "totalCost": 12.50},
-        {"month": "2026-02", "totalTokens": 3_200_000, "totalCost": 8.00},
-    ]
-})
+_MONTHLY_JSON = json.dumps(
+    {
+        "monthly": [
+            {"month": "2026-01", "totalTokens": 5_000_000, "totalCost": 12.50},
+            {"month": "2026-02", "totalTokens": 3_200_000, "totalCost": 8.00},
+        ]
+    }
+)
 
 
 def test_usage_monthly():
@@ -147,30 +156,32 @@ def test_usage_monthly():
 
 # --- Handler: blocks ---
 
-_BLOCKS_JSON = json.dumps({
-    "blocks": [
-        {
-            "id": "b1",
-            "startTime": "2026-02-18T10:00:00.000Z",
-            "endTime": "2026-02-18T15:00:00.000Z",
-            "isActive": False,
-            "isGap": False,
-            "totalTokens": 1_200_000,
-            "costUSD": 4.50,
-            "models": ["claude-sonnet-4-6"],
-        },
-        {
-            "id": "gap1",
-            "startTime": "2026-02-18T15:00:00.000Z",
-            "endTime": "2026-02-18T18:00:00.000Z",
-            "isActive": False,
-            "isGap": True,
-            "totalTokens": 0,
-            "costUSD": 0,
-            "models": [],
-        },
-    ]
-})
+_BLOCKS_JSON = json.dumps(
+    {
+        "blocks": [
+            {
+                "id": "b1",
+                "startTime": "2026-02-18T10:00:00.000Z",
+                "endTime": "2026-02-18T15:00:00.000Z",
+                "isActive": False,
+                "isGap": False,
+                "totalTokens": 1_200_000,
+                "costUSD": 4.50,
+                "models": ["claude-sonnet-4-6"],
+            },
+            {
+                "id": "gap1",
+                "startTime": "2026-02-18T15:00:00.000Z",
+                "endTime": "2026-02-18T18:00:00.000Z",
+                "isActive": False,
+                "isGap": True,
+                "totalTokens": 0,
+                "costUSD": 0,
+                "models": [],
+            },
+        ]
+    }
+)
 
 
 def test_usage_blocks():
@@ -193,20 +204,22 @@ def test_usage_blocks():
 def test_usage_active_block_tagged():
     orch = _make_orchestrator()
     mock_result = MagicMock()
-    mock_result.stdout = json.dumps({
-        "blocks": [
-            {
-                "id": "b2",
-                "startTime": "2026-02-18T20:00:00.000Z",
-                "endTime": "2026-02-19T01:00:00.000Z",
-                "isActive": True,
-                "isGap": False,
-                "totalTokens": 500_000,
-                "costUSD": 2.10,
-                "models": ["claude-sonnet-4-6"],
-            }
-        ]
-    })
+    mock_result.stdout = json.dumps(
+        {
+            "blocks": [
+                {
+                    "id": "b2",
+                    "startTime": "2026-02-18T20:00:00.000Z",
+                    "endTime": "2026-02-19T01:00:00.000Z",
+                    "isActive": True,
+                    "isGap": False,
+                    "totalTokens": 500_000,
+                    "costUSD": 2.10,
+                    "models": ["claude-sonnet-4-6"],
+                }
+            ]
+        }
+    )
 
     with patch("apple_flow.orchestrator.subprocess.run", return_value=mock_result):
         result = orch.handle_message(_msg("usage: blocks"))
@@ -216,8 +229,10 @@ def test_usage_active_block_tagged():
 
 # --- Error handling ---
 
+
 def test_usage_timeout_graceful():
     import subprocess as _sp
+
     orch = _make_orchestrator()
 
     with patch("apple_flow.orchestrator.subprocess.run", side_effect=_sp.TimeoutExpired("npx", 30)):

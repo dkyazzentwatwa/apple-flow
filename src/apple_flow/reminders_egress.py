@@ -25,12 +25,7 @@ class AppleRemindersEgress:
         Returns True on success, False on failure.
         """
         escaped_list = self.list_name.replace('"', '\\"')
-        escaped_text = (
-            result_text
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-        )
+        escaped_text = result_text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         escaped_id = reminder_id.replace('"', '\\"')
 
         script = f'''
@@ -82,12 +77,7 @@ class AppleRemindersEgress:
         Useful for writing the plan while awaiting approval.
         """
         escaped_list = self.list_name.replace('"', '\\"')
-        escaped_note = (
-            note
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-        )
+        escaped_note = note.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         escaped_id = reminder_id.replace('"', '\\"')
 
         script = f'''
@@ -149,12 +139,7 @@ class AppleRemindersEgress:
         """
         escaped_source_list = source_list_name.replace('"', '\\"')
         escaped_archive_list = archive_list_name.replace('"', '\\"')
-        escaped_text = (
-            result_text
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-        )
+        escaped_text = result_text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         escaped_id = reminder_id.replace('"', '\\"')
 
         script = f'''

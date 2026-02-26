@@ -31,9 +31,7 @@ _NS = uuid.NAMESPACE_OID
 # Automation log line pattern:
 # "- YYYY-MM-DD HH:MM | schedule(...) | action | result | notes"
 # OR "- YYYY-MM-DD HH:MM | companion | action | ..."
-_LOG_LINE_RE = re.compile(
-    r"^-\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})\s+\|\s+(.+)$"
-)
+_LOG_LINE_RE = re.compile(r"^-\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})\s+\|\s+(.+)$")
 
 
 class OfficeSyncer:
@@ -100,14 +98,16 @@ class OfficeSyncer:
                 continue
 
             row_id = self._uuid5_id(run_at, action)
-            rows.append({
-                "id": row_id,
-                "run_at": run_at,
-                "schedule_type": schedule_type,
-                "action": action,
-                "result": result,
-                "notes": notes,
-            })
+            rows.append(
+                {
+                    "id": row_id,
+                    "run_at": run_at,
+                    "schedule_type": schedule_type,
+                    "action": action,
+                    "result": result,
+                    "notes": notes,
+                }
+            )
 
         return self._upsert("automation_runs", rows)
 
@@ -120,14 +120,16 @@ class OfficeSyncer:
             sections = self._parse_h2_sections(memory_md.read_text(encoding="utf-8"))
             for section, body in sections:
                 row_id = self._uuid5_id("durable", section)
-                rows.append({
-                    "id": row_id,
-                    "topic": "durable",
-                    "section": section,
-                    "content": body,
-                    "is_durable": True,
-                    "source": "MEMORY.md",
-                })
+                rows.append(
+                    {
+                        "id": row_id,
+                        "topic": "durable",
+                        "section": section,
+                        "content": body,
+                        "is_durable": True,
+                        "source": "MEMORY.md",
+                    }
+                )
 
         # 60_memory/*.md — topic=filename stem
         memory_dir = self.office_path / "60_memory"
@@ -137,14 +139,16 @@ class OfficeSyncer:
                 sections = self._parse_h2_sections(md_file.read_text(encoding="utf-8"))
                 for section, body in sections:
                     row_id = self._uuid5_id(topic, section)
-                    rows.append({
-                        "id": row_id,
-                        "topic": topic,
-                        "section": section,
-                        "content": body,
-                        "is_durable": False,
-                        "source": f"60_memory/{md_file.name}",
-                    })
+                    rows.append(
+                        {
+                            "id": row_id,
+                            "topic": topic,
+                            "section": section,
+                            "content": body,
+                            "is_durable": False,
+                            "source": f"60_memory/{md_file.name}",
+                        }
+                    )
 
         return self._upsert("memory_entries", rows)
 
@@ -168,15 +172,33 @@ class OfficeSyncer:
             # Map well-known section names to JSONB columns
             def _lines(key: str) -> list[str]:
                 body = sections.get(key, "")
-                return [ln.lstrip("- ").strip() for ln in body.splitlines() if ln.strip().startswith("-")]
+                return [
+                    ln.lstrip("- ").strip()
+                    for ln in body.splitlines()
+                    if ln.strip().startswith("-")
+                ]
 
             row["top_priorities"] = _lines("Top 3 Priorities") or _lines("Priorities")
             row["open_loops"] = _lines("Open Loops") or _lines("Open loops")
-            row["calendar_items"] = _lines("Calendar") or _lines("Today's calendar") or _lines("Schedule")
-            row["morning_briefing"] = sections.get("Morning Briefing", "").strip() or sections.get("Inbox Triage", "").strip() or None
-            row["work_log"] = sections.get("Work Log", "").strip() or sections.get("Log", "").strip() or None
-            row["memory_delta"] = sections.get("Memory Delta", "").strip() or sections.get("Memory", "").strip() or None
-            row["wins"] = sections.get("Wins", "").strip() or sections.get("Reflection", "").strip() or None
+            row["calendar_items"] = (
+                _lines("Calendar") or _lines("Today's calendar") or _lines("Schedule")
+            )
+            row["morning_briefing"] = (
+                sections.get("Morning Briefing", "").strip()
+                or sections.get("Inbox Triage", "").strip()
+                or None
+            )
+            row["work_log"] = (
+                sections.get("Work Log", "").strip() or sections.get("Log", "").strip() or None
+            )
+            row["memory_delta"] = (
+                sections.get("Memory Delta", "").strip()
+                or sections.get("Memory", "").strip()
+                or None
+            )
+            row["wins"] = (
+                sections.get("Wins", "").strip() or sections.get("Reflection", "").strip() or None
+            )
 
             rows.append(row)
 
@@ -202,18 +224,22 @@ class OfficeSyncer:
             checked, captured_at_str, source, note = m.groups()
             status = "archive" if checked.lower() == "x" else "untriaged"
             try:
-                captured_at = datetime.strptime(captured_at_str.strip(), "%Y-%m-%d %H:%M").isoformat()
+                captured_at = datetime.strptime(
+                    captured_at_str.strip(), "%Y-%m-%d %H:%M"
+                ).isoformat()
             except ValueError:
                 continue
             note_clean = note.strip()
             row_id = self._uuid5_id(captured_at, note_clean[:80])
-            rows.append({
-                "id": row_id,
-                "captured_at": captured_at,
-                "source": source.strip(),
-                "content": note_clean,
-                "status": status,
-            })
+            rows.append(
+                {
+                    "id": row_id,
+                    "captured_at": captured_at,
+                    "source": source.strip(),
+                    "content": note_clean,
+                    "status": status,
+                }
+            )
 
         return self._upsert("inbox_items", rows)
 
@@ -241,11 +267,23 @@ class OfficeSyncer:
 
             # Parse common brief fields
             row["status"] = sections.get("Status", "").strip() or None
-            row["outcome"] = sections.get("Outcome", "").strip() or sections.get("Success Criteria", "").strip() or None
-            row["why_now"] = sections.get("Why Now", "").strip() or sections.get("Motivation", "").strip() or None
-            row["scope"] = sections.get("Scope", "").strip() or sections.get("Scope In", "").strip() or None
+            row["outcome"] = (
+                sections.get("Outcome", "").strip()
+                or sections.get("Success Criteria", "").strip()
+                or None
+            )
+            row["why_now"] = (
+                sections.get("Why Now", "").strip()
+                or sections.get("Motivation", "").strip()
+                or None
+            )
+            row["scope"] = (
+                sections.get("Scope", "").strip() or sections.get("Scope In", "").strip() or None
+            )
             row["scope_out"] = sections.get("Scope Out", "").strip() or None
-            row["risks"] = sections.get("Risks", "").strip() or sections.get("Blockers", "").strip() or None
+            row["risks"] = (
+                sections.get("Risks", "").strip() or sections.get("Blockers", "").strip() or None
+            )
 
             rows.append(row)
 

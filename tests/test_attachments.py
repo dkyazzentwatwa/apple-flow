@@ -99,8 +99,18 @@ def test_multiple_attachments_all_listed():
         is_from_me=False,
         context={
             "attachments": [
-                {"filename": "file1.txt", "mime_type": "text/plain", "path": "/tmp/file1.txt", "size_bytes": "100"},
-                {"filename": "image.png", "mime_type": "image/png", "path": "/tmp/image.png", "size_bytes": "50000"},
+                {
+                    "filename": "file1.txt",
+                    "mime_type": "text/plain",
+                    "path": "/tmp/file1.txt",
+                    "size_bytes": "100",
+                },
+                {
+                    "filename": "image.png",
+                    "mime_type": "image/png",
+                    "path": "/tmp/image.png",
+                    "size_bytes": "50000",
+                },
             ]
         },
     )

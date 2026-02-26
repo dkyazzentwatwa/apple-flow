@@ -32,21 +32,27 @@ def test_ensure_via_applescript_handles_created_exists_and_failed(monkeypatch):
     monkeypatch.setattr(
         gateway_setup,
         "_run_osascript",
-        lambda _script: subprocess.CompletedProcess(args=[], returncode=0, stdout="created\n", stderr=""),
+        lambda _script: subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="created\n", stderr=""
+        ),
     )
     assert gateway_setup._ensure_via_applescript("test").status == "created"
 
     monkeypatch.setattr(
         gateway_setup,
         "_run_osascript",
-        lambda _script: subprocess.CompletedProcess(args=[], returncode=0, stdout="exists\n", stderr=""),
+        lambda _script: subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="exists\n", stderr=""
+        ),
     )
     assert gateway_setup._ensure_via_applescript("test").status == "exists"
 
     monkeypatch.setattr(
         gateway_setup,
         "_run_osascript",
-        lambda _script: subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="permission denied"),
+        lambda _script: subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="permission denied"
+        ),
     )
     failed = gateway_setup._ensure_via_applescript("test")
     assert failed.status == "failed"

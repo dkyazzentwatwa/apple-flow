@@ -21,8 +21,11 @@ def _make_orchestrator(store=None, auto_context_messages=0):
 
 def _msg(text, sender="+15551234567", msg_id="m1"):
     return InboundMessage(
-        id=msg_id, sender=sender, text=text,
-        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+        id=msg_id,
+        sender=sender,
+        text=text,
+        received_at="2026-02-17T12:00:00Z",
+        is_from_me=False,
     )
 
 
@@ -52,8 +55,12 @@ def test_history_command_with_messages():
 
 def test_history_search_with_query():
     store = FakeStore()
-    store.record_message("prev1", "+15551234567", "fix the CSS bug", "2026-02-17T10:00:00Z", "hash1")
-    store.record_message("prev2", "+15551234567", "deploy to production", "2026-02-17T11:00:00Z", "hash2")
+    store.record_message(
+        "prev1", "+15551234567", "fix the CSS bug", "2026-02-17T10:00:00Z", "hash1"
+    )
+    store.record_message(
+        "prev2", "+15551234567", "deploy to production", "2026-02-17T11:00:00Z", "hash2"
+    )
     orch = _make_orchestrator(store=store)
 
     result = orch.handle_message(_msg("history: CSS", msg_id="m3"))

@@ -8,6 +8,23 @@ from unittest.mock import Mock, patch
 from apple_flow.codex_cli_connector import CodexCliConnector
 
 
+def _make_mock_proc(
+    *,
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+    communicate_side_effect: Exception | None = None,
+) -> Mock:
+    proc = Mock()
+    proc.pid = 12345
+    proc.returncode = returncode
+    proc.poll = Mock(return_value=returncode)
+    proc.communicate = Mock(return_value=(stdout, stderr))
+    if communicate_side_effect is not None:
+        proc.communicate.side_effect = communicate_side_effect
+    return proc
+
+
 def test_cli_connector_implements_protocol():
     """Verify CLI connector implements ConnectorProtocol."""
     from apple_flow.protocols import ConnectorProtocol
@@ -66,22 +83,20 @@ def test_run_turn_success():
         inject_tools_context=False,
     )
 
-    mock_result = Mock()
-    mock_result.returncode = 0
-    mock_result.stdout = "This is a test response"
-    mock_result.stderr = ""
+    mock_proc = _make_mock_proc(stdout="This is a test response")
 
-    with patch("subprocess.run", return_value=mock_result) as mock_run:
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
         response = connector.run_turn("+15551234567", "test prompt")
 
         # Verify subprocess was called correctly
-        mock_run.assert_called_once()
-        args, kwargs = mock_run.call_args
+        mock_popen.assert_called_once()
+        args, kwargs = mock_popen.call_args
         assert args[0] == ["codex", "exec", "--skip-git-repo-check", "--yolo", "test prompt"]
         assert kwargs["cwd"] == "/tmp"
-        assert kwargs["timeout"] == 30.0
-        assert kwargs["capture_output"] is True
+        assert kwargs["stdout"] == subprocess.PIPE
+        assert kwargs["stderr"] == subprocess.PIPE
         assert kwargs["text"] is True
+        mock_proc.communicate.assert_called_once_with(timeout=30.0)
 
         # Verify response
         assert response == "This is a test response"
@@ -89,33 +104,37 @@ def test_run_turn_success():
 
 def test_run_turn_with_model_flag():
     """Test that -m flag is included when model is configured."""
-    connector = CodexCliConnector(codex_command="codex", model="gpt-5.3-codex", inject_tools_context=False)
+    connector = CodexCliConnector(
+        codex_command="codex", model="gpt-5.3-codex", inject_tools_context=False
+    )
 
-    mock_result = Mock()
-    mock_result.returncode = 0
-    mock_result.stdout = "response"
-    mock_result.stderr = ""
+    mock_proc = _make_mock_proc(stdout="response")
 
-    with patch("subprocess.run", return_value=mock_result) as mock_run:
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
         connector.run_turn("+15551234567", "test prompt")
 
-        args, _ = mock_run.call_args
-        assert args[0] == ["codex", "exec", "--skip-git-repo-check", "--yolo", "-m", "gpt-5.3-codex", "test prompt"]
+        args, _ = mock_popen.call_args
+        assert args[0] == [
+            "codex",
+            "exec",
+            "--skip-git-repo-check",
+            "--yolo",
+            "-m",
+            "gpt-5.3-codex",
+            "test prompt",
+        ]
 
 
 def test_run_turn_no_model_flag_when_empty():
     """Test that -m flag is omitted when model is empty."""
     connector = CodexCliConnector(codex_command="codex", model="")
 
-    mock_result = Mock()
-    mock_result.returncode = 0
-    mock_result.stdout = "response"
-    mock_result.stderr = ""
+    mock_proc = _make_mock_proc(stdout="response")
 
-    with patch("subprocess.run", return_value=mock_result) as mock_run:
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
         connector.run_turn("+15551234567", "test prompt")
 
-        args, _ = mock_run.call_args
+        args, _ = mock_popen.call_args
         assert "-m" not in args[0]
 
 
@@ -123,18 +142,15 @@ def test_run_turn_with_context():
     """Test that context is included in subsequent messages."""
     connector = CodexCliConnector(context_window=2)
 
-    mock_result = Mock()
-    mock_result.returncode = 0
-    mock_result.stdout = "Response 1"
-    mock_result.stderr = ""
+    mock_proc = _make_mock_proc(stdout="Response 1")
 
     sender = "+15551234567"
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("subprocess.Popen", return_value=mock_proc):
         # First turn - no context
         connector.run_turn(sender, "Message 1")
 
-        mock_result.stdout = "Response 2"
+        mock_proc.communicate = Mock(return_value=("Response 2", ""))
         # Second turn - should include context
         connector.run_turn(sender, "Message 2")
 
@@ -148,7 +164,8 @@ def test_run_turn_timeout():
     """Test timeout handling."""
     connector = CodexCliConnector(timeout=1.0)
 
-    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("codex", 1.0)):
+    timeout_proc = _make_mock_proc(communicate_side_effect=subprocess.TimeoutExpired("codex", 1.0))
+    with patch("subprocess.Popen", return_value=timeout_proc):
         response = connector.run_turn("+15551234567", "test")
 
         assert "timed out" in response.lower()
@@ -159,7 +176,7 @@ def test_run_turn_command_not_found():
     """Test handling of missing codex binary."""
     connector = CodexCliConnector(codex_command="/nonexistent/codex")
 
-    with patch("subprocess.run", side_effect=FileNotFoundError):
+    with patch("subprocess.Popen", side_effect=FileNotFoundError):
         response = connector.run_turn("+15551234567", "test")
 
         assert "not found" in response.lower()
@@ -170,12 +187,9 @@ def test_run_turn_error_exit_code():
     """Test handling of non-zero exit codes."""
     connector = CodexCliConnector()
 
-    mock_result = Mock()
-    mock_result.returncode = 1
-    mock_result.stdout = ""
-    mock_result.stderr = "Something went wrong"
+    mock_proc = _make_mock_proc(returncode=1, stderr="Something went wrong")
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("subprocess.Popen", return_value=mock_proc):
         response = connector.run_turn("+15551234567", "test")
 
         assert "Error" in response
@@ -186,12 +200,9 @@ def test_run_turn_empty_response():
     """Test handling of empty response."""
     connector = CodexCliConnector()
 
-    mock_result = Mock()
-    mock_result.returncode = 0
-    mock_result.stdout = ""
-    mock_result.stderr = ""
+    mock_proc = _make_mock_proc(stdout="")
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("subprocess.Popen", return_value=mock_proc):
         response = connector.run_turn("+15551234567", "test")
 
         assert response == "No response generated."
@@ -201,16 +212,14 @@ def test_context_window_limiting():
     """Test that context is limited to configured window size."""
     connector = CodexCliConnector(context_window=2)
 
-    mock_result = Mock()
-    mock_result.returncode = 0
-    mock_result.stderr = ""
+    mock_proc = _make_mock_proc()
 
     sender = "+15551234567"
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("subprocess.Popen", return_value=mock_proc):
         # Send 5 messages
         for i in range(5):
-            mock_result.stdout = f"Response {i}"
+            mock_proc.communicate = Mock(return_value=(f"Response {i}", ""))
             connector.run_turn(sender, f"Message {i}")
 
         # Should only keep last 4 (2x context_window)
@@ -226,6 +235,8 @@ def test_run_turn_streaming_with_model_flag():
     connector = CodexCliConnector(codex_command="codex", model="gpt-5.3-codex")
 
     mock_proc = Mock()
+    mock_proc.pid = 12345
+    mock_proc.poll = Mock(return_value=0)
     mock_proc.stdout = iter(["line1\n", "line2\n"])
     mock_proc.returncode = 0
     mock_proc.stderr = Mock()
@@ -244,6 +255,8 @@ def test_run_turn_streaming_no_model_flag_when_empty():
     connector = CodexCliConnector(codex_command="codex", model="")
 
     mock_proc = Mock()
+    mock_proc.pid = 12345
+    mock_proc.poll = Mock(return_value=0)
     mock_proc.stdout = iter(["response\n"])
     mock_proc.returncode = 0
     mock_proc.stderr = Mock()

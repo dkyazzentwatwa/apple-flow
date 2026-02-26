@@ -122,6 +122,115 @@ def test_clear_context_resets_sender_thread():
     assert "reset:+15551234567" in connector.created
 
 
+def test_system_cancel_run_cancels_jobs_and_sender_processes():
+    class KillableFakeConnector(FakeConnector):
+        def __init__(self):
+            super().__init__()
+            self.cancel_calls: list[str | None] = []
+
+        def cancel_active_processes(self, thread_id: str | None = None) -> int:
+            self.cancel_calls.append(thread_id)
+            return 1
+
+    connector = KillableFakeConnector()
+    egress = FakeEgress()
+    store = FakeStore()
+    store.create_run(
+        run_id="run_cancel_1",
+        sender="+15551234567",
+        intent="task",
+        state="executing",
+        cwd="/tmp",
+        risk_level="execute",
+    )
+    store.enqueue_run_job(
+        job_id="job_cancel_1",
+        run_id="run_cancel_1",
+        sender="+15551234567",
+        phase="executor",
+        attempt=1,
+        status="running",
+    )
+
+    orchestrator = RelayOrchestrator(
+        connector=connector,
+        egress=egress,
+        store=store,
+        allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
+        default_workspace="/Users/cypher/Public/code/codex-flow",
+    )
+
+    msg = InboundMessage(
+        id="m_cancel_1",
+        sender="+15551234567",
+        text="system: cancel run run_cancel_1",
+        received_at="2026-02-16T12:00:00Z",
+        is_from_me=False,
+    )
+    result = orchestrator.handle_message(msg)
+
+    assert result.kind is CommandKind.SYSTEM
+    assert store.get_run("run_cancel_1")["state"] == "cancelled"
+    assert store.run_jobs["job_cancel_1"]["status"] == "cancelled"
+    assert connector.cancel_calls == ["+15551234567"]
+    assert any(event["event_type"] == "execution_cancelled" for event in store.events)
+    assert any("Cancelled run `run_cancel_1`" in text for _, text in egress.messages)
+
+
+def test_system_killswitch_cancels_inflight_runs():
+    class KillableFakeConnector(FakeConnector):
+        def __init__(self):
+            super().__init__()
+            self.cancel_calls: list[str | None] = []
+
+        def cancel_active_processes(self, thread_id: str | None = None) -> int:
+            self.cancel_calls.append(thread_id)
+            return 2
+
+    connector = KillableFakeConnector()
+    egress = FakeEgress()
+    store = FakeStore()
+    store.create_run(
+        run_id="run_ks_1",
+        sender="+15551234567",
+        intent="task",
+        state="executing",
+        cwd="/tmp",
+        risk_level="execute",
+    )
+    store.create_run(
+        run_id="run_ks_2",
+        sender="+15557654321",
+        intent="task",
+        state="planning",
+        cwd="/tmp",
+        risk_level="execute",
+    )
+
+    orchestrator = RelayOrchestrator(
+        connector=connector,
+        egress=egress,
+        store=store,
+        allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
+        default_workspace="/Users/cypher/Public/code/codex-flow",
+    )
+
+    msg = InboundMessage(
+        id="m_kill_1",
+        sender="+15551234567",
+        text="system: killswitch",
+        received_at="2026-02-16T12:00:00Z",
+        is_from_me=False,
+    )
+    result = orchestrator.handle_message(msg)
+
+    assert result.kind is CommandKind.SYSTEM
+    assert connector.cancel_calls == [None]
+    assert store.get_run("run_ks_1")["state"] == "cancelled"
+    assert store.get_run("run_ks_2")["state"] == "cancelled"
+    assert any("Killed 2" in text for _, text in egress.messages)
+
+
 def test_reminder_task_moves_to_archive_after_approval():
     """Test that approved reminder tasks are automatically moved to archive."""
 
@@ -130,12 +239,14 @@ def test_reminder_task_moves_to_archive_after_approval():
             self.moved_reminders = []
 
         def move_to_archive(self, reminder_id, result_text, source_list_name, archive_list_name):
-            self.moved_reminders.append({
-                "reminder_id": reminder_id,
-                "result_text": result_text,
-                "source_list_name": source_list_name,
-                "archive_list_name": archive_list_name,
-            })
+            self.moved_reminders.append(
+                {
+                    "reminder_id": reminder_id,
+                    "result_text": result_text,
+                    "source_list_name": source_list_name,
+                    "archive_list_name": archive_list_name,
+                }
+            )
             return True
 
     connector = FakeConnector()
@@ -202,12 +313,14 @@ def test_note_task_moves_to_archive_after_approval():
             self.moved_notes = []
 
         def move_to_archive(self, note_id, result_text, source_folder_name, archive_subfolder_name):
-            self.moved_notes.append({
-                "note_id": note_id,
-                "result_text": result_text,
-                "source_folder_name": source_folder_name,
-                "archive_subfolder_name": archive_subfolder_name,
-            })
+            self.moved_notes.append(
+                {
+                    "note_id": note_id,
+                    "result_text": result_text,
+                    "source_folder_name": source_folder_name,
+                    "archive_subfolder_name": archive_subfolder_name,
+                }
+            )
             return True
 
     connector = FakeConnector()
@@ -268,6 +381,7 @@ def test_note_task_moves_to_archive_after_approval():
 
 def test_calendar_post_approval_annotates_event():
     """Regression: calendar_egress.annotate_event() must be called (not write_result)."""
+
     class FakeCalendarEgress:
         def __init__(self):
             self.annotated = []
@@ -346,7 +460,7 @@ def test_note_context_key_note_title_is_used():
         context={
             "channel": "notes",
             "note_id": "x-coredata://NOTE456",
-            "note_title": "Write tests",   # ingress sets note_title
+            "note_title": "Write tests",  # ingress sets note_title
             "folder_name": "codex-task",
         },
     )
@@ -355,7 +469,7 @@ def test_note_context_key_note_title_is_used():
     store.get_run(result.run_id)
     src = store.get_run_source_context(result.run_id)
     assert src is not None
-    assert src["note_name"] == "Write tests"   # orchestrator stores it as note_name
+    assert src["note_name"] == "Write tests"  # orchestrator stores it as note_name
 
 
 def test_calendar_context_key_event_summary_is_used():
@@ -381,7 +495,7 @@ def test_calendar_context_key_event_summary_is_used():
         context={
             "channel": "calendar",
             "event_id": "EVT-XYZ",
-            "event_summary": "Run backups",   # ingress sets event_summary
+            "event_summary": "Run backups",  # ingress sets event_summary
             "calendar_name": "codex-task",
         },
     )
@@ -389,7 +503,7 @@ def test_calendar_context_key_event_summary_is_used():
     result = orchestrator.handle_message(msg)
     src = store.get_run_source_context(result.run_id)
     assert src is not None
-    assert src["event_name"] == "Run backups"   # orchestrator stores it as event_name
+    assert src["event_name"] == "Run backups"  # orchestrator stores it as event_name
 
 
 # --- Natural Language UX tests ---
