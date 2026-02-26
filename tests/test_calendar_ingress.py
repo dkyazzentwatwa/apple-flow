@@ -21,7 +21,10 @@ def _make_ingress(store=None, auto_approve=False):
 def _mock_applescript_output(events):
     result = MagicMock()
     result.returncode = 0
-    result.stdout = json.dumps(events)
+    lines = []
+    for evt in events:
+        lines.append(f"{evt['id']}\t{evt['summary']}\t{evt['description']}\t{evt['start_date']}")
+    result.stdout = "\n".join(lines)
     result.stderr = ""
     return result
 
@@ -162,6 +165,16 @@ def test_compose_text_summary_only():
 
 def test_compose_text_both_empty():
     assert AppleCalendarIngress._compose_text("", "") == ""
+
+
+def test_parse_tab_delimited():
+    output = "evt1\tSummary 1\tDesc 1\t2026-02-17\nevt2\tSummary 2\tDesc 2\t2026-02-17"
+    results = AppleCalendarIngress._parse_tab_delimited(output)
+    assert len(results) == 2
+    assert results[0]["id"] == "evt1"
+    assert results[0]["summary"] == "Summary 1"
+    assert results[0]["description"] == "Desc 1"
+    assert results[0]["start_date"] == "2026-02-17"
 
 
 # --- Trigger Tag Tests ---

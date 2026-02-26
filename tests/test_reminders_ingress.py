@@ -177,6 +177,30 @@ def test_compose_text_empty():
     assert result == ""
 
 
+def test_parse_tab_delimited():
+    # Test normal, empty, and missing-like fields
+    output = (
+        "rem1\tTask 1\tBody 1\t2026-02-17\t2026-02-18\n"
+        "rem2\tTask 2\tBody 2\t2026-02-17\t\n"
+        "rem3\tTask 3\t\t\t"
+    )
+    results = AppleRemindersIngress._parse_tab_delimited(output)
+    assert len(results) == 3
+    assert results[0]["id"] == "rem1"
+    assert results[0]["name"] == "Task 1"
+    assert results[0]["body"] == "Body 1"
+    assert results[0]["creation_date"] == "2026-02-17"
+    assert results[0]["due_date"] == "2026-02-18"
+
+    assert results[1]["id"] == "rem2"
+    assert results[1]["due_date"] == ""
+
+    assert results[2]["id"] == "rem3"
+    assert results[2]["body"] == ""
+    assert results[2]["creation_date"] == ""
+    assert results[2]["due_date"] == ""
+
+
 def test_fetch_new_respects_limit(monkeypatch):
     store = FakeStore()
     ingress = AppleRemindersIngress(

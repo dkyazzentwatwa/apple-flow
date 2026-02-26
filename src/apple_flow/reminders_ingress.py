@@ -131,82 +131,101 @@ class AppleRemindersIngress:
             self._store.set_state(_PROCESSED_IDS_KEY, json.dumps(sorted(self._processed_ids)))
 
     def _fetch_incomplete_via_applescript(self, limit: int) -> list[dict[str, str]]:
-        """Run AppleScript to get incomplete reminders as JSON."""
+        """Run AppleScript to get incomplete reminders as tab-delimited records.
+
+        Performance: O(N) where N is the total text size, using bulk string
+        replacements instead of character-by-character loops.
+        """
         escaped_list_name = self.list_name.replace('"', '\\"')
 
         script = f'''
+        on sanitise(txt)
+            set AppleScript's text item delimiters to tab
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            set AppleScript's text item delimiters to linefeed
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            set AppleScript's text item delimiters to return
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            set AppleScript's text item delimiters to ""
+            return txt
+        end sanitise
+
         tell application "Reminders"
             set maxCount to {int(limit)}
-            set resultList to {{}}
+            set outputLines to {{}}
 
             try
                 set taskList to list "{escaped_list_name}"
             on error
-                return "[]"
+                return ""
             end try
 
             set openItems to (every reminder of taskList whose completed is false)
 
             repeat with rem in openItems
-                if (count of resultList) >= maxCount then exit repeat
+                if (count of outputLines) >= maxCount then exit repeat
 
-                set theReminder to contents of rem
-                try
-                    set remId to "" & (id of theReminder)
-                on error
-                    set remId to ""
-                end try
-                try
-                    set remName to "" & (name of theReminder)
-                on error
-                    set remName to ""
-                end try
-                try
-                    set remBody to "" & (body of theReminder)
-                on error
-                    set remBody to ""
-                end try
-                try
-                    set remCreation to "" & (creation date of theReminder)
-                on error
-                    set remCreation to ""
-                end try
-                try
-                    set remDue to "" & (due date of theReminder)
-                on error
-                    set remDue to ""
-                end try
-
-                set rec to "{{\\"id\\": \\"" & my escapeJSON(remId) & "\\", \\"name\\": \\"" & my escapeJSON(remName) & "\\", \\"body\\": \\"" & my escapeJSON(remBody) & "\\", \\"creation_date\\": \\"" & my escapeJSON(remCreation) & "\\", \\"due_date\\": \\"" & my escapeJSON(remDue) & "\\"}}"
-                set end of resultList to rec
-            end repeat
-
-            set AppleScript's text item delimiters to ","
-            return "[" & (resultList as text) & "]"
-        end tell
-
-        on escapeJSON(txt)
-            set output to ""
-            repeat with ch in (characters of txt)
-                set charCode to (ASCII number of ch)
-                if ch is "\\"" then
-                    set output to output & "\\\\\\""
-                else if ch is "\\\\" then
-                    set output to output & "\\\\\\\\"
-                else if ch is (ASCII character 10) then
-                    set output to output & "\\\\n"
-                else if ch is (ASCII character 13) then
-                    set output to output & "\\\\n"
-                else if ch is (ASCII character 9) then
-                    set output to output & "\\\\t"
-                else if charCode < 32 and charCode is not 10 and charCode is not 13 and charCode is not 9 then
-                    set output to output & " "
+                set rId to id of rem
+                if rId is missing value then
+                    set rIdStr to ""
                 else
-                    set output to output & ch
+                    set rIdStr to my sanitise(rId as text)
                 end if
+
+                set rName to name of rem
+                if rName is missing value then
+                    set rNameStr to ""
+                else
+                    set rNameStr to my sanitise(rName as text)
+                end if
+
+                try
+                    set rBody to body of rem
+                    if rBody is missing value then
+                        set rBodyStr to ""
+                    else
+                        set rBodyText to rBody as text
+                        if length of rBodyText > 4000 then set rBodyText to text 1 thru 4000 of rBodyText
+                        set rBodyStr to my sanitise(rBodyText)
+                    end if
+                on error
+                    set rBodyStr to ""
+                end try
+
+                try
+                    set rCreation to creation date of rem
+                    if rCreation is missing value then
+                        set rCreationStr to ""
+                    else
+                        set rCreationStr to my sanitise(rCreation as text)
+                    end if
+                on error
+                    set rCreationStr to ""
+                end try
+
+                try
+                    set rDue to due date of rem
+                    if rDue is missing value then
+                        set rDueStr to ""
+                    else
+                        set rDueStr to my sanitise(rDue as text)
+                    end if
+                on error
+                    set rDueStr to ""
+                end try
+
+                set end of outputLines to rIdStr & tab & rNameStr & tab & rBodyStr & tab & rCreationStr & tab & rDueStr
             end repeat
-            return output
-        end escapeJSON
+
+            set AppleScript's text item delimiters to linefeed
+            return (outputLines as text)
+        end tell
         '''
 
         try:
@@ -224,17 +243,9 @@ class AppleRemindersIngress:
                 )
                 return []
             output = result.stdout.strip()
-            if not output or output == "[]":
+            if not output:
                 return []
-
-            # Clean control characters before parsing JSON.
-            cleaned = "".join(
-                char if (32 <= ord(char) < 127) else " " for char in output
-            )
-            return json.loads(cleaned)
-        except json.JSONDecodeError as exc:
-            logger.warning("Failed to parse Reminders AppleScript output: %s", exc)
-            return []
+            return self._parse_tab_delimited(output)
         except subprocess.TimeoutExpired:
             logger.warning("Reminders AppleScript fetch timed out")
             return []
@@ -244,6 +255,23 @@ class AppleRemindersIngress:
         except Exception as exc:
             logger.warning("Unexpected error fetching reminders: %s", exc)
             return []
+
+    @staticmethod
+    def _parse_tab_delimited(output: str) -> list[dict[str, str]]:
+        """Parse tab-delimited reminders output into list of dicts."""
+        reminders: list[dict[str, str]] = []
+        for line in output.splitlines():
+            parts = line.split("\t")
+            if len(parts) < 5:
+                continue
+            reminders.append({
+                "id": parts[0],
+                "name": parts[1],
+                "body": parts[2],
+                "creation_date": parts[3],
+                "due_date": parts[4],
+            })
+        return reminders
 
     @staticmethod
     def _compose_text(name: str, body: str, due_date: str) -> str:
