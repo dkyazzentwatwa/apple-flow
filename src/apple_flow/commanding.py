@@ -11,6 +11,7 @@ class CommandKind(str, Enum):
     PLAN = "plan"
     TASK = "task"
     PROJECT = "project"
+    HELP = "help"
     CLEAR_CONTEXT = "clear_context"
     APPROVE = "approve"
     DENY = "deny"
@@ -69,6 +70,7 @@ _PREFIX_TO_KIND = {
     "plan": CommandKind.PLAN,
     "task": CommandKind.TASK,
     "project": CommandKind.PROJECT,
+    "help": CommandKind.HELP,
     "health": CommandKind.HEALTH,
     "history": CommandKind.HISTORY,
     "usage": CommandKind.USAGE,
@@ -99,6 +101,12 @@ def parse_command(raw_text: str) -> ParsedCommand:
 
     if lowered.startswith("status "):
         return ParsedCommand(kind=CommandKind.STATUS, payload=text.split(" ", 1)[1].strip())
+
+    if lowered == "help":
+        return ParsedCommand(kind=CommandKind.HELP, payload="")
+
+    if lowered.startswith("help "):
+        return ParsedCommand(kind=CommandKind.HELP, payload=text.split(" ", 1)[1].strip())
 
     if lowered in {"clear context", "new chat", "reset context"}:
         return ParsedCommand(kind=CommandKind.CLEAR_CONTEXT, payload="")

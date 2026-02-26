@@ -43,6 +43,7 @@ from .store import SQLiteStore
 logger = logging.getLogger("apple_flow.daemon")
 
 _FASTLANE_COMMANDS = {
+    CommandKind.HELP,
     CommandKind.STATUS,
     CommandKind.HEALTH,
     CommandKind.HISTORY,
@@ -1122,6 +1123,7 @@ class RelayDaemon:
             chat_line,
             "",
             f"ℹ️  {mode_hint}",
+            "❓ help",
             "✅ approve <id>  |  ❌ deny <id>  |  ❌❌ deny all  |  📊 status",
             "🏥 health  |  🔍 history: [query]  |  📈 usage  |  📋 logs  |  🔄 clear context",
             "🔧 system: stop  |  restart  |  kill provider  |  cancel run <run_id>",

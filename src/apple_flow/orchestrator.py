@@ -157,7 +157,7 @@ class RelayOrchestrator:
             if not command.payload:
                 hint = (
                     f"Use `{self.chat_prefix} <message>` for general chat.\n"
-                    "Or use `idea:`, `plan:`, `task:`, `project:`, `health`, `history:`, or `usage`."
+                    "Or use `help`, `idea:`, `plan:`, `task:`, `project:`, `health`, `history:`, or `usage`."
                 )
                 self.egress.send(message.sender, hint)
                 return OrchestrationResult(kind=CommandKind.CHAT, response=hint)
@@ -168,6 +168,9 @@ class RelayOrchestrator:
 
         if command.kind is CommandKind.HEALTH:
             return self._handle_health(message.sender)
+
+        if command.kind is CommandKind.HELP:
+            return self._handle_help(message.sender, command.payload)
 
         if command.kind is CommandKind.HISTORY:
             return self._handle_history(message.sender, command.payload)
@@ -237,6 +240,48 @@ class RelayOrchestrator:
         return OrchestrationResult(kind=command.kind, response=response)
 
     # --- Health Dashboard ---
+
+    def _handle_help(self, sender: str, payload: str) -> OrchestrationResult:
+        topic = payload.strip().lower()
+        if topic:
+            response = (
+                "Help topics are not yet segmented.\n"
+                "Send `help` to see all commands and tips."
+            )
+            self.egress.send(sender, response)
+            return OrchestrationResult(kind=CommandKind.HELP, response=response)
+
+        lines = [
+            "Apple Flow help",
+            "",
+            "Core commands:",
+            "- help — show this guide",
+            "- status — list pending approvals + active runs",
+            "- status <run_id|request_id> — inspect one run/request",
+            "- approve <id> / deny <id> / deny all — approval controls",
+            "- clear context — reset this sender's chat context",
+            "",
+            "Conversation modes:",
+            "- relay: <message> — general chat (when prefix mode is enabled)",
+            "- idea: <request> — brainstorming and options",
+            "- plan: <request> — implementation planning",
+            "- task: <request> — execute a concrete task (approval required)",
+            "- project: <request> — multi-step work (approval required)",
+            "",
+            "Diagnostics:",
+            "- health — daemon + companion status",
+            "- history: [query] — recent conversation history",
+            "- usage — token usage stats",
+            "- logs — tail the daemon log",
+            "",
+            "Tips:",
+            "- Use `status` first when something seems stuck.",
+            "- Use `approve <id> <extra instructions>` to resume with guidance.",
+            "- Use `@alias` right after `idea:/plan:/task:/project:` to target a workspace.",
+        ]
+        response = "\n".join(lines)
+        self.egress.send(sender, response)
+        return OrchestrationResult(kind=CommandKind.HELP, response=response)
 
     def _handle_status(self, sender: str, payload: str) -> OrchestrationResult:
         if payload:

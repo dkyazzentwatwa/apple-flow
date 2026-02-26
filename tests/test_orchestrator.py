@@ -122,6 +122,35 @@ def test_clear_context_resets_sender_thread():
     assert "reset:+15551234567" in connector.created
 
 
+def test_help_command_returns_command_guide():
+    connector = FakeConnector()
+    egress = FakeEgress()
+    store = FakeStore()
+
+    orchestrator = RelayOrchestrator(
+        connector=connector,
+        egress=egress,
+        store=store,
+        allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
+        default_workspace="/Users/cypher/Public/code/codex-flow",
+    )
+
+    msg = InboundMessage(
+        id="m_help_1",
+        sender="+15551234567",
+        text="help",
+        received_at="2026-02-16T12:00:00Z",
+        is_from_me=False,
+    )
+
+    result = orchestrator.handle_message(msg)
+    assert result.kind is CommandKind.HELP
+    assert "Apple Flow help" in result.response
+    assert "status <run_id|request_id>" in result.response
+    assert "approve <id> <extra instructions>" in result.response
+    assert egress.messages
+
+
 def test_system_cancel_run_cancels_jobs_and_sender_processes():
     class KillableFakeConnector(FakeConnector):
         def __init__(self):

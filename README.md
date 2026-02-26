@@ -302,6 +302,7 @@ You should get a reply within seconds.
 | `plan: <goal>` | 📋 Implementation plan (no changes) |
 | `task: <instruction>` | ⚡ Queue a task (needs approval) |
 | `project: <spec>` | 🚀 Multi-step pipeline (needs approval) |
+| `help` | ❓ Show command list + practical tips |
 | `approve <id>` | ✅ Execute a queued task |
 | `deny <id>` | ❌ Cancel a queued task |
 | `deny all` | 🗑️ Cancel all pending approvals |

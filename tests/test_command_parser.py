@@ -25,6 +25,16 @@ def test_parse_status_with_target():
     assert parsed.payload == "req_1234"
 
 
+def test_parse_help_with_optional_topic():
+    parsed = parse_command("help")
+    assert parsed.kind is CommandKind.HELP
+    assert parsed.payload == ""
+
+    parsed_with_topic = parse_command("help approvals")
+    assert parsed_with_topic.kind is CommandKind.HELP
+    assert parsed_with_topic.payload == "approvals"
+
+
 def test_parse_fallback_to_chat():
     parsed = parse_command("hello there")
     assert parsed.kind is CommandKind.CHAT
