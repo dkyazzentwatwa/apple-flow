@@ -125,18 +125,40 @@ class AppleCalendarIngress:
         return f"{summary}\n\n{description}"
 
     def _fetch_due_events_via_applescript(self, limit: int) -> list[dict[str, str]]:
+        """Run AppleScript to get due events as tab-delimited records.
+
+        Performance: O(N) where N is the total text size, using bulk string
+        replacements instead of character-by-character loops.
+        """
         escaped_cal = self.calendar_name.replace('"', '\\"')
 
         script = f'''
+        on sanitise(txt)
+            set AppleScript's text item delimiters to tab
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            set AppleScript's text item delimiters to linefeed
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            set AppleScript's text item delimiters to return
+            set parts to text items of txt
+            set AppleScript's text item delimiters to " "
+            set txt to parts as text
+            set AppleScript's text item delimiters to ""
+            return txt
+        end sanitise
+
         tell application "Calendar"
             set maxCount to {int(limit)}
-            set resultList to {{}}
+            set outputLines to {{}}
             set lookaheadMinutes to {int(self.lookahead_minutes)}
 
             try
                 set targetCal to calendar "{escaped_cal}"
             on error
-                return "[]"
+                return ""
             end try
 
             set nowDate to current date
@@ -145,51 +167,52 @@ class AppleCalendarIngress:
             set dueEvents to (every event of targetCal whose start date >= (nowDate - (lookaheadMinutes * minutes)) and start date <= futureDate)
 
             repeat with evt in dueEvents
-                if (count of resultList) >= maxCount then exit repeat
+                if (count of outputLines) >= maxCount then exit repeat
 
-                set evtId to uid of evt as text
-                set evtSummary to summary of evt as text
-                try
-                    set evtDescription to description of evt as text
-                on error
-                    set evtDescription to ""
-                end try
-                try
-                    set evtStart to start date of evt as text
-                on error
-                    set evtStart to ""
-                end try
-
-                set rec to "{{\\"id\\": \\"" & my escapeJSON(evtId) & "\\", \\"summary\\": \\"" & my escapeJSON(evtSummary) & "\\", \\"description\\": \\"" & my escapeJSON(evtDescription) & "\\", \\"start_date\\": \\"" & my escapeJSON(evtStart) & "\\"}}"
-                set end of resultList to rec
-            end repeat
-
-            set AppleScript's text item delimiters to ","
-            return "[" & (resultList as text) & "]"
-        end tell
-
-        on escapeJSON(txt)
-            set output to ""
-            repeat with ch in (characters of txt)
-                set charCode to (ASCII number of ch)
-                if ch is "\\"" then
-                    set output to output & "\\\\\\""
-                else if ch is "\\\\" then
-                    set output to output & "\\\\\\\\"
-                else if ch is (ASCII character 10) then
-                    set output to output & "\\\\n"
-                else if ch is (ASCII character 13) then
-                    set output to output & "\\\\n"
-                else if ch is (ASCII character 9) then
-                    set output to output & "\\\\t"
-                else if charCode < 32 and charCode is not 10 and charCode is not 13 and charCode is not 9 then
-                    set output to output & " "
+                set eId to uid of evt
+                if eId is missing value then
+                    set eIdStr to ""
                 else
-                    set output to output & ch
+                    set eIdStr to my sanitise(eId as text)
                 end if
+
+                set eSummary to summary of evt
+                if eSummary is missing value then
+                    set eSummaryStr to ""
+                else
+                    set eSummaryStr to my sanitise(eSummary as text)
+                end if
+
+                try
+                    set eDesc to description of evt
+                    if eDesc is missing value then
+                        set eDescStr to ""
+                    else
+                        set eDescText to eDesc as text
+                        if length of eDescText > 4000 then set eDescText to text 1 thru 4000 of eDescText
+                        set eDescStr to my sanitise(eDescText)
+                    end if
+                on error
+                    set eDescStr to ""
+                end try
+
+                try
+                    set eStart to start date of evt
+                    if eStart is missing value then
+                        set eStartStr to ""
+                    else
+                        set eStartStr to my sanitise(eStart as text)
+                    end if
+                on error
+                    set eStartStr to ""
+                end try
+
+                set end of outputLines to eIdStr & tab & eSummaryStr & tab & eDescStr & tab & eStartStr
             end repeat
-            return output
-        end escapeJSON
+
+            set AppleScript's text item delimiters to linefeed
+            return (outputLines as text)
+        end tell
         '''
 
         try:
@@ -203,13 +226,9 @@ class AppleCalendarIngress:
                 logger.warning("Calendar AppleScript failed (rc=%s): %s", result.returncode, result.stderr.strip())
                 return []
             output = result.stdout.strip()
-            if not output or output == "[]":
+            if not output:
                 return []
-            cleaned = "".join(char if (32 <= ord(char) < 127) else " " for char in output)
-            return json.loads(cleaned)
-        except json.JSONDecodeError as exc:
-            logger.warning("Failed to parse Calendar AppleScript output: %s", exc)
-            return []
+            return self._parse_tab_delimited(output)
         except subprocess.TimeoutExpired:
             logger.warning("Calendar AppleScript fetch timed out")
             return []
@@ -219,3 +238,19 @@ class AppleCalendarIngress:
         except Exception as exc:
             logger.warning("Unexpected error fetching calendar events: %s", exc)
             return []
+
+    @staticmethod
+    def _parse_tab_delimited(output: str) -> list[dict[str, str]]:
+        """Parse tab-delimited calendar output into list of dicts."""
+        events: list[dict[str, str]] = []
+        for line in output.splitlines():
+            parts = line.split("\t")
+            if len(parts) < 4:
+                continue
+            events.append({
+                "id": parts[0],
+                "summary": parts[1],
+                "description": parts[2],
+                "start_date": parts[3],
+            })
+        return events
