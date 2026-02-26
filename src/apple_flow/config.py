@@ -34,7 +34,7 @@ class RelaySettings(BaseSettings):
     codex_cli_model: str = ""  # e.g., "gpt-5.3-codex" (empty = use codex default)
 
     # Connector selection (overrides use_codex_cli when set)
-    connector: str = ""  # "codex-cli" | "claude-cli" | "gemini-cli" | "cline" | "codex-app-server"
+    connector: str = ""  # "codex-cli" | "claude-cli" | "gemini-cli" | "kilo-cli" | "cline" | "codex-app-server"
 
     # Claude CLI connector settings (used when connector="claude-cli")
     claude_cli_command: str = "claude"
@@ -43,6 +43,11 @@ class RelaySettings(BaseSettings):
     claude_cli_model: str = ""  # e.g. "claude-sonnet-4-6", "claude-opus-4-6"
     claude_cli_tools: list[str] = Field(default_factory=list)  # e.g. ["default", "WebSearch"]
     claude_cli_allowed_tools: list[str] = Field(default_factory=list)  # e.g. ["WebSearch"]
+
+    # Kilo CLI connector settings (used when connector="kilo-cli")
+    kilo_cli_command: str = "kilo"
+    kilo_cli_context_window: int = 10
+    kilo_cli_model: str = ""  # e.g. "google/gemini-3-flash-preview" (empty = kilo default)
 
     # Cline CLI connector settings (used when connector="cline")
     cline_command: str = "cline"

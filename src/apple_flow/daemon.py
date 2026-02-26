@@ -24,6 +24,7 @@ from .config import RelaySettings
 from .egress import IMessageEgress
 from .gateway_setup import ensure_gateway_resources
 from .gemini_cli_connector import GeminiCliConnector
+from .kilo_cli_connector import KiloCliConnector
 from .ingress import IMessageIngress
 from .mail_egress import AppleMailEgress
 from .mail_ingress import AppleMailIngress
@@ -132,6 +133,7 @@ class RelayDaemon:
             "codex-cli",
             "claude-cli",
             "gemini-cli",
+            "kilo-cli",
             "cline",
             "codex-app-server",
         }
@@ -188,6 +190,19 @@ class RelayDaemon:
                 context_window=settings.gemini_cli_context_window,
                 model=settings.gemini_cli_model,
                 approval_mode=settings.gemini_cli_approval_mode,
+                inject_tools_context=settings.inject_tools_context,
+                system_prompt=settings.personality_prompt.replace(
+                    "{workspace}", settings.default_workspace
+                ),
+            )
+        elif connector_type == "kilo-cli":
+            logger.info("Using Kilo CLI connector (kilo run) for stateless execution")
+            self.connector = KiloCliConnector(
+                kilo_command=settings.kilo_cli_command,
+                workspace=settings.default_workspace,
+                timeout=settings.codex_turn_timeout_seconds,
+                context_window=settings.kilo_cli_context_window,
+                model=settings.kilo_cli_model,
                 inject_tools_context=settings.inject_tools_context,
                 system_prompt=settings.personality_prompt.replace(
                     "{workspace}", settings.default_workspace
