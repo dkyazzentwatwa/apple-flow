@@ -1,0 +1,19 @@
+[agents.default]
+description = "People Ops Policy Team orchestrator."
+config_file = "../agents/teams/people-ops-policy-team/roles/default.toml"
+
+[agents.explorer]
+description = "People Ops Policy Team context mapper."
+config_file = "../agents/teams/people-ops-policy-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "People Ops Policy Team risk and quality reviewer."
+config_file = "../agents/teams/people-ops-policy-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "People Ops Policy Team execution specialist."
+config_file = "../agents/teams/people-ops-policy-team/roles/worker.toml"
+
+[agents.monitor]
+description = "People Ops Policy Team runtime and outcome monitor."
+config_file = "../agents/teams/people-ops-policy-team/roles/monitor.toml"

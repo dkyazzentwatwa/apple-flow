@@ -1,0 +1,19 @@
+[agents.default]
+description = "Bug Triaging and Fixing Team orchestrator."
+config_file = "../agents/teams/bug-triage-fix-team/roles/default.toml"
+
+[agents.explorer]
+description = "Bug Triaging and Fixing Team context mapper."
+config_file = "../agents/teams/bug-triage-fix-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Bug Triaging and Fixing Team risk and quality reviewer."
+config_file = "../agents/teams/bug-triage-fix-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Bug Triaging and Fixing Team execution specialist."
+config_file = "../agents/teams/bug-triage-fix-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Bug Triaging and Fixing Team runtime and outcome monitor."
+config_file = "../agents/teams/bug-triage-fix-team/roles/monitor.toml"

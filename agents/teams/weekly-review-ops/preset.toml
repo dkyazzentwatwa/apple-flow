@@ -1,0 +1,19 @@
+[agents.default]
+description = "Weekly Review Ops orchestrator."
+config_file = "../agents/teams/weekly-review-ops/roles/default.toml"
+
+[agents.explorer]
+description = "Weekly Review Ops context mapper."
+config_file = "../agents/teams/weekly-review-ops/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Weekly Review Ops risk and quality reviewer."
+config_file = "../agents/teams/weekly-review-ops/roles/reviewer.toml"
+
+[agents.worker]
+description = "Weekly Review Ops execution specialist."
+config_file = "../agents/teams/weekly-review-ops/roles/worker.toml"
+
+[agents.monitor]
+description = "Weekly Review Ops runtime and outcome monitor."
+config_file = "../agents/teams/weekly-review-ops/roles/monitor.toml"

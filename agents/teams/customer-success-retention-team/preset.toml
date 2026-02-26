@@ -1,0 +1,19 @@
+[agents.default]
+description = "Customer Success Retention Team orchestrator."
+config_file = "../agents/teams/customer-success-retention-team/roles/default.toml"
+
+[agents.explorer]
+description = "Customer Success Retention Team context mapper."
+config_file = "../agents/teams/customer-success-retention-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Customer Success Retention Team risk and quality reviewer."
+config_file = "../agents/teams/customer-success-retention-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Customer Success Retention Team execution specialist."
+config_file = "../agents/teams/customer-success-retention-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Customer Success Retention Team runtime and outcome monitor."
+config_file = "../agents/teams/customer-success-retention-team/roles/monitor.toml"

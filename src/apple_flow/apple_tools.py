@@ -510,9 +510,10 @@ def mail_search(
 ) -> list | str:
     """Search emails by sender, subject, or body preview (Python-side filter).
 
-    Fetches up to 200 messages then filters in Python.
+    Fetches a bounded recent window then filters in Python.
     """
-    all_msgs = _mail_fetch_raw(account=account, mailbox=mailbox, limit=200, max_age_days=max_age_days)
+    fetch_limit = min(200, max(limit * 5, limit))
+    all_msgs = _mail_fetch_raw(account=account, mailbox=mailbox, limit=fetch_limit, max_age_days=max_age_days)
     q = query.lower()
     matches = [
         m for m in all_msgs
@@ -622,14 +623,13 @@ def mail_list_mailboxes(
         esc_account = account.replace('"', '\\"')
         fetch_block = f'''
             try
-                set targetAccount to account "{esc_account}"
+                set targetAccounts to {{account "{esc_account}"}}
             on error
                 return ""
             end try
-            set allMailboxes to every mailbox of targetAccount
         '''
     else:
-        fetch_block = "set allMailboxes to every mailbox"
+        fetch_block = "set targetAccounts to every account"
 
     script = f'''
     on sanitise(txt)
@@ -649,17 +649,49 @@ def mail_list_mailboxes(
         return txt
     end sanitise
 
+    using terms from application "Mail"
+        on appendMailboxRows(mailboxesToWalk, accountName, parentPath, outputLines)
+            repeat with mb in mailboxesToWalk
+                set mbName to my sanitise(name of mb as text)
+                set mbPath to mbName
+                if parentPath is not "" then set mbPath to parentPath & "/" & mbName
+                try
+                    set mbId to my sanitise(id of mb as text)
+                on error
+                    set mbId to ""
+                end try
+                set end of outputLines to mbName & (ASCII character 9) & accountName & (ASCII character 9) & mbPath & (ASCII character 9) & mbId
+
+                try
+                    set childMailboxes to every mailbox of mb
+                    if (count of childMailboxes) > 0 then
+                        set outputLines to my appendMailboxRows(childMailboxes, accountName, mbPath, outputLines)
+                    end if
+                on error
+                    -- Ignore folders that cannot be enumerated.
+                end try
+            end repeat
+            return outputLines
+        end appendMailboxRows
+    end using terms from
+
     tell application "Mail"
         set outputLines to {{}}
         {fetch_block}
-        repeat with mb in allMailboxes
-            set mbName to my sanitise(name of mb as text)
+        repeat with acc in targetAccounts
             try
-                set accName to my sanitise(name of account of mb as text)
+                set accName to my sanitise(name of acc as text)
             on error
                 set accName to ""
             end try
-            set end of outputLines to mbName & (ASCII character 9) & accName
+            try
+                set rootMailboxes to every mailbox of acc
+                if (count of rootMailboxes) > 0 then
+                    set outputLines to my appendMailboxRows(rootMailboxes, accName, "", outputLines)
+                end if
+            on error
+                -- Ignore accounts that cannot be read.
+            end try
         end repeat
         set AppleScript's text item delimiters to (ASCII character 10)
         return outputLines as text
@@ -667,15 +699,38 @@ def mail_list_mailboxes(
     '''
 
     raw = _run_script(script, timeout=60.0)
-    parsed = _parse_delimited_output(raw, ["mailbox", "account"])
+    parsed: list[dict[str, str]] = []
+    for line in (raw or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        mailbox_name = (parts[0] or "").strip()
+        account_name = (parts[1] or "").strip()
+        mailbox_path = (parts[2] or "").strip() if len(parts) >= 3 else mailbox_name
+        mailbox_id = (parts[3] or "").strip() if len(parts) >= 4 else ""
+        parsed.append(
+            {
+                "mailbox": mailbox_name,
+                "account": account_name,
+                "path": mailbox_path or mailbox_name,
+                "mailbox_id": mailbox_id,
+            }
+        )
+
     deduped: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
     for row in parsed:
         mailbox = (row.get("mailbox") or "").strip()
         account_name = (row.get("account") or "").strip()
+        mailbox_path = (row.get("path") or mailbox).strip()
+        mailbox_id = (row.get("mailbox_id") or "").strip()
         if not mailbox:
             continue
-        key = (_normalize_text_key(mailbox), _normalize_text_key(account_name))
+        key = (
+            _normalize_text_key(account_name),
+            _normalize_text_key(mailbox_path),
+            mailbox_id,
+        )
         if key in seen:
             continue
         seen.add(key)
@@ -686,18 +741,20 @@ def mail_list_mailboxes(
             {
                 "mailbox": mailbox,
                 "account": account_name,
+                "path": mailbox_path,
+                "mailbox_id": mailbox_id,
                 "is_system_mailbox": is_system,
             }
         )
 
-    deduped.sort(key=lambda item: (_normalize_text_key(item.get("account", "")), _normalize_text_key(item["mailbox"])))
+    deduped.sort(key=lambda item: (_normalize_text_key(item.get("account", "")), _normalize_text_key(item.get("path", item["mailbox"]))))
     return _format_output(
         deduped,
         as_text=as_text,
         format_fn=lambda x: (
-            f"{x.get('mailbox', '')}"
+            f"{x.get('path', x.get('mailbox', ''))}"
             if not x.get("account")
-            else f"{x.get('mailbox', '')}  [{x.get('account', '')}]"
+            else f"{x.get('path', x.get('mailbox', ''))}  [{x.get('account', '')}]"
         ),
     )
 
@@ -705,16 +762,36 @@ def mail_list_mailboxes(
 def _resolve_mail_label(
     label: str,
     mailboxes: list[dict[str, Any]],
-) -> tuple[str | None, list[str], str | None]:
-    """Resolve a label string to a mailbox name."""
-    candidates = [str(item.get("mailbox", "")).strip() for item in mailboxes if item.get("mailbox")]
+) -> tuple[dict[str, Any] | None, list[str], str | None]:
+    """Resolve a label string to a mailbox row."""
+    candidates = [item for item in mailboxes if str(item.get("mailbox", "")).strip()]
     if not candidates:
         return None, [], "no mailboxes discovered"
 
-    normalized_candidates = {_normalize_text_key(name): name for name in candidates}
+    def _display_name(row: dict[str, Any]) -> str:
+        path = str(row.get("path") or row.get("mailbox") or "").strip()
+        return path
+
+    normalized_candidates: dict[str, list[dict[str, Any]]] = {}
+    for row in candidates:
+        mailbox_name = str(row.get("mailbox") or "").strip()
+        path_name = str(row.get("path") or mailbox_name).strip()
+        for token in {
+            _normalize_text_key(mailbox_name),
+            _normalize_text_key(path_name),
+            _normalize_text_key(_display_name(row)),
+        }:
+            if not token:
+                continue
+            normalized_candidates.setdefault(token, []).append(row)
+
     query = _normalize_text_key(label)
     if query in normalized_candidates:
-        return normalized_candidates[query], [], None
+        exact_matches = normalized_candidates[query]
+        if len(exact_matches) == 1:
+            return exact_matches[0], [], None
+        suggestions = sorted({_display_name(row) for row in exact_matches}, key=_normalize_text_key)[:5]
+        return None, suggestions, f"label '{label}' is ambiguous"
 
     alias = {
         "action": "Action",
@@ -724,22 +801,41 @@ def _resolve_mail_label(
     }.get(query)
     if alias:
         alias_norm = _normalize_text_key(alias)
-        if alias_norm in normalized_candidates:
-            return normalized_candidates[alias_norm], [], None
+        alias_matches = normalized_candidates.get(alias_norm, [])
+        if len(alias_matches) == 1:
+            return alias_matches[0], [], None
+        if len(alias_matches) > 1:
+            suggestions = sorted({_display_name(row) for row in alias_matches}, key=_normalize_text_key)[:5]
+            return None, suggestions, f"label '{label}' is ambiguous"
 
-    partial_matches = [
-        name for name in candidates
-        if query and (
-            query in _normalize_text_key(name)
-            or _normalize_text_key(name).startswith(query)
-        )
-    ]
+    partial_matches = []
+    for row in candidates:
+        mailbox_name = str(row.get("mailbox") or "").strip()
+        path_name = str(row.get("path") or mailbox_name).strip()
+        haystacks = {
+            _normalize_text_key(mailbox_name),
+            _normalize_text_key(path_name),
+            _normalize_text_key(_display_name(row)),
+        }
+        if query and any(query in target or target.startswith(query) for target in haystacks):
+            partial_matches.append(row)
+
     # Keep deterministic, case-insensitive ordering for suggestions.
-    partial_matches = sorted(set(partial_matches), key=_normalize_text_key)
+    partial_matches = sorted(
+        partial_matches,
+        key=lambda row: (
+            _normalize_text_key(str(row.get("account") or "")),
+            _normalize_text_key(str(row.get("path") or row.get("mailbox") or "")),
+        ),
+    )
     if len(partial_matches) == 1:
         return partial_matches[0], [], None
 
-    suggestions = partial_matches[:5] if partial_matches else sorted(set(candidates), key=_normalize_text_key)[:5]
+    suggestions = (
+        [_display_name(row) for row in partial_matches[:5]]
+        if partial_matches
+        else sorted({_display_name(row) for row in candidates}, key=_normalize_text_key)[:5]
+    )
     if not partial_matches:
         return None, suggestions, f"no mailbox matches label '{label}'"
     return None, suggestions, f"label '{label}' is ambiguous"
@@ -786,24 +882,113 @@ def mail_move_to_label(
         }
 
     esc_source = source_mailbox.replace('"', '\\"')
-    esc_dest = destination.replace('"', '\\"')
+    destination_name = str(destination.get("mailbox") or "").strip()
+    destination_path = str(destination.get("path") or destination_name).strip()
+    destination_id = str(destination.get("mailbox_id") or "").strip()
+    destination_account = str(destination.get("account") or "").strip()
+
+    esc_dest_name = destination_name.replace('"', '\\"')
+    esc_dest_path = destination_path.replace('"', '\\"')
+    esc_dest_id = destination_id.replace('"', '\\"')
+    esc_dest_account = destination_account.replace('"', '\\"')
     if account:
         esc_account = account.replace('"', '\\"')
         source_ref = f'mailbox "{esc_source}" of account "{esc_account}"'
-        dest_ref = f'mailbox "{esc_dest}" of account "{esc_account}"'
+    elif _normalize_text_key(source_mailbox) == "inbox":
+        source_ref = "inbox"
     else:
         source_ref = f'mailbox "{esc_source}"'
-        dest_ref = f'mailbox "{esc_dest}"'
 
     moved = 0
     results: list[dict[str, str]] = []
     for message_id in cleaned_ids:
         esc_id = message_id.replace('"', '\\"')
         script = f'''
+        using terms from application "Mail"
+            on findMailboxById(targetId, mailboxList)
+                repeat with mb in mailboxList
+                    try
+                        if (id of mb as text) is targetId then return mb
+                    on error
+                        -- Ignore unreadable mailbox IDs.
+                    end try
+                    try
+                        set childMailboxes to every mailbox of mb
+                        if (count of childMailboxes) > 0 then
+                            set nestedFound to my findMailboxById(targetId, childMailboxes)
+                            if nestedFound is not missing value then return nestedFound
+                        end if
+                    on error
+                        -- Ignore unreadable child mailboxes.
+                    end try
+                end repeat
+                return missing value
+            end findMailboxById
+
+            on findMailboxByPath(targetPath, mailboxList, parentPath)
+                repeat with mb in mailboxList
+                    try
+                        set mbName to name of mb as text
+                    on error
+                        set mbName to ""
+                    end try
+                    set nextPath to mbName
+                    if parentPath is not "" then set nextPath to parentPath & "/" & mbName
+                    if nextPath is targetPath then return mb
+                    try
+                        set childMailboxes to every mailbox of mb
+                        if (count of childMailboxes) > 0 then
+                            set nestedFound to my findMailboxByPath(targetPath, childMailboxes, nextPath)
+                            if nestedFound is not missing value then return nestedFound
+                        end if
+                    on error
+                        -- Ignore unreadable child mailboxes.
+                    end try
+                end repeat
+                return missing value
+            end findMailboxByPath
+        end using terms from
+
         tell application "Mail"
             try
                 set sourceBox to {source_ref}
-                set destinationBox to {dest_ref}
+                if "{esc_dest_account}" is not "" then
+                    set targetAccounts to {{account "{esc_dest_account}"}}
+                else
+                    set targetAccounts to every account
+                end if
+                set destinationBox to missing value
+                if "{esc_dest_id}" is not "" then
+                    repeat with acc in targetAccounts
+                        try
+                            set destinationBox to my findMailboxById("{esc_dest_id}", every mailbox of acc)
+                        on error
+                            set destinationBox to missing value
+                        end try
+                        if destinationBox is not missing value then exit repeat
+                    end repeat
+                end if
+                if destinationBox is missing value and "{esc_dest_path}" is not "" then
+                    repeat with acc in targetAccounts
+                        try
+                            set destinationBox to my findMailboxByPath("{esc_dest_path}", every mailbox of acc, "")
+                        on error
+                            set destinationBox to missing value
+                        end try
+                        if destinationBox is not missing value then exit repeat
+                    end repeat
+                end if
+                if destinationBox is missing value then
+                    repeat with acc in targetAccounts
+                        try
+                            set destinationBox to first mailbox of acc whose name is "{esc_dest_name}"
+                        on error
+                            set destinationBox to missing value
+                        end try
+                        if destinationBox is not missing value then exit repeat
+                    end repeat
+                end if
+                if destinationBox is missing value then error "destination mailbox not found"
                 set matchedMsg to first message of sourceBox whose id as text is "{esc_id}"
                 move matchedMsg to destinationBox
                 return "ok"
@@ -829,7 +1014,9 @@ def mail_move_to_label(
         "attempted": attempted,
         "moved": moved,
         "failed": attempted - moved,
-        "destination_mailbox": destination,
+        "destination_mailbox": destination_name,
+        "destination_path": destination_path,
+        "destination_account": destination_account,
         "results": results,
     }
 

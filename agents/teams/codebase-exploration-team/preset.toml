@@ -1,0 +1,19 @@
+[agents.default]
+description = "Codebase Exploration Team orchestrator."
+config_file = "../agents/teams/codebase-exploration-team/roles/default.toml"
+
+[agents.explorer]
+description = "Codebase Exploration Team context mapper."
+config_file = "../agents/teams/codebase-exploration-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Codebase Exploration Team risk and quality reviewer."
+config_file = "../agents/teams/codebase-exploration-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Codebase Exploration Team execution specialist."
+config_file = "../agents/teams/codebase-exploration-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Codebase Exploration Team runtime and outcome monitor."
+config_file = "../agents/teams/codebase-exploration-team/roles/monitor.toml"

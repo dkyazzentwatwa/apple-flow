@@ -1,0 +1,19 @@
+[agents.default]
+description = "Notes Ops Processor orchestrator."
+config_file = "../agents/teams/notes-ops-processor/roles/default.toml"
+
+[agents.explorer]
+description = "Notes Ops Processor context mapper."
+config_file = "../agents/teams/notes-ops-processor/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Notes Ops Processor risk and quality reviewer."
+config_file = "../agents/teams/notes-ops-processor/roles/reviewer.toml"
+
+[agents.worker]
+description = "Notes Ops Processor execution specialist."
+config_file = "../agents/teams/notes-ops-processor/roles/worker.toml"
+
+[agents.monitor]
+description = "Notes Ops Processor runtime and outcome monitor."
+config_file = "../agents/teams/notes-ops-processor/roles/monitor.toml"

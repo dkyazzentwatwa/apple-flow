@@ -1,0 +1,19 @@
+[agents.default]
+description = "Market Research and Strategy Team orchestrator."
+config_file = "../agents/teams/market-research-strategy-team/roles/default.toml"
+
+[agents.explorer]
+description = "Market Research and Strategy Team context mapper."
+config_file = "../agents/teams/market-research-strategy-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Market Research and Strategy Team risk and quality reviewer."
+config_file = "../agents/teams/market-research-strategy-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Market Research and Strategy Team execution specialist."
+config_file = "../agents/teams/market-research-strategy-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Market Research and Strategy Team runtime and outcome monitor."
+config_file = "../agents/teams/market-research-strategy-team/roles/monitor.toml"

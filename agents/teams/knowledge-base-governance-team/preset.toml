@@ -1,0 +1,19 @@
+[agents.default]
+description = "Knowledge Base Governance Team orchestrator."
+config_file = "../agents/teams/knowledge-base-governance-team/roles/default.toml"
+
+[agents.explorer]
+description = "Knowledge Base Governance Team context mapper."
+config_file = "../agents/teams/knowledge-base-governance-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Knowledge Base Governance Team risk and quality reviewer."
+config_file = "../agents/teams/knowledge-base-governance-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Knowledge Base Governance Team execution specialist."
+config_file = "../agents/teams/knowledge-base-governance-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Knowledge Base Governance Team runtime and outcome monitor."
+config_file = "../agents/teams/knowledge-base-governance-team/roles/monitor.toml"

@@ -1,0 +1,19 @@
+[agents.default]
+description = "Customer Support Resolution Team orchestrator."
+config_file = "../agents/teams/customer-support-resolution-team/roles/default.toml"
+
+[agents.explorer]
+description = "Customer Support Resolution Team context mapper."
+config_file = "../agents/teams/customer-support-resolution-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Customer Support Resolution Team risk and quality reviewer."
+config_file = "../agents/teams/customer-support-resolution-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Customer Support Resolution Team execution specialist."
+config_file = "../agents/teams/customer-support-resolution-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Customer Support Resolution Team runtime and outcome monitor."
+config_file = "../agents/teams/customer-support-resolution-team/roles/monitor.toml"

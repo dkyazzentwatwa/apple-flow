@@ -1,0 +1,19 @@
+[agents.default]
+description = "Developer Relations Amplifier orchestrator."
+config_file = "../agents/teams/developer-relations-amplifier/roles/default.toml"
+
+[agents.explorer]
+description = "Developer Relations Amplifier context mapper."
+config_file = "../agents/teams/developer-relations-amplifier/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Developer Relations Amplifier risk and quality reviewer."
+config_file = "../agents/teams/developer-relations-amplifier/roles/reviewer.toml"
+
+[agents.worker]
+description = "Developer Relations Amplifier execution specialist."
+config_file = "../agents/teams/developer-relations-amplifier/roles/worker.toml"
+
+[agents.monitor]
+description = "Developer Relations Amplifier runtime and outcome monitor."
+config_file = "../agents/teams/developer-relations-amplifier/roles/monitor.toml"

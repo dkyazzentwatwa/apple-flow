@@ -1,0 +1,19 @@
+[agents.default]
+description = "Incident Communications Team orchestrator."
+config_file = "../agents/teams/incident-comms-team/roles/default.toml"
+
+[agents.explorer]
+description = "Incident Communications Team context mapper."
+config_file = "../agents/teams/incident-comms-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Incident Communications Team risk and quality reviewer."
+config_file = "../agents/teams/incident-comms-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Incident Communications Team execution specialist."
+config_file = "../agents/teams/incident-comms-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Incident Communications Team runtime and outcome monitor."
+config_file = "../agents/teams/incident-comms-team/roles/monitor.toml"

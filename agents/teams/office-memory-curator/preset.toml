@@ -1,0 +1,19 @@
+[agents.default]
+description = "Office Memory Curator orchestrator."
+config_file = "../agents/teams/office-memory-curator/roles/default.toml"
+
+[agents.explorer]
+description = "Office Memory Curator context mapper."
+config_file = "../agents/teams/office-memory-curator/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Office Memory Curator risk and quality reviewer."
+config_file = "../agents/teams/office-memory-curator/roles/reviewer.toml"
+
+[agents.worker]
+description = "Office Memory Curator execution specialist."
+config_file = "../agents/teams/office-memory-curator/roles/worker.toml"
+
+[agents.monitor]
+description = "Office Memory Curator runtime and outcome monitor."
+config_file = "../agents/teams/office-memory-curator/roles/monitor.toml"

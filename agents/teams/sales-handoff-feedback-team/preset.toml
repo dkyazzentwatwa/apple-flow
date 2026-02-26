@@ -1,0 +1,19 @@
+[agents.default]
+description = "Sales Handoff and Feedback Team orchestrator."
+config_file = "../agents/teams/sales-handoff-feedback-team/roles/default.toml"
+
+[agents.explorer]
+description = "Sales Handoff and Feedback Team context mapper."
+config_file = "../agents/teams/sales-handoff-feedback-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Sales Handoff and Feedback Team risk and quality reviewer."
+config_file = "../agents/teams/sales-handoff-feedback-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Sales Handoff and Feedback Team execution specialist."
+config_file = "../agents/teams/sales-handoff-feedback-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Sales Handoff and Feedback Team runtime and outcome monitor."
+config_file = "../agents/teams/sales-handoff-feedback-team/roles/monitor.toml"

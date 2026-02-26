@@ -1,0 +1,19 @@
+[agents.default]
+description = "Content and Outreach Team orchestrator."
+config_file = "../agents/teams/content-outreach-team/roles/default.toml"
+
+[agents.explorer]
+description = "Content and Outreach Team context mapper."
+config_file = "../agents/teams/content-outreach-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Content and Outreach Team risk and quality reviewer."
+config_file = "../agents/teams/content-outreach-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Content and Outreach Team execution specialist."
+config_file = "../agents/teams/content-outreach-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Content and Outreach Team runtime and outcome monitor."
+config_file = "../agents/teams/content-outreach-team/roles/monitor.toml"

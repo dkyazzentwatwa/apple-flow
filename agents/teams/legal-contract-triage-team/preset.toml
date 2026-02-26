@@ -1,0 +1,19 @@
+[agents.default]
+description = "Legal Contract Triage Team orchestrator."
+config_file = "../agents/teams/legal-contract-triage-team/roles/default.toml"
+
+[agents.explorer]
+description = "Legal Contract Triage Team context mapper."
+config_file = "../agents/teams/legal-contract-triage-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Legal Contract Triage Team risk and quality reviewer."
+config_file = "../agents/teams/legal-contract-triage-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Legal Contract Triage Team execution specialist."
+config_file = "../agents/teams/legal-contract-triage-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Legal Contract Triage Team runtime and outcome monitor."
+config_file = "../agents/teams/legal-contract-triage-team/roles/monitor.toml"

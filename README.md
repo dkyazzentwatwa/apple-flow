@@ -52,6 +52,31 @@ Your AI companion watches your life and sends proactive iMessage updates:
 
 **The best part?** It's 100% local-first. Your data never leaves your Mac.
 
+## 🧠 Agent Teams (Codex Multi-Agent Presets)
+
+Apple Flow includes a codex-native team library under `/agents` with 36 niche, reusable multi-agent workflows:
+
+- 12 Apple Flow Ops teams
+- 12 Software/GTM teams
+- 12 Business Ops teams
+
+Each team bundle includes:
+
+- `TEAM.md` (purpose, triggers, inputs, outputs, guardrails)
+- `preset.toml` (`[agents.<role>]` mappings)
+- `roles/*.toml` (`default`, `explorer`, `reviewer`, `worker`, `monitor`)
+
+Quick usage:
+
+```bash
+./scripts/agents/list_teams.sh
+./scripts/agents/use_team.sh imessage-command-center
+```
+
+This writes a managed team preset block into `.codex/config.toml` with backup support.
+
+See [docs/AGENT_TEAMS.md](docs/AGENT_TEAMS.md) for details.
+
 ### 🖥️ Optional Swift Onboarding + Dashboard App
 Prefer a desktop UI? Apple Flow includes a native macOS Swift app for guided onboarding plus runtime operations:
 - Intro + system checks (Python, connector, iMessage DB, token)

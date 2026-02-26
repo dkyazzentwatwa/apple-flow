@@ -1,0 +1,19 @@
+[agents.default]
+description = "Ambient Context Enricher orchestrator."
+config_file = "../agents/teams/ambient-context-enricher/roles/default.toml"
+
+[agents.explorer]
+description = "Ambient Context Enricher context mapper."
+config_file = "../agents/teams/ambient-context-enricher/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Ambient Context Enricher risk and quality reviewer."
+config_file = "../agents/teams/ambient-context-enricher/roles/reviewer.toml"
+
+[agents.worker]
+description = "Ambient Context Enricher execution specialist."
+config_file = "../agents/teams/ambient-context-enricher/roles/worker.toml"
+
+[agents.monitor]
+description = "Ambient Context Enricher runtime and outcome monitor."
+config_file = "../agents/teams/ambient-context-enricher/roles/monitor.toml"

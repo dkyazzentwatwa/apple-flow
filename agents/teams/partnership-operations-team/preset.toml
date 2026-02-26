@@ -1,0 +1,19 @@
+[agents.default]
+description = "Partnership Operations Team orchestrator."
+config_file = "../agents/teams/partnership-operations-team/roles/default.toml"
+
+[agents.explorer]
+description = "Partnership Operations Team context mapper."
+config_file = "../agents/teams/partnership-operations-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Partnership Operations Team risk and quality reviewer."
+config_file = "../agents/teams/partnership-operations-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Partnership Operations Team execution specialist."
+config_file = "../agents/teams/partnership-operations-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Partnership Operations Team runtime and outcome monitor."
+config_file = "../agents/teams/partnership-operations-team/roles/monitor.toml"

@@ -1,0 +1,19 @@
+[agents.default]
+description = "Performance Optimization Team orchestrator."
+config_file = "../agents/teams/performance-optimization-team/roles/default.toml"
+
+[agents.explorer]
+description = "Performance Optimization Team context mapper."
+config_file = "../agents/teams/performance-optimization-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Performance Optimization Team risk and quality reviewer."
+config_file = "../agents/teams/performance-optimization-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Performance Optimization Team execution specialist."
+config_file = "../agents/teams/performance-optimization-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Performance Optimization Team runtime and outcome monitor."
+config_file = "../agents/teams/performance-optimization-team/roles/monitor.toml"

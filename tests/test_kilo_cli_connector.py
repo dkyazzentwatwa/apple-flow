@@ -88,8 +88,12 @@ def test_run_turn_success():
         assert kwargs["stderr"] == subprocess.PIPE
         assert kwargs["text"] is True
         
-        # Verify prompt was sent via stdin
-        mock_proc.communicate.assert_called_once_with(input="test prompt", timeout=30.0)
+        # Verify prompt payload includes the user prompt (connector may prepend rules)
+        mock_proc.communicate.assert_called_once()
+        _, call_kwargs = mock_proc.communicate.call_args
+        sent_input = call_kwargs["input"]
+        assert call_kwargs["timeout"] == 30.0
+        assert sent_input.endswith("test prompt")
 
         # Verify response
         assert response == "This is a Kilo response"

@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-26
+
+### Added
+- **Codex agent-team library**: Added `/agents` with cataloged multi-agent team presets (ops, software/GTM, and business ops categories), plus activation/list scripts under `scripts/agents/`.
+- **Kilo CLI connector**: Added `kilo_cli_connector.py` and wired it through config, daemon selection, and connector tests.
+- **iMessage help command**: Added an in-chat help command with usage tips and documentation pointers.
+- **Emergency stop controls**: Added a process-registry-backed killswitch and run-level cancellation support across CLI connectors.
+- **Companion startup observability**: Added companion startup greeting and health visibility signals.
+- **Mail owner forwarding**: Added automatic iMessage forwarding of Apple Mail responses to the configured owner sender.
+- **AI-led onboarding flow**: Added install master prompt docs and onboarding-driven setup flows in CLI/setup paths.
+
+### Changed
+- **System restart behavior**: Updated `system: restart` flows to use `launchctl stop`/`kickstart` semantics for cleaner auto-restart behavior with startup feedback.
+- **Approval execution lifecycle**: Improved approval execution reliability and live status visibility across daemon/orchestrator/store/admin paths.
+- **Provider and connector controls**: Expanded provider controls and connector configuration handling (including Gemini-oriented config improvements).
+- **Auto-start service management**: Updated setup/install/uninstall scripts to manage daemon and admin launchd services more reliably.
+- **Help output UX**: Enhanced help output with system command guidance and richer formatting.
+- **Ingress performance**: Optimized Calendar and Reminders ingress parsing paths.
+- **Apple Mail tooling updates**: Updated Apple Mail-related tool plumbing and command handling in app tools/entry flow.
+- **Distribution refresh**: Refreshed packaged macOS app artifacts and onboarding assets/screenshots.
+
+### Fixed
+- **Mail gateway JSON handling**: Fixed mail gateway payload parsing and iMessage feedback behavior.
+- **Mail echo loop and signatures**: Fixed outbound mail echo-loop behavior and corrected `\n` signature rendering.
+- **Long-task stability**: Improved long-running task reliability and status responsiveness.
+- **Python 3.14 shutdown handling**: Fixed shutdown-time cancellation handling for newer Python runtime behavior.
+- **Restart echo side-effect**: Fixed restart echo messages incorrectly triggering health auto-replies.
+- **Gemini approval mode**: Fixed Gemini CLI approval-mode wiring and validation behavior.
+- **Gemini response leakage**: Fixed Gemini replies leaking planning narration into user-facing responses.
+- **CI lint ordering**: Fixed Ruff import-order issues affecting CI consistency.
+- **Type hygiene**: Applied additional type-level cleanups in connector and office-sync paths.
+
+### Documentation
+- Added prompt-pack documentation for multiple user levels.
+- Added `!!agent` trigger-tag guidance for non-iMessage prompt packs.
+- Expanded and refreshed README/Quickstart/ENV/setup guidance across recent onboarding and provider updates.
+- Added/updated macOS GUI export docs and onboarding screenshots.
+- Added docs for Codex agent teams and project-level team activation workflow.
+
 ## [0.2.1] - 2026-02-20
 
 ### Fixed
@@ -109,13 +148,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.3.0 | 2026-02-26 | Codex agent teams, Kilo connector, reliability/ops improvements |
 | 0.2.1 | 2026-02-20 | Cross-gateway approval fix, CI, branding cleanup |
 | 0.2.0 | 2026-02-20 | Security hardening, admin API auth, version unification |
 | 0.1.0 | 2026-02-19 | Initial public release |
 
 ---
 
-[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dkyazzentwatwa/apple-flow/releases/tag/v0.1.0

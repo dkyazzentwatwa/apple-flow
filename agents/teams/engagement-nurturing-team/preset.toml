@@ -1,0 +1,19 @@
+[agents.default]
+description = "Engagement and Nurturing Team orchestrator."
+config_file = "../agents/teams/engagement-nurturing-team/roles/default.toml"
+
+[agents.explorer]
+description = "Engagement and Nurturing Team context mapper."
+config_file = "../agents/teams/engagement-nurturing-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Engagement and Nurturing Team risk and quality reviewer."
+config_file = "../agents/teams/engagement-nurturing-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Engagement and Nurturing Team execution specialist."
+config_file = "../agents/teams/engagement-nurturing-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Engagement and Nurturing Team runtime and outcome monitor."
+config_file = "../agents/teams/engagement-nurturing-team/roles/monitor.toml"

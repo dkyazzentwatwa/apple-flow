@@ -1,0 +1,19 @@
+[agents.default]
+description = "Reminders Execution Loop orchestrator."
+config_file = "../agents/teams/reminders-execution-loop/roles/default.toml"
+
+[agents.explorer]
+description = "Reminders Execution Loop context mapper."
+config_file = "../agents/teams/reminders-execution-loop/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Reminders Execution Loop risk and quality reviewer."
+config_file = "../agents/teams/reminders-execution-loop/roles/reviewer.toml"
+
+[agents.worker]
+description = "Reminders Execution Loop execution specialist."
+config_file = "../agents/teams/reminders-execution-loop/roles/worker.toml"
+
+[agents.monitor]
+description = "Reminders Execution Loop runtime and outcome monitor."
+config_file = "../agents/teams/reminders-execution-loop/roles/monitor.toml"

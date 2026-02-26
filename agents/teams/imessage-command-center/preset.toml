@@ -1,0 +1,19 @@
+[agents.default]
+description = "iMessage Command Center orchestrator."
+config_file = "../agents/teams/imessage-command-center/roles/default.toml"
+
+[agents.explorer]
+description = "iMessage Command Center context mapper."
+config_file = "../agents/teams/imessage-command-center/roles/explorer.toml"
+
+[agents.reviewer]
+description = "iMessage Command Center risk and quality reviewer."
+config_file = "../agents/teams/imessage-command-center/roles/reviewer.toml"
+
+[agents.worker]
+description = "iMessage Command Center execution specialist."
+config_file = "../agents/teams/imessage-command-center/roles/worker.toml"
+
+[agents.monitor]
+description = "iMessage Command Center runtime and outcome monitor."
+config_file = "../agents/teams/imessage-command-center/roles/monitor.toml"

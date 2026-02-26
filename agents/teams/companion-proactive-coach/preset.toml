@@ -1,0 +1,19 @@
+[agents.default]
+description = "Companion Proactive Coach orchestrator."
+config_file = "../agents/teams/companion-proactive-coach/roles/default.toml"
+
+[agents.explorer]
+description = "Companion Proactive Coach context mapper."
+config_file = "../agents/teams/companion-proactive-coach/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Companion Proactive Coach risk and quality reviewer."
+config_file = "../agents/teams/companion-proactive-coach/roles/reviewer.toml"
+
+[agents.worker]
+description = "Companion Proactive Coach execution specialist."
+config_file = "../agents/teams/companion-proactive-coach/roles/worker.toml"
+
+[agents.monitor]
+description = "Companion Proactive Coach runtime and outcome monitor."
+config_file = "../agents/teams/companion-proactive-coach/roles/monitor.toml"

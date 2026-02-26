@@ -1,0 +1,19 @@
+[agents.default]
+description = "Revenue Ops Forecast Team orchestrator."
+config_file = "../agents/teams/revenue-ops-forecast-team/roles/default.toml"
+
+[agents.explorer]
+description = "Revenue Ops Forecast Team context mapper."
+config_file = "../agents/teams/revenue-ops-forecast-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Revenue Ops Forecast Team risk and quality reviewer."
+config_file = "../agents/teams/revenue-ops-forecast-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Revenue Ops Forecast Team execution specialist."
+config_file = "../agents/teams/revenue-ops-forecast-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Revenue Ops Forecast Team runtime and outcome monitor."
+config_file = "../agents/teams/revenue-ops-forecast-team/roles/monitor.toml"

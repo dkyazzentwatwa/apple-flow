@@ -1,0 +1,19 @@
+[agents.default]
+description = "Vendor Procurement Ops Team orchestrator."
+config_file = "../agents/teams/vendor-procurement-ops-team/roles/default.toml"
+
+[agents.explorer]
+description = "Vendor Procurement Ops Team context mapper."
+config_file = "../agents/teams/vendor-procurement-ops-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Vendor Procurement Ops Team risk and quality reviewer."
+config_file = "../agents/teams/vendor-procurement-ops-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Vendor Procurement Ops Team execution specialist."
+config_file = "../agents/teams/vendor-procurement-ops-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Vendor Procurement Ops Team runtime and outcome monitor."
+config_file = "../agents/teams/vendor-procurement-ops-team/roles/monitor.toml"

@@ -1,0 +1,19 @@
+[agents.default]
+description = "Daily Digest Ops orchestrator."
+config_file = "../agents/teams/daily-digest-ops/roles/default.toml"
+
+[agents.explorer]
+description = "Daily Digest Ops context mapper."
+config_file = "../agents/teams/daily-digest-ops/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Daily Digest Ops risk and quality reviewer."
+config_file = "../agents/teams/daily-digest-ops/roles/reviewer.toml"
+
+[agents.worker]
+description = "Daily Digest Ops execution specialist."
+config_file = "../agents/teams/daily-digest-ops/roles/worker.toml"
+
+[agents.monitor]
+description = "Daily Digest Ops runtime and outcome monitor."
+config_file = "../agents/teams/daily-digest-ops/roles/monitor.toml"

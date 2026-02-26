@@ -1,0 +1,19 @@
+[agents.default]
+description = "Approval Governance orchestrator."
+config_file = "../agents/teams/approval-governance/roles/default.toml"
+
+[agents.explorer]
+description = "Approval Governance context mapper."
+config_file = "../agents/teams/approval-governance/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Approval Governance risk and quality reviewer."
+config_file = "../agents/teams/approval-governance/roles/reviewer.toml"
+
+[agents.worker]
+description = "Approval Governance execution specialist."
+config_file = "../agents/teams/approval-governance/roles/worker.toml"
+
+[agents.monitor]
+description = "Approval Governance runtime and outcome monitor."
+config_file = "../agents/teams/approval-governance/roles/monitor.toml"

@@ -1,0 +1,19 @@
+[agents.default]
+description = "Feature Implementation Team orchestrator."
+config_file = "../agents/teams/feature-implementation-team/roles/default.toml"
+
+[agents.explorer]
+description = "Feature Implementation Team context mapper."
+config_file = "../agents/teams/feature-implementation-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Feature Implementation Team risk and quality reviewer."
+config_file = "../agents/teams/feature-implementation-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Feature Implementation Team execution specialist."
+config_file = "../agents/teams/feature-implementation-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Feature Implementation Team runtime and outcome monitor."
+config_file = "../agents/teams/feature-implementation-team/roles/monitor.toml"

@@ -1,0 +1,19 @@
+[agents.default]
+description = "Executive Briefing Team orchestrator."
+config_file = "../agents/teams/executive-briefing-team/roles/default.toml"
+
+[agents.explorer]
+description = "Executive Briefing Team context mapper."
+config_file = "../agents/teams/executive-briefing-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Executive Briefing Team risk and quality reviewer."
+config_file = "../agents/teams/executive-briefing-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Executive Briefing Team execution specialist."
+config_file = "../agents/teams/executive-briefing-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Executive Briefing Team runtime and outcome monitor."
+config_file = "../agents/teams/executive-briefing-team/roles/monitor.toml"

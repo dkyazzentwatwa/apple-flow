@@ -1,0 +1,19 @@
+[agents.default]
+description = "Product Launch GTM Team orchestrator."
+config_file = "../agents/teams/product-launch-gtm-team/roles/default.toml"
+
+[agents.explorer]
+description = "Product Launch GTM Team context mapper."
+config_file = "../agents/teams/product-launch-gtm-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Product Launch GTM Team risk and quality reviewer."
+config_file = "../agents/teams/product-launch-gtm-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Product Launch GTM Team execution specialist."
+config_file = "../agents/teams/product-launch-gtm-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Product Launch GTM Team runtime and outcome monitor."
+config_file = "../agents/teams/product-launch-gtm-team/roles/monitor.toml"

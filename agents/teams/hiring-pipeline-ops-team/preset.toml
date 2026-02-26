@@ -1,0 +1,19 @@
+[agents.default]
+description = "Hiring Pipeline Ops Team orchestrator."
+config_file = "../agents/teams/hiring-pipeline-ops-team/roles/default.toml"
+
+[agents.explorer]
+description = "Hiring Pipeline Ops Team context mapper."
+config_file = "../agents/teams/hiring-pipeline-ops-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Hiring Pipeline Ops Team risk and quality reviewer."
+config_file = "../agents/teams/hiring-pipeline-ops-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Hiring Pipeline Ops Team execution specialist."
+config_file = "../agents/teams/hiring-pipeline-ops-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Hiring Pipeline Ops Team runtime and outcome monitor."
+config_file = "../agents/teams/hiring-pipeline-ops-team/roles/monitor.toml"

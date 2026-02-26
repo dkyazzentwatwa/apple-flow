@@ -1,0 +1,19 @@
+[agents.default]
+description = "Finance Close Assistant Team orchestrator."
+config_file = "../agents/teams/finance-close-assistant-team/roles/default.toml"
+
+[agents.explorer]
+description = "Finance Close Assistant Team context mapper."
+config_file = "../agents/teams/finance-close-assistant-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Finance Close Assistant Team risk and quality reviewer."
+config_file = "../agents/teams/finance-close-assistant-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Finance Close Assistant Team execution specialist."
+config_file = "../agents/teams/finance-close-assistant-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Finance Close Assistant Team runtime and outcome monitor."
+config_file = "../agents/teams/finance-close-assistant-team/roles/monitor.toml"

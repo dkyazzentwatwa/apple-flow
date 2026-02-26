@@ -1,0 +1,19 @@
+[agents.default]
+description = "Mail Inbox Triage orchestrator."
+config_file = "../agents/teams/mail-inbox-triage/roles/default.toml"
+
+[agents.explorer]
+description = "Mail Inbox Triage context mapper."
+config_file = "../agents/teams/mail-inbox-triage/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Mail Inbox Triage risk and quality reviewer."
+config_file = "../agents/teams/mail-inbox-triage/roles/reviewer.toml"
+
+[agents.worker]
+description = "Mail Inbox Triage execution specialist."
+config_file = "../agents/teams/mail-inbox-triage/roles/worker.toml"
+
+[agents.monitor]
+description = "Mail Inbox Triage runtime and outcome monitor."
+config_file = "../agents/teams/mail-inbox-triage/roles/monitor.toml"

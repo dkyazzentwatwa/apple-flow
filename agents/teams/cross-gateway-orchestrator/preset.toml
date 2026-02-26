@@ -1,0 +1,19 @@
+[agents.default]
+description = "Cross-Gateway Orchestrator orchestrator."
+config_file = "../agents/teams/cross-gateway-orchestrator/roles/default.toml"
+
+[agents.explorer]
+description = "Cross-Gateway Orchestrator context mapper."
+config_file = "../agents/teams/cross-gateway-orchestrator/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Cross-Gateway Orchestrator risk and quality reviewer."
+config_file = "../agents/teams/cross-gateway-orchestrator/roles/reviewer.toml"
+
+[agents.worker]
+description = "Cross-Gateway Orchestrator execution specialist."
+config_file = "../agents/teams/cross-gateway-orchestrator/roles/worker.toml"
+
+[agents.monitor]
+description = "Cross-Gateway Orchestrator runtime and outcome monitor."
+config_file = "../agents/teams/cross-gateway-orchestrator/roles/monitor.toml"

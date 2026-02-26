@@ -454,6 +454,21 @@ class TestMailListMailboxes:
             assert isinstance(result, list)
             assert [row["mailbox"] for row in result] == ["Action", "Focus"]
 
+    def test_parses_recursive_rows_with_path_and_mailbox_id(self):
+        raw = (
+            "Projects\tdavid@techtiff.ai\tProjects\tmb-1\n"
+            "Focus\tdavid@techtiff.ai\tProjects/Focus\tmb-2\n"
+            "INBOX\tdavid@techtiff.ai\tINBOX\tmb-3"
+        )
+        with patch("subprocess.run", return_value=_ok_result(raw)):
+            result = mail_list_mailboxes(account="david@techtiff.ai")
+            assert isinstance(result, list)
+            assert len(result) == 2
+            assert result[0]["mailbox"] == "Projects"
+            assert result[1]["mailbox"] == "Focus"
+            assert result[1]["path"] == "Projects/Focus"
+            assert result[1]["mailbox_id"] == "mb-2"
+
     def test_include_system_true_keeps_system_mailboxes(self):
         raw = "Action\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
         with patch("subprocess.run", return_value=_ok_result(raw)):
@@ -505,6 +520,14 @@ class TestMailMoveToLabel:
             result = mail_move_to_label(["123"], label="foc", account="david@techtiff.ai")
             assert result["moved"] == 1
             assert result["destination_mailbox"] == "Focus"
+
+    def test_resolves_label_using_mailbox_path(self):
+        raw_mailboxes = "Focus\tdavid@techtiff.ai\tWork/Focus\tmb-42"
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok")]):
+            result = mail_move_to_label(["123"], label="Work/Focus", account="david@techtiff.ai")
+            assert result["moved"] == 1
+            assert result["destination_mailbox"] == "Focus"
+            assert result["destination_path"] == "Work/Focus"
 
     def test_returns_error_for_ambiguous_label(self):
         raw_mailboxes = "Focus\tdavid@techtiff.ai\nFollow Ups\tdavid@techtiff.ai"

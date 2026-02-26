@@ -1,0 +1,221 @@
+# Agent Team Catalog
+
+version = 1
+format = "codex-multi-agent"
+
+[[teams]]
+slug = "imessage-command-center"
+category = "apple_flow_ops"
+title = "iMessage Command Center"
+summary = "Operate Apple Flow through iMessage-first command workflows."
+
+[[teams]]
+slug = "mail-inbox-triage"
+category = "apple_flow_ops"
+title = "Mail Inbox Triage"
+summary = "Process unread Apple Mail into prioritized execution queues."
+
+[[teams]]
+slug = "reminders-execution-loop"
+category = "apple_flow_ops"
+title = "Reminders Execution Loop"
+summary = "Turn reminders into tracked execution cycles and closures."
+
+[[teams]]
+slug = "notes-ops-processor"
+category = "apple_flow_ops"
+title = "Notes Ops Processor"
+summary = "Convert operational notes into actionable tasks and outcomes."
+
+[[teams]]
+slug = "calendar-action-automation"
+category = "apple_flow_ops"
+title = "Calendar Action Automation"
+summary = "Run event-driven actions from Calendar with guardrails."
+
+[[teams]]
+slug = "approval-governance"
+category = "apple_flow_ops"
+title = "Approval Governance"
+summary = "Manage mutating-command approvals and expiration hygiene."
+
+[[teams]]
+slug = "companion-proactive-coach"
+category = "apple_flow_ops"
+title = "Companion Proactive Coach"
+summary = "Drive proactive nudges and assistant follow-up quality."
+
+[[teams]]
+slug = "office-memory-curator"
+category = "apple_flow_ops"
+title = "Office Memory Curator"
+summary = "Maintain high-signal durable memory across office artifacts."
+
+[[teams]]
+slug = "ambient-context-enricher"
+category = "apple_flow_ops"
+title = "Ambient Context Enricher"
+summary = "Continuously enrich memory from ambient Apple data."
+
+[[teams]]
+slug = "daily-digest-ops"
+category = "apple_flow_ops"
+title = "Daily Digest Ops"
+summary = "Generate and deliver concise daily operational briefings."
+
+[[teams]]
+slug = "weekly-review-ops"
+category = "apple_flow_ops"
+title = "Weekly Review Ops"
+summary = "Produce weekly review loops with decisions and next actions."
+
+[[teams]]
+slug = "cross-gateway-orchestrator"
+category = "apple_flow_ops"
+title = "Cross-Gateway Orchestrator"
+summary = "Coordinate workflows across iMessage, Mail, Notes, Reminders, and Calendar."
+
+[[teams]]
+slug = "codebase-exploration-team"
+category = "software_gtm"
+title = "Codebase Exploration Team"
+summary = "Map unfamiliar codebases into searchable architecture knowledge."
+
+[[teams]]
+slug = "feature-implementation-team"
+category = "software_gtm"
+title = "Feature Implementation Team"
+summary = "Deliver scoped features with review and release readiness."
+
+[[teams]]
+slug = "bug-triage-fix-team"
+category = "software_gtm"
+title = "Bug Triaging and Fixing Team"
+summary = "Diagnose, prioritize, and resolve software defects quickly."
+
+[[teams]]
+slug = "security-audit-team"
+category = "software_gtm"
+title = "Security Audit Team"
+summary = "Find and report security risks with practical remediation."
+
+[[teams]]
+slug = "performance-optimization-team"
+category = "software_gtm"
+title = "Performance Optimization Team"
+summary = "Identify and implement high-impact performance improvements."
+
+[[teams]]
+slug = "prospecting-qualification-team"
+category = "software_gtm"
+title = "Prospecting and Qualification Team"
+summary = "Source leads and score fit against ICP criteria."
+
+[[teams]]
+slug = "content-outreach-team"
+category = "software_gtm"
+title = "Content and Outreach Team"
+summary = "Create and run personalized outbound messaging campaigns."
+
+[[teams]]
+slug = "engagement-nurturing-team"
+category = "software_gtm"
+title = "Engagement and Nurturing Team"
+summary = "Track engagement and orchestrate effective nurture sequences."
+
+[[teams]]
+slug = "sales-handoff-feedback-team"
+category = "software_gtm"
+title = "Sales Handoff and Feedback Team"
+summary = "Transfer qualified opportunities and capture sales feedback."
+
+[[teams]]
+slug = "market-research-strategy-team"
+category = "software_gtm"
+title = "Market Research and Strategy Team"
+summary = "Analyze market shifts and tune GTM strategy."
+
+[[teams]]
+slug = "product-launch-gtm-team"
+category = "software_gtm"
+title = "Product Launch GTM Team"
+summary = "Coordinate launch planning, messaging, and rollout signals."
+
+[[teams]]
+slug = "developer-relations-amplifier"
+category = "software_gtm"
+title = "Developer Relations Amplifier"
+summary = "Scale technical content, community touchpoints, and feedback loops."
+
+[[teams]]
+slug = "customer-support-resolution-team"
+category = "business_ops"
+title = "Customer Support Resolution Team"
+summary = "Resolve customer issues with SLA-aware escalation workflows."
+
+[[teams]]
+slug = "customer-success-retention-team"
+category = "business_ops"
+title = "Customer Success Retention Team"
+summary = "Protect renewals via risk detection and proactive plans."
+
+[[teams]]
+slug = "revenue-ops-forecast-team"
+category = "business_ops"
+title = "Revenue Ops Forecast Team"
+summary = "Improve pipeline hygiene and forecast accuracy."
+
+[[teams]]
+slug = "finance-close-assistant-team"
+category = "business_ops"
+title = "Finance Close Assistant Team"
+summary = "Coordinate month-end close tasks and reconciliation checks."
+
+[[teams]]
+slug = "hiring-pipeline-ops-team"
+category = "business_ops"
+title = "Hiring Pipeline Ops Team"
+summary = "Run recruiting funnel operations and decision readiness."
+
+[[teams]]
+slug = "people-ops-policy-team"
+category = "business_ops"
+title = "People Ops Policy Team"
+summary = "Manage people policy workflows and change communications."
+
+[[teams]]
+slug = "legal-contract-triage-team"
+category = "business_ops"
+title = "Legal Contract Triage Team"
+summary = "Prioritize contract queues and risk review routing."
+
+[[teams]]
+slug = "vendor-procurement-ops-team"
+category = "business_ops"
+title = "Vendor Procurement Ops Team"
+summary = "Handle vendor intake, due diligence, and procurement stages."
+
+[[teams]]
+slug = "knowledge-base-governance-team"
+category = "business_ops"
+title = "Knowledge Base Governance Team"
+summary = "Enforce quality and freshness standards across knowledge docs."
+
+[[teams]]
+slug = "executive-briefing-team"
+category = "business_ops"
+title = "Executive Briefing Team"
+summary = "Create concise executive updates with decision framing."
+
+[[teams]]
+slug = "incident-comms-team"
+category = "business_ops"
+title = "Incident Communications Team"
+summary = "Coordinate stakeholder-safe incident communication timelines."
+
+[[teams]]
+slug = "partnership-operations-team"
+category = "business_ops"
+title = "Partnership Operations Team"
+summary = "Run partnership lifecycle operations from sourcing to expansion."
+

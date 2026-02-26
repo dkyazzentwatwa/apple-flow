@@ -1,0 +1,19 @@
+[agents.default]
+description = "Prospecting and Qualification Team orchestrator."
+config_file = "../agents/teams/prospecting-qualification-team/roles/default.toml"
+
+[agents.explorer]
+description = "Prospecting and Qualification Team context mapper."
+config_file = "../agents/teams/prospecting-qualification-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Prospecting and Qualification Team risk and quality reviewer."
+config_file = "../agents/teams/prospecting-qualification-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Prospecting and Qualification Team execution specialist."
+config_file = "../agents/teams/prospecting-qualification-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Prospecting and Qualification Team runtime and outcome monitor."
+config_file = "../agents/teams/prospecting-qualification-team/roles/monitor.toml"

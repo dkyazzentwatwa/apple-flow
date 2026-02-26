@@ -1,0 +1,19 @@
+[agents.default]
+description = "Security Audit Team orchestrator."
+config_file = "../agents/teams/security-audit-team/roles/default.toml"
+
+[agents.explorer]
+description = "Security Audit Team context mapper."
+config_file = "../agents/teams/security-audit-team/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Security Audit Team risk and quality reviewer."
+config_file = "../agents/teams/security-audit-team/roles/reviewer.toml"
+
+[agents.worker]
+description = "Security Audit Team execution specialist."
+config_file = "../agents/teams/security-audit-team/roles/worker.toml"
+
+[agents.monitor]
+description = "Security Audit Team runtime and outcome monitor."
+config_file = "../agents/teams/security-audit-team/roles/monitor.toml"

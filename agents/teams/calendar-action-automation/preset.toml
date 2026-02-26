@@ -1,0 +1,19 @@
+[agents.default]
+description = "Calendar Action Automation orchestrator."
+config_file = "../agents/teams/calendar-action-automation/roles/default.toml"
+
+[agents.explorer]
+description = "Calendar Action Automation context mapper."
+config_file = "../agents/teams/calendar-action-automation/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Calendar Action Automation risk and quality reviewer."
+config_file = "../agents/teams/calendar-action-automation/roles/reviewer.toml"
+
+[agents.worker]
+description = "Calendar Action Automation execution specialist."
+config_file = "../agents/teams/calendar-action-automation/roles/worker.toml"
+
+[agents.monitor]
+description = "Calendar Action Automation runtime and outcome monitor."
+config_file = "../agents/teams/calendar-action-automation/roles/monitor.toml"
