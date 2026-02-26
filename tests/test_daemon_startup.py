@@ -6,6 +6,7 @@ import pytest
 
 import apple_flow.daemon as daemon_module
 from apple_flow.commanding import CommandKind
+from apple_flow.config import RelaySettings
 from apple_flow.daemon import (
     RelayDaemon,
     gateway_resource_statuses_for_settings,
@@ -110,6 +111,74 @@ def test_migrate_legacy_db_skips_when_db_path_is_explicit(tmp_path):
     assert migrated is False
     assert legacy_db.exists()
     assert not target_db.exists()
+
+
+def test_relaydaemon_wires_gemini_approval_mode(monkeypatch, tmp_path):
+    captured_kwargs: dict[str, object] = {}
+
+    class _FakeStore:
+        def __init__(self, _path):
+            pass
+
+        def bootstrap(self):
+            pass
+
+        def get_state(self, _key):
+            return None
+
+        def set_state(self, _key, _value):
+            pass
+
+    class _FakeIngress:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def latest_rowid(self):
+            return None
+
+    class _FakeOrchestrator:
+        def __init__(self, *_args, **_kwargs):
+            self._approval = object()
+
+        def set_run_executor(self, _executor):
+            pass
+
+    class _FakeRunExecutor:
+        def __init__(self, **_kwargs):
+            pass
+
+    class _FakeGeminiConnector:
+        def __init__(self, **kwargs):
+            captured_kwargs.update(kwargs)
+
+        def shutdown(self):
+            pass
+
+        def cancel_active_processes(self, _thread_id=None):
+            return 0
+
+    monkeypatch.setattr(daemon_module, "ensure_gateway_resources", lambda **_kwargs: [])
+    monkeypatch.setattr(daemon_module, "SQLiteStore", _FakeStore)
+    monkeypatch.setattr(daemon_module, "PolicyEngine", lambda _settings: object())
+    monkeypatch.setattr(daemon_module, "IMessageIngress", _FakeIngress)
+    monkeypatch.setattr(daemon_module, "IMessageEgress", lambda **_kwargs: object())
+    monkeypatch.setattr(daemon_module, "RelayOrchestrator", _FakeOrchestrator)
+    monkeypatch.setattr(daemon_module, "RunExecutor", _FakeRunExecutor)
+    monkeypatch.setattr(daemon_module, "GeminiCliConnector", _FakeGeminiConnector)
+
+    settings = RelaySettings(
+        connector="gemini-cli",
+        db_path=tmp_path / "relay.db",
+        default_workspace=str(tmp_path),
+        allowed_workspaces=[str(tmp_path)],
+        soul_file=str(tmp_path / "missing_soul.md"),
+        gemini_cli_approval_mode="plan",
+    )
+
+    daemon = RelayDaemon(settings)
+    assert captured_kwargs["approval_mode"] == "plan"
+    assert captured_kwargs["model"] == settings.gemini_cli_model
+    assert daemon.connector is not None
 
 
 @pytest.mark.asyncio

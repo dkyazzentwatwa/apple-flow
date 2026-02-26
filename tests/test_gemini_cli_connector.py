@@ -129,6 +129,32 @@ def test_run_turn_no_approval_mode_when_empty():
         assert "--approval-mode" not in args[0]
 
 
+def test_run_turn_with_valid_approval_mode():
+    connector = GeminiCliConnector(model="", approval_mode="plan", inject_tools_context=False)
+    mock_proc = _make_mock_proc(stdout="response")
+
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+        connector.run_turn("+15551234567", "test prompt")
+        args, _ = mock_popen.call_args
+        assert "--approval-mode" in args[0]
+        mode_idx = args[0].index("--approval-mode")
+        assert args[0][mode_idx + 1] == "plan"
+
+
+def test_invalid_approval_mode_falls_back_to_yolo(caplog):
+    caplog.set_level("WARNING")
+    connector = GeminiCliConnector(model="", approval_mode="INVALID_MODE", inject_tools_context=False)
+    mock_proc = _make_mock_proc(stdout="response")
+
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+        connector.run_turn("+15551234567", "test prompt")
+        args, _ = mock_popen.call_args
+        mode_idx = args[0].index("--approval-mode")
+        assert args[0][mode_idx + 1] == "yolo"
+
+    assert "Invalid Gemini approval mode" in caplog.text
+
+
 def test_run_turn_with_context():
     connector = GeminiCliConnector(context_window=2, inject_tools_context=False)
     mock_proc = _make_mock_proc(stdout="Response 1")

@@ -13,6 +13,7 @@ logger = logging.getLogger("apple_flow.gemini_cli_connector")
 
 class GeminiCliConnector:
     """Stateless Gemini CLI connector using `gemini -p` for each turn."""
+    _VALID_APPROVAL_MODES = {"default", "auto_edit", "yolo", "plan"}
 
     def __init__(
         self,
@@ -30,7 +31,15 @@ class GeminiCliConnector:
         self.timeout = timeout
         self.context_window = context_window
         self.model = model.strip()
-        self.approval_mode = approval_mode.strip().lower()
+        normalized_approval_mode = approval_mode.strip().lower()
+        if normalized_approval_mode and normalized_approval_mode not in self._VALID_APPROVAL_MODES:
+            logger.warning(
+                "Invalid Gemini approval mode %r; falling back to 'yolo'. Valid modes: %s",
+                normalized_approval_mode,
+                ", ".join(sorted(self._VALID_APPROVAL_MODES)),
+            )
+            normalized_approval_mode = "yolo"
+        self.approval_mode = normalized_approval_mode
         self.inject_tools_context = inject_tools_context
         self.system_prompt = system_prompt.strip()
         self.soul_prompt: str = ""
