@@ -54,6 +54,12 @@ agent-office/*
 !agent-office/SCAFFOLD.md
 !agent-office/setup.sh
 !agent-office/SOUL.md
+!agent-office/20_projects/
+agent-office/20_projects/*
+!agent-office/20_projects/workspace-dashboard/
+agent-office/20_projects/workspace-dashboard/*
+!agent-office/20_projects/workspace-dashboard/snapshot.py
+!agent-office/20_projects/workspace-dashboard/server.py
 
 # Swift GUI app source (keep private/local), publish only dist artifacts.
 /app/
