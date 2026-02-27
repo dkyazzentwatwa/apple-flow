@@ -46,6 +46,30 @@ def test_parse_fallback_to_chat():
     assert parsed.payload == "hello there"
 
 
+def test_parse_natural_team_commands():
+    parsed = parse_command("list available agent teams")
+    assert parsed.kind is CommandKind.SYSTEM
+    assert parsed.payload == "teams list"
+
+    parsed = parse_command("what team is active")
+    assert parsed.kind is CommandKind.SYSTEM
+    assert parsed.payload == "team current"
+
+    parsed = parse_command("unload team")
+    assert parsed.kind is CommandKind.SYSTEM
+    assert parsed.payload == "team unload"
+
+
+def test_parse_natural_team_load_with_remainder():
+    parsed = parse_command("load up the codebase-exploration-team and research new features")
+    assert parsed.kind is CommandKind.SYSTEM
+    assert parsed.payload == "team load codebase-exploration-team and research new features"
+
+    quoted = parse_command('load up the "customer-support-resolution-team" and analyze these emails')
+    assert quoted.kind is CommandKind.SYSTEM
+    assert quoted.payload == "team load customer-support-resolution-team and analyze these emails"
+
+
 def test_parse_clear_context_aliases():
     for raw in ["clear context", "new chat", "reset context"]:
         parsed = parse_command(raw)

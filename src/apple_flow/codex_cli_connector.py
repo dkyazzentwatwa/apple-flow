@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import threading
 from typing import Any
@@ -77,7 +78,7 @@ class CodexCliConnector:
         logger.info("Reset context for sender: %s", sender)
         return sender
 
-    def run_turn(self, thread_id: str, prompt: str) -> str:
+    def run_turn(self, thread_id: str, prompt: str, options: dict[str, Any] | None = None) -> str:
         """Execute a turn using `codex exec`.
 
         Builds a context-aware prompt from recent history, spawns a fresh
@@ -114,14 +115,20 @@ class CodexCliConnector:
         )
 
         proc: subprocess.Popen[str] | None = None
-        proc: subprocess.Popen[str] | None = None
         try:
+            env = os.environ.copy()
+            if options:
+                codex_config_path = str(options.get("codex_config_path", "")).strip()
+                if codex_config_path:
+                    env["CODEX_CONFIG_PATH"] = codex_config_path
+
             proc = subprocess.Popen(
                 cmd,
                 cwd=self.workspace,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                env=env,
                 start_new_session=True,
             )
             self._processes.register(sender, proc)
@@ -175,7 +182,13 @@ class CodexCliConnector:
             if proc is not None:
                 self._processes.unregister(proc)
 
-    def run_turn_streaming(self, thread_id: str, prompt: str, on_progress: Any = None) -> str:
+    def run_turn_streaming(
+        self,
+        thread_id: str,
+        prompt: str,
+        on_progress: Any = None,
+        options: dict[str, Any] | None = None,
+    ) -> str:
         """Execute a turn with line-by-line streaming, calling on_progress for each line.
 
         Falls back to regular run_turn if streaming fails.
@@ -190,12 +203,19 @@ class CodexCliConnector:
         logger.info("Executing codex CLI (streaming): sender=%s", sender)
 
         try:
+            env = os.environ.copy()
+            if options:
+                codex_config_path = str(options.get("codex_config_path", "")).strip()
+                if codex_config_path:
+                    env["CODEX_CONFIG_PATH"] = codex_config_path
+
             proc = subprocess.Popen(
                 cmd,
                 cwd=self.workspace,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                env=env,
                 start_new_session=True,
             )
             self._processes.register(sender, proc)

@@ -12,11 +12,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
+from .agent_teams import AgentTeamCatalog
 from .approval import ApprovalHandler, OrchestrationResult
 from .commanding import CommandKind, ParsedCommand, is_likely_mutating, parse_command
 from .models import InboundMessage, RunState
 from .notes_logging import log_to_notes
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
+from .utils import normalize_sender
 
 logger = logging.getLogger("apple_flow.orchestrator")
 
@@ -87,6 +89,7 @@ class RelayOrchestrator:
         self.memory = memory
         self.office_syncer = office_syncer
         self.log_file_path = log_file_path
+        self.team_catalog = AgentTeamCatalog(Path(__file__).resolve().parents[2])
 
         self._approval = ApprovalHandler(
             connector=connector,
@@ -207,7 +210,7 @@ class RelayOrchestrator:
             return self._approval.resolve(message.sender, command.kind, command.payload)
 
         if command.kind is CommandKind.SYSTEM:
-            return self._handle_system(message.sender, command.payload)
+            return self._handle_system(message, command.payload)
 
         # Natural language mode: auto-promote bare CHAT messages with mutating intent to TASK
         if (
@@ -217,24 +220,37 @@ class RelayOrchestrator:
         ):
             command = ParsedCommand(kind=CommandKind.TASK, payload=command.payload, workspace=command.workspace)
 
+        active_team = self._get_active_team(message.sender)
+        team_context = None
+        if command.kind in {CommandKind.IDEA, CommandKind.PLAN, CommandKind.TASK, CommandKind.PROJECT}:
+            team_context = self._build_turn_team_context(active_team)
+
         workspace = self._resolve_workspace(command.workspace)
 
         thread_id = self.connector.get_or_create_thread(message.sender)
         self.store.upsert_session(message.sender, thread_id, command.kind.value)
 
         if command.kind in {CommandKind.TASK, CommandKind.PROJECT}:
-            return self._approval.handle_approval_required(
+            result = self._approval.handle_approval_required(
                 message, command.kind, thread_id, command.payload, workspace,
                 default_workspace=self.default_workspace,
                 is_workspace_allowed=self._is_workspace_allowed,
+                team_context=team_context,
             )
+            if result.run_id and team_context:
+                self._consume_active_team(message.sender)
+            return result
+
+        if command.kind in {CommandKind.IDEA, CommandKind.PLAN} and team_context:
+            self._consume_active_team(message.sender)
 
         prompt = self._build_non_mutating_prompt(command.kind, command.payload, workspace)
+        prompt = self._apply_team_prompt_fallback(prompt, team_context)
         prompt = self._inject_auto_context(message.sender, prompt)
         prompt = self._inject_attachment_context(message, prompt)
         prompt = self._inject_memory_context(prompt)
 
-        response = self.connector.run_turn(thread_id, prompt)
+        response = self._run_connector_turn(thread_id, prompt, team_context)
         self.egress.send(message.sender, response)
         self._log_to_notes(command.kind.value, message.sender, command.payload, response)
         return OrchestrationResult(kind=command.kind, response=response)
@@ -278,6 +294,7 @@ class RelayOrchestrator:
             "- 🔧 system: stop | restart | kill provider | cancel run <run_id>",
             "- 🔇 system: mute | unmute",
             "- 🔄 system: sync office",
+            "- 🧩 system: teams list | team load <slug> | team current | team unload",
             "",
             "🧠 Tips:",
             "- Use `status` first when something seems stuck.",
@@ -903,7 +920,12 @@ class RelayOrchestrator:
             f"Killed {killed} process(es), cancelled {cancelled_jobs} queued/running job(s)."
         )
 
-    def _handle_system(self, sender: str, subcommand: str) -> OrchestrationResult:
+    def _handle_system(self, message: InboundMessage, subcommand: str) -> OrchestrationResult:
+        sender = message.sender
+        action, slug, remainder = self._parse_team_system_command(subcommand)
+        if action:
+            return self._handle_team_system(message, action, slug, remainder)
+
         sub = subcommand.strip().lower()
         if sub == "stop":
             response = "Apple Flow shutting down..."
@@ -949,10 +971,151 @@ class RelayOrchestrator:
         else:
             response = (
                 "Unknown system command. Use: "
-                "system: stop | restart | kill provider | cancel run <run_id> | mute | unmute | sync office"
+                "system: stop | restart | kill provider | cancel run <run_id> | mute | unmute | sync office | "
+                "teams list | team load <slug> | team current | team unload"
             )
             self.egress.send(sender, response)
-        return OrchestrationResult(kind=CommandKind.SYSTEM, response=sub)
+        return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+    def _parse_team_system_command(self, subcommand: str) -> tuple[str, str, str]:
+        """Return (action, slug, remainder) for supported team system commands."""
+        sub = (subcommand or "").strip()
+        lowered = sub.lower()
+
+        if lowered in {"teams list", "team list", "list teams"}:
+            return ("list", "", "")
+        if lowered in {"team current", "current team"}:
+            return ("current", "", "")
+        if lowered in {"team unload", "unload team", "clear team", "reset team"}:
+            return ("unload", "", "")
+
+        if lowered.startswith("team load "):
+            tail = sub[10:].strip()
+        elif lowered.startswith("load team "):
+            tail = sub[10:].strip()
+        else:
+            return ("", "", "")
+
+        remainder = ""
+        split_idx = tail.lower().find(" and ")
+        if split_idx >= 0:
+            slug = tail[:split_idx].strip()
+            remainder = tail[split_idx + 5 :].strip()
+        else:
+            slug = tail.strip()
+        return ("load", slug.lower(), remainder)
+
+    def _handle_team_system(
+        self,
+        message: InboundMessage,
+        action: str,
+        slug: str,
+        remainder: str,
+    ) -> OrchestrationResult:
+        sender = message.sender
+
+        if not self.team_catalog.is_available():
+            response = "Agent teams are not available on this host (missing `agents/catalog.toml`)."
+            self.egress.send(sender, response)
+            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+        if action == "list":
+            teams = self.team_catalog.list_teams()
+            if not teams:
+                response = "No agent teams found."
+            else:
+                lines = ["Available agent teams:"]
+                for team in teams:
+                    summary = f" — {team.summary}" if team.summary else ""
+                    lines.append(f"- `{team.slug}` ({team.title}){summary}")
+                lines.append("")
+                lines.append("Use: `system: team load <slug>`")
+                response = "\n".join(lines)
+            self.egress.send(sender, response)
+            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+        if action == "current":
+            active = self._get_active_team(sender)
+            if not active:
+                response = "No active team loaded for this sender."
+            else:
+                response = (
+                    f"Active team: `{active.get('slug', '?')}` ({active.get('title', 'unknown')}). "
+                    "It will auto-reset after your next `idea`, `plan`, `task`, or `project` request."
+                )
+            self.egress.send(sender, response)
+            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+        if action == "unload":
+            self._clear_active_team(sender)
+            response = "Unloaded active team for this sender."
+            self.egress.send(sender, response)
+            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+        if action != "load":
+            response = "Unsupported team system command."
+            self.egress.send(sender, response)
+            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+        if not slug:
+            response = "Usage: `system: team load <slug>`"
+            self.egress.send(sender, response)
+            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+        team = self.team_catalog.get_team(slug)
+        if team is None:
+            suggestions = self.team_catalog.suggest(slug, limit=5)
+            lines = [f"Unknown team: `{slug}`."]
+            if suggestions:
+                lines.append("Closest matches:")
+                for item in suggestions:
+                    lines.append(f"- `{item.slug}` ({item.title})")
+            lines.append("")
+            lines.append("Use: `system: teams list`")
+            response = "\n".join(lines)
+            self.egress.send(sender, response)
+            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+        self._set_active_team(
+            sender=sender,
+            team_slug=team.slug,
+            team_title=team.title,
+        )
+
+        mode_note = (
+            "Using Codex team preset."
+            if self._is_codex_cli_connector()
+            else "Using TEAM.md fallback for this connector."
+        )
+        loaded_msg = (
+            f"Loaded team `{team.slug}` ({team.title}). {mode_note} "
+            "It will auto-reset after your next `idea`, `plan`, `task`, or `project` request."
+        )
+        self.egress.send(sender, loaded_msg)
+
+        if not remainder:
+            return OrchestrationResult(kind=CommandKind.SYSTEM, response=loaded_msg)
+
+        response = self._run_follow_on_after_team_load(message, remainder)
+        return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+    def _run_follow_on_after_team_load(self, message: InboundMessage, remainder: str) -> str:
+        parsed = parse_command(remainder)
+        if parsed.kind in {CommandKind.IDEA, CommandKind.PLAN, CommandKind.TASK, CommandKind.PROJECT}:
+            follow_text = remainder
+        else:
+            follow_text = f"plan: {remainder}"
+
+        synthetic = InboundMessage(
+            id=f"{message.id}:team:{uuid4().hex[:6]}",
+            sender=message.sender,
+            text=follow_text,
+            received_at=datetime.now(UTC).isoformat(),
+            is_from_me=False,
+            context=dict(message.context or {}),
+        )
+        result = self.handle_message(synthetic)
+        return result.response or "Follow-on request executed."
 
     def _mark_restart_echo_suppress(self, sender: str, text: str) -> None:
         """Persist a short-lived marker to suppress restart-message echo after reboot."""
@@ -1031,6 +1194,85 @@ class RelayOrchestrator:
         if kind is CommandKind.PLAN:
             return f"planning mode: create a stepwise implementation plan with acceptance criteria. goal={payload}"
         return self._build_unified_prompt(payload, workspace)
+
+    def _run_connector_turn(self, thread_id: str, prompt: str, team_context: dict[str, Any] | None = None) -> str:
+        options: dict[str, Any] = {}
+        if team_context and team_context.get("codex_config_path"):
+            options["codex_config_path"] = team_context["codex_config_path"]
+
+        if options:
+            try:
+                return self.connector.run_turn(thread_id, prompt, options=options)  # type: ignore[arg-type]
+            except TypeError:
+                pass
+        return self.connector.run_turn(thread_id, prompt)
+
+    def _is_codex_cli_connector(self) -> bool:
+        return self.connector.__class__.__name__ == "CodexCliConnector"
+
+    def _team_state_key(self, sender: str) -> str:
+        return f"active_team:{normalize_sender(sender)}"
+
+    def _set_active_team(self, sender: str, team_slug: str, team_title: str) -> None:
+        state = {
+            "slug": team_slug,
+            "title": team_title,
+            "mode": "one_shot",
+            "armed_at": datetime.now(UTC).isoformat(),
+        }
+        self.store.set_state(self._team_state_key(sender), json.dumps(state))
+
+    def _get_active_team(self, sender: str) -> dict[str, Any] | None:
+        raw = self.store.get_state(self._team_state_key(sender))
+        if not raw:
+            return None
+        try:
+            state = json.loads(raw)
+        except Exception:
+            return None
+        if not isinstance(state, dict):
+            return None
+        slug = str(state.get("slug", "")).strip().lower()
+        if not slug:
+            return None
+        title = str(state.get("title", slug)).strip()
+        return {"slug": slug, "title": title, "mode": "one_shot"}
+
+    def _consume_active_team(self, sender: str) -> None:
+        self._clear_active_team(sender)
+
+    def _clear_active_team(self, sender: str) -> None:
+        self.store.set_state(self._team_state_key(sender), "")
+
+    def _build_turn_team_context(self, active_team: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not active_team:
+            return None
+
+        slug = str(active_team.get("slug", "")).strip().lower()
+        if not slug:
+            return None
+
+        team = self.team_catalog.get_team(slug)
+        if team is None:
+            return None
+
+        context: dict[str, Any] = {"slug": team.slug, "title": team.title}
+        if self._is_codex_cli_connector() and team.preset_path.exists():
+            context["codex_config_path"] = str(team.preset_path)
+            return context
+
+        fallback = self.team_catalog.build_team_prompt_fallback(team.slug)
+        if fallback:
+            context["prompt_fallback"] = fallback
+        return context
+
+    def _apply_team_prompt_fallback(self, prompt: str, team_context: dict[str, Any] | None) -> str:
+        if not team_context:
+            return prompt
+        fallback = str(team_context.get("prompt_fallback", "")).strip()
+        if not fallback:
+            return prompt
+        return f"{fallback}\n\n{prompt}"
 
     def _is_workspace_allowed(self, candidate: str) -> bool:
         target = Path(candidate).resolve()

@@ -75,7 +75,31 @@ Quick usage:
 
 This writes a managed team preset block into `.codex/config.toml` with backup support.
 
-See [docs/AGENT_TEAMS.md](docs/AGENT_TEAMS.md) for details.
+### iMessage-native team commands (new)
+
+You can now manage teams directly from iMessage in a natural way. Team activation is **per sender** and **auto-resets after the next work request** (`idea`, `plan`, `task`, `project`).
+
+Examples:
+
+- `list available agent teams`
+- `load up the codebase-exploration-team and research new features`
+- `load up the "customer-support-resolution-team" and analyze these emails from test@gmail.com`
+- `what team is active`
+- `unload team`
+
+Explicit `system:` forms also work:
+
+- `system: teams list`
+- `system: team load <slug>`
+- `system: team current`
+- `system: team unload`
+
+Connector behavior:
+
+- `codex-cli`: applies the selected team preset at runtime.
+- Other CLI connectors (`claude-cli`, `gemini-cli`, `kilo-cli`, `cline`): use `TEAM.md` prompt fallback for that turn.
+
+See [docs/AGENT_TEAMS.md](docs/AGENT_TEAMS.md) for details and command semantics.
 
 ### 🖥️ Optional Swift Onboarding + Dashboard App
 Prefer a desktop UI? Apple Flow includes a native macOS Swift app for guided onboarding plus runtime operations:

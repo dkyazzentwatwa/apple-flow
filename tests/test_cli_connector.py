@@ -115,6 +115,22 @@ def test_run_turn_with_model_flag():
         assert args[0] == ["codex", "exec", "--skip-git-repo-check", "--yolo", "-m", "gpt-5.3-codex", "test prompt"]
 
 
+def test_run_turn_sets_codex_config_path_from_options():
+    connector = CodexCliConnector(codex_command="codex", inject_tools_context=False)
+    mock_proc = _make_mock_proc(stdout="response")
+
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+        connector.run_turn(
+            "+15551234567",
+            "test prompt",
+            options={"codex_config_path": "/tmp/team-preset.toml"},
+        )
+
+        _, kwargs = mock_popen.call_args
+        env = kwargs["env"]
+        assert env["CODEX_CONFIG_PATH"] == "/tmp/team-preset.toml"
+
+
 def test_run_turn_no_model_flag_when_empty():
     """Test that -m flag is omitted when model is empty."""
     connector = CodexCliConnector(codex_command="codex", model="")

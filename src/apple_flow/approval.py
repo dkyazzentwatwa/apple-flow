@@ -279,6 +279,12 @@ class ApprovalHandler:
             )
 
         thread_id = self.connector.get_or_create_thread(sender)
+        source_context = self.store.get_run_source_context(run_id) or {}
+        team_context = None
+        if isinstance(source_context, dict):
+            maybe_team = source_context.get("team_context")
+            if isinstance(maybe_team, dict):
+                team_context = maybe_team
 
         exec_prompt_parts = [
             "executor mode: perform the approved plan carefully and provide concise progress + final output.",
@@ -297,6 +303,7 @@ class ApprovalHandler:
         if extra_instructions:
             exec_prompt_parts.append(f"additional instructions from user: {extra_instructions}")
         exec_prompt = "\n".join(exec_prompt_parts)
+        exec_prompt = self._apply_team_prompt_fallback(exec_prompt, team_context)
 
         execution_output = self._run_execution(
             sender=sender,
@@ -305,6 +312,7 @@ class ApprovalHandler:
             run_id=run_id,
             step="executor",
             phase=f"execution attempt {attempt}",
+            team_context=team_context,
         )
 
         outcome, reason = self._classify_execution_outcome(execution_output)
@@ -344,6 +352,7 @@ class ApprovalHandler:
         if self.enable_verifier:
             self.store.update_run_state(run_id, RunState.VERIFYING.value)
             verify_prompt = "verifier mode: validate completion evidence and summarize pass/fail with key checks."
+            verify_prompt = self._apply_team_prompt_fallback(verify_prompt, team_context)
             verification_output = self._run_execution(
                 sender=sender,
                 thread_id=thread_id,
@@ -351,6 +360,7 @@ class ApprovalHandler:
                 run_id=run_id,
                 step="verifier",
                 phase=f"verification attempt {attempt}",
+                team_context=team_context,
             )
             verifier_outcome, verifier_reason = self._classify_execution_outcome(verification_output)
             self._create_event(
@@ -376,7 +386,6 @@ class ApprovalHandler:
         self._safe_send(sender, final)
         self._log(kind.value, sender, run.get("intent", ""), final)
 
-        source_context = self.store.get_run_source_context(run_id)
         if source_context:
             self._handle_post_execution_cleanup(source_context, final)
 
@@ -402,6 +411,7 @@ class ApprovalHandler:
         workspace: str,
         default_workspace: str,
         is_workspace_allowed: Any,
+        team_context: dict[str, Any] | None = None,
     ) -> OrchestrationResult:
         """Plan a mutating command and create an approval request."""
         ws = workspace or default_workspace
@@ -439,6 +449,10 @@ class ApprovalHandler:
                     "event_name": message.context.get("event_summary"),
                     "calendar_name": message.context.get("calendar_name"),
                 }
+        if team_context:
+            if source_context is None:
+                source_context = {}
+            source_context["team_context"] = team_context
 
         self.store.create_run(
             run_id=run_id,
@@ -460,7 +474,11 @@ class ApprovalHandler:
             "planner mode: produce an objective, steps, risks, and done criteria. "
             f"intent={kind.value}; request={payload}; workspace={ws}"
         )
-        plan_output = self.connector.run_turn(thread_id, planner_prompt)
+        plan_output = self._run_connector_turn(
+            thread_id=thread_id,
+            prompt=self._apply_team_prompt_fallback(planner_prompt, team_context),
+            team_context=team_context,
+        )
 
         self.store.update_run_state(run_id, RunState.AWAITING_APPROVAL.value)
         request_id = f"req_{uuid4().hex[:8]}"
@@ -491,6 +509,52 @@ class ApprovalHandler:
 
     # --- Internal helpers ---
 
+    def _run_connector_turn(
+        self,
+        thread_id: str,
+        prompt: str,
+        team_context: dict[str, Any] | None = None,
+    ) -> str:
+        options: dict[str, Any] = {}
+        if team_context and team_context.get("codex_config_path"):
+            options["codex_config_path"] = team_context["codex_config_path"]
+        if options:
+            try:
+                return self.connector.run_turn(thread_id, prompt, options=options)  # type: ignore[arg-type]
+            except TypeError:
+                pass
+        return self.connector.run_turn(thread_id, prompt)
+
+    def _run_connector_turn_streaming(
+        self,
+        thread_id: str,
+        prompt: str,
+        on_progress: Any,
+        team_context: dict[str, Any] | None = None,
+    ) -> str:
+        options: dict[str, Any] = {}
+        if team_context and team_context.get("codex_config_path"):
+            options["codex_config_path"] = team_context["codex_config_path"]
+        if options:
+            try:
+                return self.connector.run_turn_streaming(
+                    thread_id,
+                    prompt,
+                    on_progress,
+                    options=options,
+                )  # type: ignore[arg-type]
+            except TypeError:
+                pass
+        return self.connector.run_turn_streaming(thread_id, prompt, on_progress)
+
+    def _apply_team_prompt_fallback(self, prompt: str, team_context: dict[str, Any] | None) -> str:
+        if not team_context:
+            return prompt
+        fallback = str(team_context.get("prompt_fallback", "")).strip()
+        if not fallback:
+            return prompt
+        return f"{fallback}\n\n{prompt}"
+
     def _run_execution(
         self,
         sender: str,
@@ -499,12 +563,21 @@ class ApprovalHandler:
         run_id: str,
         step: str,
         phase: str,
+        team_context: dict[str, Any] | None = None,
     ) -> str:
         if self.enable_progress_streaming and hasattr(self.connector, "run_turn_streaming"):
-            return self._run_with_progress(sender, thread_id, prompt, run_id=run_id, step=step, phase=phase)
+            return self._run_with_progress(
+                sender,
+                thread_id,
+                prompt,
+                run_id=run_id,
+                step=step,
+                phase=phase,
+                team_context=team_context,
+            )
         return self._run_with_heartbeat(
             sender=sender,
-            runner=lambda: self.connector.run_turn(thread_id, prompt),
+            runner=lambda: self._run_connector_turn(thread_id, prompt, team_context),
             run_id=run_id,
             step=step,
             phase=phase,
@@ -538,6 +611,7 @@ class ApprovalHandler:
         run_id: str,
         step: str,
         phase: str,
+        team_context: dict[str, Any] | None = None,
     ) -> str:
         last_update = 0.0
 
@@ -558,7 +632,7 @@ class ApprovalHandler:
 
         return self._run_with_heartbeat(
             sender=sender,
-            runner=lambda: self.connector.run_turn_streaming(thread_id, prompt, on_progress),
+            runner=lambda: self._run_connector_turn_streaming(thread_id, prompt, on_progress, team_context),
             run_id=run_id,
             step=step,
             phase=phase,

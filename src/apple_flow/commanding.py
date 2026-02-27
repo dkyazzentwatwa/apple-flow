@@ -58,6 +58,10 @@ _OBJECT_RE = re.compile(
 _LABELS_CLAUSE_RE = re.compile(r"\blabels?\s*[:=]\s*([^\n.;]+)", re.IGNORECASE)
 _CLASSIFY_INTO_RE = re.compile(r"\bclassif(?:y|ication)?\b[^\n]*?\binto\b\s+([^\n.;]+)", re.IGNORECASE)
 _INTO_LABELS_RE = re.compile(r"\binto\s+labels?\s*[:=]?\s*([^\n.;]+)", re.IGNORECASE)
+_NATURAL_TEAM_LOAD_RE = re.compile(
+    r"(?:^|\b)(?:load up|load|switch to)\s+(?:the\s+)?[\"']?(?P<slug>[a-z0-9][a-z0-9-]*)[\"']?",
+    re.IGNORECASE,
+)
 
 
 def is_likely_mutating(text: str) -> bool:
@@ -175,6 +179,10 @@ def parse_command(raw_text: str) -> ParsedCommand:
     if lowered.startswith("deny "):
         return ParsedCommand(kind=CommandKind.DENY, payload=text.split(" ", 1)[1].strip())
 
+    natural_team = _parse_natural_team_command(text, lowered)
+    if natural_team is not None:
+        return natural_team
+
     for prefix, kind in _PREFIX_TO_KIND.items():
         marker = f"{prefix}:"
         if lowered.startswith(marker):
@@ -185,3 +193,61 @@ def parse_command(raw_text: str) -> ParsedCommand:
     # Plain chat — still check for @alias
     workspace, clean_payload = _extract_workspace_alias(text)
     return ParsedCommand(kind=CommandKind.CHAT, payload=clean_payload, workspace=workspace)
+
+
+def _parse_natural_team_command(text: str, lowered: str) -> ParsedCommand | None:
+    compact = lowered.strip(" \t\n\r.,!?")
+
+    list_signals = (
+        "list available agent teams",
+        "list available teams",
+        "list agent teams",
+        "list teams",
+        "show teams",
+        "show agent teams",
+        "what teams are available",
+        "what agent teams are available",
+        "available teams",
+        "available agent teams",
+    )
+    if compact in list_signals:
+        return ParsedCommand(kind=CommandKind.SYSTEM, payload="teams list")
+
+    current_signals = (
+        "what team is active",
+        "what team is loaded",
+        "what team is current",
+        "current team",
+        "active team",
+        "loaded team",
+    )
+    if compact in current_signals:
+        return ParsedCommand(kind=CommandKind.SYSTEM, payload="team current")
+
+    unload_signals = (
+        "unload team",
+        "clear team",
+        "reset team",
+        "disable team",
+    )
+    if compact in unload_signals:
+        return ParsedCommand(kind=CommandKind.SYSTEM, payload="team unload")
+
+    match = _NATURAL_TEAM_LOAD_RE.search(text)
+    if not match:
+        return None
+
+    slug = (match.group("slug") or "").strip().lower()
+    if not slug:
+        return None
+
+    remainder = text[match.end() :].strip()
+    if remainder.lower().startswith("team "):
+        remainder = remainder[5:].strip()
+    if remainder.lower().startswith("and "):
+        remainder = remainder[4:].strip()
+
+    payload = f"team load {slug}"
+    if remainder:
+        payload = f"{payload} and {remainder}"
+    return ParsedCommand(kind=CommandKind.SYSTEM, payload=payload)
