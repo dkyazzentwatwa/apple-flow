@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
 DASHBOARD_DIR = Path(__file__).resolve().parents[1] / "agent-office" / "20_projects" / "workspace-dashboard"
 if str(DASHBOARD_DIR) not in sys.path:
     sys.path.insert(0, str(DASHBOARD_DIR))

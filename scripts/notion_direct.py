@@ -6,9 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from datetime import datetime, timezone
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any
 
 NOTION_VERSION = "2022-06-28"

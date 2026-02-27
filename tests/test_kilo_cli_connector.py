@@ -87,7 +87,7 @@ def test_run_turn_success():
         assert kwargs["stdout"] == subprocess.PIPE
         assert kwargs["stderr"] == subprocess.PIPE
         assert kwargs["text"] is True
-        
+
         # Verify prompt payload includes the user prompt (connector may prepend rules)
         mock_proc.communicate.assert_called_once()
         _, call_kwargs = mock_proc.communicate.call_args

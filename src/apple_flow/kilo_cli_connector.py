@@ -206,7 +206,7 @@ class KiloCliConnector:
             self._processes.register(sender, proc)
 
             output_lines: list[str] = []
-            
+
             # Since we're using stdin, we need to send the full_prompt first
             # but for streaming, Popen.stdin might be tricky if we want to pipe input and then read output
             # Communicate is usually better for piping input, but it buffers.
@@ -281,7 +281,7 @@ class KiloCliConnector:
 
         if self.soul_prompt:
             parts.append(self.soul_prompt)
-        
+
         if self.system_prompt:
             parts.append(self.system_prompt)
 

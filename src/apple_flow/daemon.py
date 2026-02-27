@@ -18,14 +18,14 @@ from .claude_cli_connector import ClaudeCliConnector
 from .cline_connector import ClineConnector
 from .codex_cli_connector import CodexCliConnector
 from .codex_connector import CodexAppServerConnector
-from .companion import CompanionLoop
 from .commanding import CommandKind, parse_command
+from .companion import CompanionLoop
 from .config import RelaySettings
 from .egress import IMessageEgress
 from .gateway_setup import ensure_gateway_resources
 from .gemini_cli_connector import GeminiCliConnector
-from .kilo_cli_connector import KiloCliConnector
 from .ingress import IMessageIngress
+from .kilo_cli_connector import KiloCliConnector
 from .mail_egress import AppleMailEgress
 from .mail_ingress import AppleMailIngress
 from .memory import FileMemory
@@ -37,8 +37,8 @@ from .policy import PolicyEngine
 from .protocols import ConnectorProtocol
 from .reminders_egress import AppleRemindersEgress
 from .reminders_ingress import AppleRemindersIngress
-from .scheduler import FollowUpScheduler
 from .run_executor import RunExecutor
+from .scheduler import FollowUpScheduler
 from .store import SQLiteStore
 
 logger = logging.getLogger("apple_flow.daemon")
