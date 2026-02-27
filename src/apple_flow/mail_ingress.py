@@ -245,33 +245,38 @@ class AppleMailIngress:
         if not sanitized_ids:
             return
 
+        # Build AppleScript with proper indentation (tabs inside tell block)
         id_lines = "\n".join(
             [
-                f'''
-                try
-                    set matchedMsg to first message of {mailbox_ref} whose id as text is "{mid}"
-                    set read status of matchedMsg to true
-                on error
-                    -- Skip messages that can no longer be found.
-                end try
-                '''
+                f'''\ttry
+\t\tset matchedMsg to first message of {mailbox_ref} whose id as text is "{mid}"
+\t\tset read status of matchedMsg to true
+\ton error
+\t\t-- Skip messages that can no longer be found.
+\tend try'''
                 for mid in sanitized_ids
             ]
         )
 
-        script = f'''
-        tell application "Mail"
+        script = f'''tell application "Mail"
 {id_lines}
-        end tell
-        '''
+end tell'''
 
         try:
-            subprocess.run(
+            result = subprocess.run(
                 ["osascript", "-e", script],
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
+            if result.returncode != 0:
+                logger.warning(
+                    "Failed to mark emails as read (rc=%s): %s",
+                    result.returncode,
+                    result.stderr.strip() or "Unknown AppleScript error",
+                )
+            else:
+                logger.debug("Marked %s email(s) as read", len(sanitized_ids))
         except Exception as exc:
             logger.warning("Failed to mark %s email(s) as read: %s", len(sanitized_ids), exc)
 
