@@ -46,6 +46,17 @@ python -m apple_flow admin
 ./scripts/uninstall_autostart.sh
 ```
 
+### Direct Notion API Helper (No MCP)
+
+Use `scripts/notion_direct.py` when MCP access is unavailable or you need direct Notion API calls.
+
+```bash
+# Requires NOTION_API_KEY in environment (or .env loaded into shell)
+./scripts/notion_direct.py list-dbs --query "Lead Gen"
+./scripts/notion_direct.py fetch <page_or_database_id>
+./scripts/notion_direct.py query-db <database_id> --page-size 10
+```
+
 ## Architecture
 
 ### Data Flow

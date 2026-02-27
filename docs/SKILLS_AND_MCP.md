@@ -175,3 +175,23 @@ args = ["-y", "apple-tools-mcp"]
 | `search_calendar` | Semantic search across Calendar events |
 
 > **Note:** First run may take a few minutes to build the local vector index. The index is stored locally and is never sent to any external service.
+
+## Notion MCP (Global Setup)
+
+The recommended package is [`@notionhq/notion-mcp-server`](https://www.npmjs.com/package/@notionhq/notion-mcp-server), which exposes Notion workspace actions and search to AI tools.
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.notion]
+command = "npx"
+args = ["-y", "@notionhq/notion-mcp-server"]
+```
+
+Set your Notion token in the environment before running Codex:
+
+```bash
+export NOTION_API_KEY="<your_notion_integration_token>"
+```
+
+Security reminder: avoid hardcoding API keys in repo-tracked files; prefer environment-based injection from your shell or secret manager.
