@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from .commanding import CommandKind
+from .commanding import CommandKind, extract_prompt_labels
 from .models import InboundMessage, RunState
 from .notes_logging import log_to_notes
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
@@ -285,6 +285,13 @@ class ApprovalHandler:
             "If blocked on input/credentials/decision, prefix your response with `BLOCKER:` and ask one clear question.",
             f"workspace={run['cwd']}",
         ]
+        requested_labels = extract_prompt_labels(self._get_run_request_text(run_id))
+        if requested_labels:
+            exec_prompt_parts.append(
+                "When triaging Apple Mail, only use these labels: "
+                + ", ".join(requested_labels)
+                + "."
+            )
         if plan_summary:
             exec_prompt_parts.append(f"approved plan:\n{plan_summary}")
         if extra_instructions:
@@ -442,6 +449,12 @@ class ApprovalHandler:
             risk_level="execute",
             source_context=source_context,
         )
+        self._create_event(
+            run_id=run_id,
+            step="request",
+            event_type="request_received",
+            payload={"request": payload, "intent": kind.value},
+        )
 
         planner_prompt = (
             "planner mode: produce an objective, steps, risks, and done criteria. "
@@ -496,6 +509,26 @@ class ApprovalHandler:
             step=step,
             phase=phase,
         )
+
+    def _get_run_request_text(self, run_id: str) -> str:
+        """Best-effort retrieval of the original task/project request text."""
+        if not hasattr(self.store, "list_events_for_run"):
+            return ""
+        try:
+            events = self.store.list_events_for_run(run_id, limit=50)
+        except Exception:
+            return ""
+
+        for event in events:
+            if event.get("event_type") != "request_received":
+                continue
+            payload = event.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            request = payload.get("request")
+            if isinstance(request, str):
+                return request
+        return ""
 
     def _run_with_progress(
         self,

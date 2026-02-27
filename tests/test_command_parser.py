@@ -1,6 +1,11 @@
 import pytest
 
-from apple_flow.commanding import CommandKind, is_likely_mutating, parse_command
+from apple_flow.commanding import (
+    CommandKind,
+    extract_prompt_labels,
+    is_likely_mutating,
+    parse_command,
+)
 
 
 def test_parse_prefixed_idea_command():
@@ -73,3 +78,18 @@ def test_is_likely_mutating_true(text):
 ])
 def test_is_likely_mutating_false(text):
     assert is_likely_mutating(text) is False
+
+
+def test_extract_prompt_labels_from_explicit_labels_clause():
+    labels = extract_prompt_labels("task: triage inbox. labels: Focus, Noise, Action, Delete")
+    assert labels == ["Focus", "Noise", "Action", "Delete"]
+
+
+def test_extract_prompt_labels_from_classify_into_phrase():
+    labels = extract_prompt_labels("project: classify into Focus / Noise / Action")
+    assert labels == ["Focus", "Noise", "Action"]
+
+
+def test_extract_prompt_labels_returns_empty_when_not_provided():
+    labels = extract_prompt_labels("task: summarize latest unread email")
+    assert labels == []

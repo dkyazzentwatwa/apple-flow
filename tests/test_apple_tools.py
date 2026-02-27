@@ -500,34 +500,81 @@ class TestMailListMailboxes:
 class TestMailMoveToLabel:
     def test_moves_message_with_exact_label(self):
         raw_mailboxes = "Action\tdavid@techtiff.ai\nFocus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
-        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok")]):
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok_exclusive")]):
             result = mail_move_to_label(["123"], label="Focus", account="david@techtiff.ai", source_mailbox="INBOX")
             assert result["attempted"] == 1
             assert result["moved"] == 1
+            assert result["inbox_removed"] == 1
             assert result["destination_mailbox"] == "Focus"
             assert result["results"][0]["status"] == "moved"
 
     def test_resolves_alias_label(self):
         raw_mailboxes = "Action\tdavid@techtiff.ai\nFocus\tdavid@techtiff.ai"
-        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok")]):
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok_exclusive")]):
             result = mail_move_to_label(["123"], label="focus", account="david@techtiff.ai")
             assert result["moved"] == 1
             assert result["destination_mailbox"] == "Focus"
 
     def test_resolves_unambiguous_partial_label(self):
         raw_mailboxes = "Focus\tdavid@techtiff.ai\nAction\tdavid@techtiff.ai"
-        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok")]):
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok_exclusive")]):
             result = mail_move_to_label(["123"], label="foc", account="david@techtiff.ai")
             assert result["moved"] == 1
             assert result["destination_mailbox"] == "Focus"
 
     def test_resolves_label_using_mailbox_path(self):
         raw_mailboxes = "Focus\tdavid@techtiff.ai\tWork/Focus\tmb-42"
-        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok")]):
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok_exclusive")]):
             result = mail_move_to_label(["123"], label="Work/Focus", account="david@techtiff.ai")
             assert result["moved"] == 1
             assert result["destination_mailbox"] == "Focus"
             assert result["destination_path"] == "Work/Focus"
+
+    def test_reports_when_message_stays_in_source_after_move(self):
+        raw_mailboxes = "Focus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
+        with patch("subprocess.run", side_effect=[_ok_result(raw_mailboxes), _ok_result("ok_labeled")]):
+            result = mail_move_to_label(["123"], label="focus", account="david@techtiff.ai")
+            assert result["attempted"] == 1
+            assert result["moved"] == 1
+            assert result["inbox_removed"] == 0
+            assert result["results"][0]["status"] == "moved_inbox_retained"
+
+    def test_uses_numeric_id_selector_for_digits(self):
+        raw_mailboxes = "Focus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
+        captured_scripts: list[str] = []
+
+        def fake_run(cmd, capture_output, text, timeout):
+            script = cmd[2]
+            captured_scripts.append(script)
+            if len(captured_scripts) == 1:
+                return _ok_result(raw_mailboxes)
+            return _ok_result("ok_exclusive")
+
+        with patch("subprocess.run", side_effect=fake_run):
+            result = mail_move_to_label(["21702"], label="focus", account="david@techtiff.ai")
+
+        assert result["moved"] == 1
+        assert len(captured_scripts) >= 2
+        assert "whose id is 21702" in captured_scripts[1]
+        assert 'whose id as text is "21702"' not in captured_scripts[1]
+
+    def test_uses_text_id_selector_for_nonnumeric_ids(self):
+        raw_mailboxes = "Focus\tdavid@techtiff.ai\nINBOX\tdavid@techtiff.ai"
+        captured_scripts: list[str] = []
+
+        def fake_run(cmd, capture_output, text, timeout):
+            script = cmd[2]
+            captured_scripts.append(script)
+            if len(captured_scripts) == 1:
+                return _ok_result(raw_mailboxes)
+            return _ok_result("ok_exclusive")
+
+        with patch("subprocess.run", side_effect=fake_run):
+            result = mail_move_to_label(["msg-abc"], label="focus", account="david@techtiff.ai")
+
+        assert result["moved"] == 1
+        assert len(captured_scripts) >= 2
+        assert 'whose id as text is "msg-abc"' in captured_scripts[1]
 
     def test_returns_error_for_ambiguous_label(self):
         raw_mailboxes = "Focus\tdavid@techtiff.ai\nFollow Ups\tdavid@techtiff.ai"

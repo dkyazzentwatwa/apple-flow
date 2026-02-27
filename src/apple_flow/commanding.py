@@ -55,6 +55,10 @@ _OBJECT_RE = re.compile(
     re.IGNORECASE,
 )
 
+_LABELS_CLAUSE_RE = re.compile(r"\blabels?\s*[:=]\s*([^\n.;]+)", re.IGNORECASE)
+_CLASSIFY_INTO_RE = re.compile(r"\bclassif(?:y|ication)?\b[^\n]*?\binto\b\s+([^\n.;]+)", re.IGNORECASE)
+_INTO_LABELS_RE = re.compile(r"\binto\s+labels?\s*[:=]?\s*([^\n.;]+)", re.IGNORECASE)
+
 
 def is_likely_mutating(text: str) -> bool:
     """Return True when text contains a mutating verb AND a concrete object noun.
@@ -63,6 +67,48 @@ def is_likely_mutating(text: str) -> bool:
     has a verb but no object noun, so it returns False.
     """
     return bool(_MUTATING_VERB_RE.search(text) and _OBJECT_RE.search(text))
+
+
+def extract_prompt_labels(text: str) -> list[str]:
+    """Extract a user-provided label list from free-form prompt text.
+
+    Supported examples:
+    - "labels: Focus, Noise, Action"
+    - "classify into Focus / Noise / Action"
+    - "move into labels Focus, Noise, Action"
+    """
+    if not text:
+        return []
+
+    match = (
+        _LABELS_CLAUSE_RE.search(text)
+        or _CLASSIFY_INTO_RE.search(text)
+        or _INTO_LABELS_RE.search(text)
+    )
+    if not match:
+        return []
+
+    raw = match.group(1).strip()
+    # Trim trailing clauses that usually start a new instruction.
+    raw = re.split(r"\b(?:based on|from|using|where|when)\b", raw, maxsplit=1, flags=re.IGNORECASE)[0]
+
+    chunks = re.split(r"\s*(?:,|/|\||\band\b)\s*", raw, flags=re.IGNORECASE)
+    labels: list[str] = []
+    seen: set[str] = set()
+    for chunk in chunks:
+        label = chunk.strip().strip("\"'`")
+        label = re.sub(r"^(?:the|a|an)\s+", "", label, flags=re.IGNORECASE)
+        label = re.sub(r"\s+", " ", label).strip()
+        if not label:
+            continue
+        normalized = label.lower()
+        if normalized in {"you decide", "decide", "which", "whichever"}:
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        labels.append(label)
+    return labels
 
 
 _PREFIX_TO_KIND = {

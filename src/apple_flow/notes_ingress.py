@@ -159,17 +159,17 @@ class AppleNotesIngress:
         script = f'''
         on sanitise(txt)
             -- Replace tabs with spaces
-            set AppleScript's text item delimiters to (ASCII character 9)
+            set AppleScript's text item delimiters to character id 9
             set parts to text items of txt
             set AppleScript's text item delimiters to " "
             set txt to parts as text
             -- Replace newlines (LF) with spaces
-            set AppleScript's text item delimiters to (ASCII character 10)
+            set AppleScript's text item delimiters to character id 10
             set parts to text items of txt
             set AppleScript's text item delimiters to " "
             set txt to parts as text
             -- Replace carriage returns with spaces
-            set AppleScript's text item delimiters to (ASCII character 13)
+            set AppleScript's text item delimiters to character id 13
             set parts to text items of txt
             set AppleScript's text item delimiters to " "
             set txt to parts as text
@@ -207,10 +207,10 @@ class AppleNotesIngress:
                     set nModDate to ""
                 end try
 
-                set end of outputLines to nId & (ASCII character 9) & nName & (ASCII character 9) & nBody & (ASCII character 9) & nModDate
+                set end of outputLines to nId & character id 9 & nName & character id 9 & nBody & character id 9 & nModDate
             end repeat
 
-            set AppleScript's text item delimiters to (ASCII character 10)
+            set AppleScript's text item delimiters to character id 10
             return (outputLines as text)
         end tell
         '''

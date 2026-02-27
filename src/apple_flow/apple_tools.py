@@ -164,15 +164,15 @@ def _notes_fetch_raw(folder: str = "", limit: int = 50) -> list[dict]:
 
     script = f'''
     on sanitise(txt)
-        set AppleScript's text item delimiters to (ASCII character 9)
+        set AppleScript's text item delimiters to character id 9
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
-        set AppleScript's text item delimiters to (ASCII character 10)
+        set AppleScript's text item delimiters to character id 10
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
-        set AppleScript's text item delimiters to (ASCII character 13)
+        set AppleScript's text item delimiters to character id 13
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
@@ -203,10 +203,10 @@ def _notes_fetch_raw(folder: str = "", limit: int = 50) -> list[dict]:
                 set nModDate to ""
             end try
 
-            set end of outputLines to nId & (ASCII character 9) & nName & (ASCII character 9) & nBody & (ASCII character 9) & nModDate
+            set end of outputLines to nId & character id 9 & nName & character id 9 & nBody & character id 9 & nModDate
         end repeat
 
-        set AppleScript's text item delimiters to (ASCII character 10)
+        set AppleScript's text item delimiters to character id 10
         return (outputLines as text)
     end tell
     '''
@@ -416,15 +416,15 @@ def _mail_fetch_raw(
 
     script = f'''
     on sanitise(txt)
-        set AppleScript's text item delimiters to (ASCII character 9)
+        set AppleScript's text item delimiters to character id 9
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
-        set AppleScript's text item delimiters to (ASCII character 10)
+        set AppleScript's text item delimiters to character id 10
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
-        set AppleScript's text item delimiters to (ASCII character 13)
+        set AppleScript's text item delimiters to character id 13
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
@@ -464,11 +464,11 @@ def _mail_fetch_raw(
                 set msgReadStr to "false"
                 if msgRead then set msgReadStr to "true"
 
-                set end of outputLines to msgId & (ASCII character 9) & msgSender & (ASCII character 9) & msgSubject & (ASCII character 9) & msgBody & (ASCII character 9) & msgDateStr & (ASCII character 9) & msgReadStr
+                set end of outputLines to msgId & character id 9 & msgSender & character id 9 & msgSubject & character id 9 & msgBody & character id 9 & msgDateStr & character id 9 & msgReadStr
             end if
         end repeat
 
-        set AppleScript's text item delimiters to (ASCII character 10)
+        set AppleScript's text item delimiters to character id 10
         return (outputLines as text)
     end tell
     '''
@@ -531,6 +531,7 @@ def mail_search(
 def mail_get_content(message_id: str, account: str = "", mailbox: str = "INBOX") -> str:
     """Return the full body of a specific email by ID, or '' if not found."""
     esc_id = message_id.replace('"', '\\"')
+    id_match = f"id is {int(message_id)}" if message_id.isdigit() else f'id as text is "{esc_id}"'
     if account:
         esc_account = account.replace('"', '\\"')
         esc_mailbox = mailbox.replace('"', '\\"')
@@ -541,7 +542,7 @@ def mail_get_content(message_id: str, account: str = "", mailbox: str = "INBOX")
     script = f'''
     tell application "Mail"
         try
-            set matchedMsg to first message of {mailbox_ref} whose id as text is "{esc_id}"
+            set matchedMsg to first message of {mailbox_ref} whose {id_match}
             return content of matchedMsg as text
         on error
             return ""
@@ -633,15 +634,15 @@ def mail_list_mailboxes(
 
     script = f'''
     on sanitise(txt)
-        set AppleScript's text item delimiters to (ASCII character 9)
+        set AppleScript's text item delimiters to character id 9
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
-        set AppleScript's text item delimiters to (ASCII character 10)
+        set AppleScript's text item delimiters to character id 10
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
-        set AppleScript's text item delimiters to (ASCII character 13)
+        set AppleScript's text item delimiters to character id 13
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
@@ -660,7 +661,7 @@ def mail_list_mailboxes(
                 on error
                     set mbId to ""
                 end try
-                set end of outputLines to mbName & (ASCII character 9) & accountName & (ASCII character 9) & mbPath & (ASCII character 9) & mbId
+                set end of outputLines to mbName & character id 9 & accountName & character id 9 & mbPath & character id 9 & mbId
 
                 try
                     set childMailboxes to every mailbox of mb
@@ -693,7 +694,7 @@ def mail_list_mailboxes(
                 -- Ignore accounts that cannot be read.
             end try
         end repeat
-        set AppleScript's text item delimiters to (ASCII character 10)
+        set AppleScript's text item delimiters to character id 10
         return outputLines as text
     end tell
     '''
@@ -900,9 +901,11 @@ def mail_move_to_label(
         source_ref = f'mailbox "{esc_source}"'
 
     moved = 0
+    inbox_removed = 0
     results: list[dict[str, str]] = []
     for message_id in cleaned_ids:
         esc_id = message_id.replace('"', '\\"')
+        match_clause = f"id is {int(message_id)}" if message_id.isdigit() else f'id as text is "{esc_id}"'
         script = f'''
         using terms from application "Mail"
             on findMailboxById(targetId, mailboxList)
@@ -989,18 +992,50 @@ def mail_move_to_label(
                     end repeat
                 end if
                 if destinationBox is missing value then error "destination mailbox not found"
-                set matchedMsg to first message of sourceBox whose id as text is "{esc_id}"
-                move matchedMsg to destinationBox
-                return "ok"
+                set sourceMatches to (every message of sourceBox whose {match_clause})
+                if (count of sourceMatches) is 0 then error "message not found in source mailbox"
+
+                repeat with matchedMsg in sourceMatches
+                    move matchedMsg to destinationBox
+                end repeat
+
+                set sourceRemaining to count of (every message of sourceBox whose {match_clause})
+                set destinationCount to count of (every message of destinationBox whose {match_clause})
+
+                -- Some accounts behave like label assignment; retry once if source still has the message.
+                if destinationCount > 0 and sourceRemaining > 0 then
+                    repeat with lingeringMsg in (every message of sourceBox whose {match_clause})
+                        move lingeringMsg to destinationBox
+                    end repeat
+                    set sourceRemaining to count of (every message of sourceBox whose {match_clause})
+                    set destinationCount to count of (every message of destinationBox whose {match_clause})
+                end if
+
+                if destinationCount > 0 and sourceRemaining is 0 then
+                    return "ok_exclusive"
+                else if destinationCount > 0 then
+                    return "ok_labeled"
+                end if
+                return "error: destination mailbox did not receive message"
             on error errMsg
                 return "error: " & errMsg
             end try
         end tell
         '''
         result = _run_script(script, timeout=30.0)
-        if result == "ok":
+        if result in {"ok", "ok_exclusive"}:
             moved += 1
+            inbox_removed += 1
             results.append({"message_id": message_id, "status": "moved"})
+        elif result == "ok_labeled":
+            moved += 1
+            results.append(
+                {
+                    "message_id": message_id,
+                    "status": "moved_inbox_retained",
+                    "warning": "message moved to destination but still visible in source mailbox",
+                }
+            )
         else:
             results.append(
                 {
@@ -1014,6 +1049,7 @@ def mail_move_to_label(
         "attempted": attempted,
         "moved": moved,
         "failed": attempted - moved,
+        "inbox_removed": inbox_removed,
         "destination_mailbox": destination_name,
         "destination_path": destination_path,
         "destination_account": destination_account,
@@ -1073,15 +1109,15 @@ def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplet
 
     script = f'''
     on sanitise(txt)
-        set AppleScript's text item delimiters to (ASCII character 9)
+        set AppleScript's text item delimiters to character id 9
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
-        set AppleScript's text item delimiters to (ASCII character 10)
+        set AppleScript's text item delimiters to character id 10
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
-        set AppleScript's text item delimiters to (ASCII character 13)
+        set AppleScript's text item delimiters to character id 13
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
@@ -1120,10 +1156,10 @@ def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplet
                 set remList to ""
             end try
 
-            set end of outputLines to remId & (ASCII character 9) & remName & (ASCII character 9) & remBody & (ASCII character 9) & remDue & (ASCII character 9) & remCompletedStr & (ASCII character 9) & remList
+            set end of outputLines to remId & character id 9 & remName & character id 9 & remBody & character id 9 & remDue & character id 9 & remCompletedStr & character id 9 & remList
         end repeat
 
-        set AppleScript's text item delimiters to (ASCII character 10)
+        set AppleScript's text item delimiters to character id 10
         return (outputLines as text)
     end tell
     '''
@@ -1311,15 +1347,15 @@ def _calendar_fetch_raw(calendar: str = "", days_ahead: int = 7, limit: int = 50
 
     script = f'''
     on sanitise(txt)
-        set AppleScript's text item delimiters to (ASCII character 9)
+        set AppleScript's text item delimiters to character id 9
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
-        set AppleScript's text item delimiters to (ASCII character 10)
+        set AppleScript's text item delimiters to character id 10
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
-        set AppleScript's text item delimiters to (ASCII character 13)
+        set AppleScript's text item delimiters to character id 13
         set parts to text items of txt
         set AppleScript's text item delimiters to " "
         set txt to parts as text
@@ -1362,10 +1398,10 @@ def _calendar_fetch_raw(calendar: str = "", days_ahead: int = 7, limit: int = 50
                 set evtCal to ""
             end try
 
-            set end of outputLines to evtId & (ASCII character 9) & evtSummary & (ASCII character 9) & evtDescription & (ASCII character 9) & evtStart & (ASCII character 9) & evtEnd & (ASCII character 9) & evtCal
+            set end of outputLines to evtId & character id 9 & evtSummary & character id 9 & evtDescription & character id 9 & evtStart & character id 9 & evtEnd & character id 9 & evtCal
         end repeat
 
-        set AppleScript's text item delimiters to (ASCII character 10)
+        set AppleScript's text item delimiters to character id 10
         return (outputLines as text)
     end tell
     '''

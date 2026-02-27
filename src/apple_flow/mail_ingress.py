@@ -130,17 +130,17 @@ class AppleMailIngress:
         script = f'''
         on sanitise(txt)
             -- Replace tabs with spaces
-            set AppleScript's text item delimiters to (ASCII character 9)
+            set AppleScript's text item delimiters to character id 9
             set parts to text items of txt
             set AppleScript's text item delimiters to " "
             set txt to parts as text
             -- Replace newlines (LF) with spaces
-            set AppleScript's text item delimiters to (ASCII character 10)
+            set AppleScript's text item delimiters to character id 10
             set parts to text items of txt
             set AppleScript's text item delimiters to " "
             set txt to parts as text
             -- Replace carriage returns with spaces
-            set AppleScript's text item delimiters to (ASCII character 13)
+            set AppleScript's text item delimiters to character id 13
             set parts to text items of txt
             set AppleScript's text item delimiters to " "
             set txt to parts as text
@@ -181,11 +181,11 @@ class AppleMailIngress:
                         set msgDate to ""
                     end try
 
-                    set end of outputLines to msgId & (ASCII character 9) & msgSender & (ASCII character 9) & msgSubject & (ASCII character 9) & msgBody & (ASCII character 9) & msgDate
+                    set end of outputLines to msgId & character id 9 & msgSender & character id 9 & msgSubject & character id 9 & msgBody & character id 9 & msgDate
                 end if
             end repeat
 
-            set AppleScript's text item delimiters to (ASCII character 10)
+            set AppleScript's text item delimiters to character id 10
             return (outputLines as text)
         end tell
         '''

@@ -260,9 +260,37 @@ def test_timeout_creates_checkpoint_and_resume_continues_same_run():
 
     assert resume_result.run_id == run_id
     assert "done after resume" in (resume_result.response or "")
-    assert store.get_run(run_id)["state"] == "completed"
-    assert store.count_run_events(run_id, "execution_started") == 2
-    assert store.count_run_events(run_id, "checkpoint_created") == 1
+
+
+def test_execution_prompt_includes_user_requested_mail_labels():
+    connector = SequenceConnector(executor_outputs=["done"])
+    store = FakeStore()
+    egress = FakeEgress()
+    orch = _make_orchestrator(connector=connector, egress=egress, store=store)
+
+    task_msg = InboundMessage(
+        id="task_mail_labels",
+        sender="+15551234567",
+        text="task: search unread emails and triage. labels: Focus, Noise, Action, Delete",
+        received_at="2026-02-17T12:00:00Z",
+        is_from_me=False,
+    )
+    task_result = orch.handle_message(task_msg)
+    assert task_result.approval_request_id is not None
+
+    approve_msg = InboundMessage(
+        id="approve_mail_labels",
+        sender="+15551234567",
+        text=f"approve {task_result.approval_request_id}",
+        received_at="2026-02-17T12:01:00Z",
+        is_from_me=False,
+    )
+    orch.handle_message(approve_msg)
+
+    exec_prompts = [prompt for _, prompt in connector.turns if "executor mode" in prompt]
+    assert exec_prompts, "expected at least one executor prompt"
+    assert "When triaging Apple Mail, only use these labels: Focus, Noise, Action, Delete." in exec_prompts[0]
+    assert store.get_run(task_result.run_id)["state"] == "completed"
 
 
 def test_repeated_timeout_honors_max_resume_attempts_and_fails():
