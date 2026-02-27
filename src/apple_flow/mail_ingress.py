@@ -92,7 +92,30 @@ class AppleMailIngress:
 
         # Mark only processed messages as read so they are not re-polled.
         if processed_ids:
-            self._mark_as_read(processed_ids)
+            read_outcomes = self._mark_as_read(processed_ids)
+            if not isinstance(read_outcomes, dict):
+                read_outcomes = {}
+            not_found_ids = [msg_id for msg_id, status in read_outcomes.items() if status == "not_found"]
+            error_ids = [msg_id for msg_id, status in read_outcomes.items() if status == "error"]
+            fallback_matches = sum(1 for status in read_outcomes.values() if status == "fallback_matched")
+            if fallback_matches:
+                logger.info(
+                    "Mail read-state fallback matched %s message(s) outside mailbox=%r",
+                    fallback_matches,
+                    self.mailbox,
+                )
+            if not_found_ids:
+                logger.warning(
+                    "Could not mark %s email(s) as read (not found after fallback): %s",
+                    len(not_found_ids),
+                    ", ".join(not_found_ids[:10]),
+                )
+            if error_ids:
+                logger.warning(
+                    "Failed to mark %s email(s) as read due to AppleScript errors: %s",
+                    len(error_ids),
+                    ", ".join(error_ids[:10]),
+                )
 
         return messages[:limit]
 
@@ -231,10 +254,15 @@ class AppleMailIngress:
             })
         return messages
 
-    def _mark_as_read(self, message_ids: list[str]) -> None:
-        """Mark processed emails as read so they are not re-polled."""
+    def _mark_as_read(self, message_ids: list[str]) -> dict[str, str]:
+        """Mark processed emails as read so they are not re-polled.
+
+        Returns:
+            Mapping of message id -> status where status is one of:
+            matched, fallback_matched, not_found, error
+        """
         if not message_ids:
-            return
+            return {}
 
         if self.account:
             mailbox_ref = f'mailbox "{self.mailbox}" of account "{self.account}"'
@@ -243,23 +271,56 @@ class AppleMailIngress:
 
         sanitized_ids = [mid.replace(chr(34), "") for mid in message_ids if mid]
         if not sanitized_ids:
-            return
+            return {}
 
-        # Build AppleScript with proper indentation (tabs inside tell block)
-        id_lines = "\n".join(
-            [
-                f'''\ttry
-\t\tset matchedMsg to first message of {mailbox_ref} whose id as text is "{mid}"
-\t\tset read status of matchedMsg to true
+        def _id_block(mid: str) -> str:
+            return f'''
+\tset statusForId to "not_found"
+\tset resolvedMsg to missing value
+\tset foundInPrimary to false
+\ttry
+\t\tset resolvedMsg to first message of {mailbox_ref} whose id as text is "{mid}"
+\t\tset foundInPrimary to true
 \ton error
-\t\t-- Skip messages that can no longer be found.
-\tend try'''
-                for mid in sanitized_ids
-            ]
-        )
+\t\tset resolvedMsg to missing value
+\tend try
+\tif resolvedMsg is missing value then
+\t\trepeat with acc in every account
+\t\t\tset accountMailboxes to every mailbox of acc
+\t\t\trepeat with boxRef in accountMailboxes
+\t\t\t\ttry
+\t\t\t\t\tset resolvedMsg to first message of boxRef whose id as text is "{mid}"
+\t\t\t\t\texit repeat
+\t\t\t\ton error
+\t\t\t\t\tset resolvedMsg to missing value
+\t\t\t\tend try
+\t\t\tend repeat
+\t\t\tif resolvedMsg is not missing value then exit repeat
+\t\tend repeat
+\tend if
+\tif resolvedMsg is missing value then
+\t\tset statusForId to "not_found"
+\telse
+\t\ttry
+\t\t\tset read status of resolvedMsg to true
+\t\t\tif foundInPrimary then
+\t\t\t\tset statusForId to "matched"
+\t\t\telse
+\t\t\t\tset statusForId to "fallback_matched"
+\t\t\tend if
+\t\ton error
+\t\t\tset statusForId to "error"
+\t\tend try
+\tend if
+\tset end of outputLines to "{mid}" & character id 9 & statusForId
+'''
 
+        id_lines = "\n".join(_id_block(mid) for mid in sanitized_ids)
         script = f'''tell application "Mail"
+\tset outputLines to {{}}
 {id_lines}
+\tset AppleScript's text item delimiters to character id 10
+\treturn (outputLines as text)
 end tell'''
 
         try:
@@ -275,10 +336,30 @@ end tell'''
                     result.returncode,
                     result.stderr.strip() or "Unknown AppleScript error",
                 )
-            else:
-                logger.debug("Marked %s email(s) as read", len(sanitized_ids))
+                return {mid: "error" for mid in sanitized_ids}
+            return self._parse_mark_read_outcomes(result.stdout, sanitized_ids)
         except Exception as exc:
             logger.warning("Failed to mark %s email(s) as read: %s", len(sanitized_ids), exc)
+            return {mid: "error" for mid in sanitized_ids}
+
+    @staticmethod
+    def _parse_mark_read_outcomes(output: str, message_ids: list[str]) -> dict[str, str]:
+        outcomes: dict[str, str] = {}
+        valid_statuses = {"matched", "fallback_matched", "not_found", "error"}
+        for line in (output or "").splitlines():
+            parts = line.split("\t")
+            if len(parts) != 2:
+                continue
+            msg_id, status = parts[0].strip(), parts[1].strip()
+            if not msg_id:
+                continue
+            if status not in valid_statuses:
+                status = "error"
+            outcomes[msg_id] = status
+        for msg_id in message_ids:
+            if msg_id not in outcomes:
+                outcomes[msg_id] = "error"
+        return outcomes
 
     @staticmethod
     def _extract_email_address(sender_raw: str) -> str:

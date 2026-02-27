@@ -1,4 +1,6 @@
 import asyncio
+import sqlite3
+import threading
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -118,7 +120,8 @@ def test_relaydaemon_wires_gemini_approval_mode(monkeypatch, tmp_path):
 
     class _FakeStore:
         def __init__(self, _path):
-            pass
+            self._conn = sqlite3.connect(":memory:")
+            self._lock = threading.Lock()
 
         def bootstrap(self):
             pass
@@ -128,6 +131,9 @@ def test_relaydaemon_wires_gemini_approval_mode(monkeypatch, tmp_path):
 
         def set_state(self, _key, _value):
             pass
+
+        def _connect(self):
+            return self._conn
 
     class _FakeIngress:
         def __init__(self, *_args, **_kwargs):
@@ -247,6 +253,52 @@ async def test_mail_poll_loop_forwards_non_duplicate_response():
     assert len(sent) == 1
     assert sent[0][0] == "+15551230000"
     assert "📧 Mail from user@example.com" in sent[0][1]
+
+
+@pytest.mark.asyncio
+async def test_mail_poll_loop_skips_reprocessing_inflight_email():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    daemon._shutdown_requested = False
+    daemon.settings = SimpleNamespace(mail_allowed_senders=[], poll_interval_seconds=0)
+    daemon._concurrency_sem = asyncio.Semaphore(2)
+    daemon._mail_owner = ""
+
+    inbound = InboundMessage(
+        id="mail_55",
+        sender="user@example.com",
+        text="relay: hello",
+        received_at="2026-01-01T00:00:00Z",
+        is_from_me=False,
+    )
+
+    fetch_calls = 0
+
+    def _fetch_new(**kwargs):
+        nonlocal fetch_calls
+        fetch_calls += 1
+        if fetch_calls >= 2:
+            daemon._shutdown_requested = True
+        return [inbound]
+
+    daemon.mail_ingress = SimpleNamespace(fetch_new=_fetch_new)
+    daemon.mail_egress = SimpleNamespace(was_recent_outbound=lambda sender, text: False)
+    daemon.egress = SimpleNamespace(send=lambda *args, **kwargs: None)
+
+    handled = 0
+
+    class _FakeMailOrchestrator:
+        def handle_message(self, msg):
+            nonlocal handled
+            handled += 1
+            import time
+
+            time.sleep(0.05)
+            return SimpleNamespace(kind=CommandKind.CHAT, response="", run_id=None)
+
+    daemon.mail_orchestrator = _FakeMailOrchestrator()
+
+    await daemon._poll_mail_loop()
+    assert handled == 1
 
 
 @pytest.mark.asyncio

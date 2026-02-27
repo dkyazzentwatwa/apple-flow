@@ -492,6 +492,7 @@ class RelayDaemon:
 
         self._concurrency_sem = asyncio.Semaphore(settings.max_concurrent_ai_calls)
         self._inflight_dispatch_tasks: set[asyncio.Task] = set()
+        self._inflight_mail_ids: set[str] = set()
 
         persisted_cursor = self.store.get_state("last_rowid")
         self._last_rowid: int | None = int(persisted_cursor) if persisted_cursor is not None else None
@@ -818,6 +819,8 @@ class RelayDaemon:
         assert self.mail_ingress is not None
         assert self.mail_egress is not None
         assert self.mail_orchestrator is not None
+        if not hasattr(self, "_inflight_mail_ids"):
+            self._inflight_mail_ids = set()
 
         logger.info("Apple Mail polling loop started")
         while not self._shutdown_requested:
@@ -828,13 +831,16 @@ class RelayDaemon:
                     require_sender_filter=bool(mail_allowlist),
                 )
                 dispatchable_mail = []
+                suppressed_empty = 0
+                suppressed_echo = 0
+                suppressed_inflight = 0
                 for msg in messages:
                     if self._shutdown_requested:
                         break
                     if not msg.text.strip():
-                        logger.info("Ignoring empty inbound email id=%s sender=%s", msg.id, msg.sender)
+                        suppressed_empty += 1
                         continue
-                    logger.info(
+                    logger.debug(
                         "Inbound email id=%s sender=%s chars=%s text=%r",
                         msg.id,
                         msg.sender,
@@ -842,9 +848,15 @@ class RelayDaemon:
                         msg.text[:120],
                     )
                     if self.mail_egress.was_recent_outbound(msg.sender, msg.text):
-                        logger.info("Ignoring probable outbound echo from %s (id=%s)", msg.sender, msg.id)
+                        suppressed_echo += 1
+                        logger.debug("Ignoring probable outbound echo from %s (id=%s)", msg.sender, msg.id)
+                        continue
+                    if msg.id in self._inflight_mail_ids:
+                        suppressed_inflight += 1
+                        logger.debug("Skipping in-flight inbound email id=%s sender=%s", msg.id, msg.sender)
                         continue
                     dispatchable_mail.append(msg)
+                    self._inflight_mail_ids.add(msg.id)
 
                 async def _dispatch_mail(msg):
                     async with self._concurrency_sem:
@@ -854,7 +866,7 @@ class RelayDaemon:
                             duration = time.monotonic() - started_at
                             if result.response in {"ignored_empty", "ignored_missing_chat_prefix", "duplicate"}:
                                 if result.response == "duplicate":
-                                    logger.info(
+                                    logger.debug(
                                         "Ignoring duplicate inbound email id=%s sender=%s",
                                         msg.id,
                                         msg.sender,
@@ -896,11 +908,29 @@ class RelayDaemon:
                                 msg.sender,
                                 exc,
                             )
+                        finally:
+                            self._inflight_mail_ids.discard(msg.id)
 
                 if dispatchable_mail:
+                    logger.info(
+                        "Mail poll fetched=%s dispatchable=%s skipped_empty=%s skipped_echo=%s skipped_inflight=%s",
+                        len(messages),
+                        len(dispatchable_mail),
+                        suppressed_empty,
+                        suppressed_echo,
+                        suppressed_inflight,
+                    )
                     for msg in dispatchable_mail:
                         self._spawn_dispatch_task(_dispatch_mail(msg))
                     await self._flush_inflight_on_shutdown()
+                elif messages:
+                    logger.info(
+                        "Mail poll fetched=%s dispatchable=0 skipped_empty=%s skipped_echo=%s skipped_inflight=%s",
+                        len(messages),
+                        suppressed_empty,
+                        suppressed_echo,
+                        suppressed_inflight,
+                    )
             except Exception as exc:
                 logger.exception("Mail polling loop error: %s", exc)
 

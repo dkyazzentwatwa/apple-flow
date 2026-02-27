@@ -214,3 +214,29 @@ def test_mark_as_read_targets_ids_directly(monkeypatch):
     assert 'first message of inbox whose id as text is "43"' in script
     assert "every message of inbox whose read status is false" not in script
     assert captured["kwargs"]["timeout"] == 30
+
+
+def test_parse_mark_read_outcomes_defaults_missing_ids_to_error():
+    outcomes = AppleMailIngress._parse_mark_read_outcomes(
+        "42\tmatched\n43\tfallback_matched",
+        ["42", "43", "44"],
+    )
+    assert outcomes["42"] == "matched"
+    assert outcomes["43"] == "fallback_matched"
+    assert outcomes["44"] == "error"
+
+
+def test_mark_as_read_returns_fallback_and_not_found(monkeypatch):
+    ingress = AppleMailIngress()
+
+    def fake_run(cmd, **kwargs):
+        return SimpleNamespace(
+            returncode=0,
+            stdout="42\tfallback_matched\n43\tnot_found\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr("apple_flow.mail_ingress.subprocess.run", fake_run)
+
+    outcomes = ingress._mark_as_read(["42", "43"])
+    assert outcomes == {"42": "fallback_matched", "43": "not_found"}
