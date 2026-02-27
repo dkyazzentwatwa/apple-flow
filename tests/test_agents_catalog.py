@@ -28,10 +28,10 @@ def test_catalog_has_expected_team_count_and_unique_slugs() -> None:
     data = _load_catalog()
     teams = data["teams"]
 
-    assert len(teams) == 36
+    assert len(teams) == 37
 
     slugs = [t["slug"] for t in teams]
-    assert len(set(slugs)) == 36
+    assert len(set(slugs)) == 37
 
 
 def test_every_team_folder_contains_required_files_and_parseable_toml() -> None:

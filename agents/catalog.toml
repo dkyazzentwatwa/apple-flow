@@ -112,6 +112,12 @@ title = "Prospecting and Qualification Team"
 summary = "Source leads and score fit against ICP criteria."
 
 [[teams]]
+slug = "lead-generation-agent"
+category = "software_gtm"
+title = "Lead Generation Agent Team"
+summary = "Source and qualify leads, then produce practical outreach sequencing plans."
+
+[[teams]]
 slug = "content-outreach-team"
 category = "software_gtm"
 title = "Content and Outreach Team"
@@ -218,4 +224,3 @@ slug = "partnership-operations-team"
 category = "business_ops"
 title = "Partnership Operations Team"
 summary = "Run partnership lifecycle operations from sourcing to expansion."
-

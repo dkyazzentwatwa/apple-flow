@@ -12,7 +12,7 @@ Apple Flow now ships a codex-native multi-agent team library under `/agents`.
 ## Categories
 
 - Apple Flow Ops (12)
-- Software/GTM (12)
+- Software/GTM (13)
 - Business Ops (12)
 
 ## Activation

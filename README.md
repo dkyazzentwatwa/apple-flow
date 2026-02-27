@@ -54,10 +54,10 @@ Your AI companion watches your life and sends proactive iMessage updates:
 
 ## 🧠 Agent Teams (Codex Multi-Agent Presets)
 
-Apple Flow includes a codex-native team library under `/agents` with 36 niche, reusable multi-agent workflows:
+Apple Flow includes a codex-native team library under `/agents` with 37 niche, reusable multi-agent workflows:
 
 - 12 Apple Flow Ops teams
-- 12 Software/GTM teams
+- 13 Software/GTM teams
 - 12 Business Ops teams
 
 Each team bundle includes:
@@ -357,7 +357,7 @@ You should get a reply within seconds.
 | `deny all` | 🗑️ Cancel all pending approvals |
 | `status` | 📊 Show pending approvals + active runs |
 | `status <run_id|request_id>` | 🔎 Show timeline/details for one run/request |
-| `health:` | 🏥 Daemon health check |
+| `health` | 🏥 Daemon health check |
 | `history: [query]` | 🔍 Message history |
 | `usage` | 📈 Token usage stats |
 | `clear context` | 🔄 Reset conversation |
@@ -433,6 +433,18 @@ apple_flow_cline_model=kimi-k2  # or gpt-4o, deepseek, etc.
 - Full agentic execution with any model provider
 - Supports: Kimi k2, GLM-5, Minimax, DeepSeek, Groq, and more
 - Best for users without Claude/OpenAI subscriptions
+
+### Kilo CLI
+
+```env
+apple_flow_connector=kilo-cli
+apple_flow_kilo_cli_model=google/gemini-3-flash-preview
+apple_flow_kilo_cli_context_window=10
+```
+
+- Uses `kilo` for stateless execution
+- Good balance between tool orchestration and model flexibility
+- Requires `npm install -g @kilocode/cli` and `kilo auth login`
 
 ---
 

@@ -19,8 +19,9 @@ def _run(cmd: list[str], env: dict[str, str] | None = None) -> subprocess.Comple
 
 def test_list_teams_outputs_all_teams() -> None:
     out = _run([str(LIST_SCRIPT)]).stdout.strip().splitlines()
-    assert len(out) == 36
+    assert len(out) == 37
     assert any(line.startswith("imessage-command-center") for line in out)
+    assert any(line.startswith("lead-generation-agent") for line in out)
     assert any(line.startswith("partnership-operations-team") for line in out)
 
 

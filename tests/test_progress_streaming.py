@@ -1,6 +1,7 @@
 """Tests for progress streaming during long tasks."""
 
 from dataclasses import dataclass, field
+import time
 
 from conftest import FakeEgress, FakeStore
 
@@ -44,6 +45,28 @@ class StreamingConnector:
 
     def shutdown(self) -> None:
         pass
+
+
+@dataclass
+class SilentStreamingConnector(StreamingConnector):
+    """Streaming connector that emits no incremental output."""
+
+    def run_turn_streaming(self, thread_id: str, prompt: str, on_progress=None) -> str:
+        self.stream_calls.append((thread_id, prompt))
+        time.sleep(0.03)
+        return "Streaming result: silent"
+
+
+@dataclass
+class SparseStreamingConnector(StreamingConnector):
+    """Streaming connector that emits one line then goes quiet briefly."""
+
+    def run_turn_streaming(self, thread_id: str, prompt: str, on_progress=None) -> str:
+        self.stream_calls.append((thread_id, prompt))
+        if on_progress:
+            on_progress("line: setup done\n")
+        time.sleep(0.03)
+        return "Streaming result: sparse"
 
 
 def _make_orchestrator(enable_streaming=True, progress_interval=0.0):
@@ -119,3 +142,65 @@ def test_progress_sends_updates_to_sender():
     # Check that progress updates were sent
     progress_messages = [text for _, text in orch.egress.messages if "[Progress]" in text]
     assert len(progress_messages) > 0
+
+
+def test_heartbeat_reports_no_streamed_output_detail():
+    orch = RelayOrchestrator(
+        connector=SilentStreamingConnector(),
+        egress=FakeEgress(),
+        store=FakeStore(),
+        allowed_workspaces=["/workspace/default"],
+        default_workspace="/workspace/default",
+        require_chat_prefix=False,
+        enable_progress_streaming=True,
+        progress_update_interval_seconds=0.0,
+    )
+    orch._approval.execution_heartbeat_seconds = 0.01
+
+    msg = InboundMessage(
+        id="m10", sender="+15551234567", text="task: deploy code",
+        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+    approve_msg = InboundMessage(
+        id="m11", sender="+15551234567", text=f"approve {result.approval_request_id}",
+        received_at="2026-02-17T12:01:00Z", is_from_me=False,
+    )
+    orch.handle_message(approve_msg)
+
+    heartbeat_messages = [text for _, text in orch.egress.messages if "Still working" in text]
+    assert heartbeat_messages
+    assert any("no streamed output yet" in text for text in heartbeat_messages)
+    heartbeat_events = [evt for evt in orch.store.events if evt.get("event_type") == "heartbeat"]
+    assert any("no_output_seconds" in (evt.get("payload") or {}) for evt in heartbeat_events)
+
+
+def test_heartbeat_reports_last_output_staleness():
+    orch = RelayOrchestrator(
+        connector=SparseStreamingConnector(),
+        egress=FakeEgress(),
+        store=FakeStore(),
+        allowed_workspaces=["/workspace/default"],
+        default_workspace="/workspace/default",
+        require_chat_prefix=False,
+        enable_progress_streaming=True,
+        progress_update_interval_seconds=0.0,
+    )
+    orch._approval.execution_heartbeat_seconds = 0.01
+
+    msg = InboundMessage(
+        id="m12", sender="+15551234567", text="task: deploy code",
+        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+    approve_msg = InboundMessage(
+        id="m13", sender="+15551234567", text=f"approve {result.approval_request_id}",
+        received_at="2026-02-17T12:01:00Z", is_from_me=False,
+    )
+    orch.handle_message(approve_msg)
+
+    heartbeat_messages = [text for _, text in orch.egress.messages if "Still working" in text]
+    assert heartbeat_messages
+    assert any("last output" in text for text in heartbeat_messages)
+    heartbeat_events = [evt for evt in orch.store.events if evt.get("event_type") == "heartbeat"]
+    assert any((evt.get("payload") or {}).get("last_snippet") == "line: setup done" for evt in heartbeat_events)

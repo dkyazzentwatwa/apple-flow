@@ -614,12 +614,20 @@ class ApprovalHandler:
         team_context: dict[str, Any] | None = None,
     ) -> str:
         last_update = 0.0
+        progress_state: dict[str, Any] = {
+            "last_output_monotonic": None,
+            "last_snippet": "",
+        }
 
         def on_progress(line: str) -> None:
             nonlocal last_update
             now = time.monotonic()
+            preview = line.strip()[:200]
+            if preview:
+                progress_state["last_output_monotonic"] = now
+                progress_state["last_snippet"] = preview
+
             if (now - last_update) >= self.progress_update_interval_seconds:
-                preview = line.strip()[:200]
                 if preview:
                     self._safe_send(sender, f"[Progress] {preview}")
                     self._create_event(
@@ -636,6 +644,7 @@ class ApprovalHandler:
             run_id=run_id,
             step=step,
             phase=phase,
+            progress_state=progress_state,
         )
 
     def _run_with_heartbeat(
@@ -645,6 +654,7 @@ class ApprovalHandler:
         run_id: str,
         step: str,
         phase: str,
+        progress_state: dict[str, Any] | None = None,
     ) -> str:
         done = threading.Event()
         result: dict[str, str] = {}
@@ -663,14 +673,30 @@ class ApprovalHandler:
         thread.start()
 
         while not done.wait(timeout=self.execution_heartbeat_seconds):
-            elapsed = int(time.monotonic() - start)
-            msg = f"⏳ Still working ({phase}) — {elapsed}s elapsed."
+            now = time.monotonic()
+            elapsed = int(now - start)
+            payload: dict[str, Any] = {"phase": phase, "elapsed_seconds": elapsed}
+            detail = "no streamed output yet"
+
+            if progress_state:
+                last_output = progress_state.get("last_output_monotonic")
+                last_snippet = str(progress_state.get("last_snippet") or "")
+                if isinstance(last_output, (int, float)):
+                    stale_for = max(0, int(now - float(last_output)))
+                    payload["no_output_seconds"] = stale_for
+                    if last_snippet:
+                        detail = f"last output {stale_for}s ago: {last_snippet}"
+                        payload["last_snippet"] = last_snippet
+                else:
+                    payload["no_output_seconds"] = elapsed
+
+            msg = f"⏳ Still working ({phase}) — {elapsed}s elapsed; {detail}."
             self._safe_send(sender, msg)
             self._create_event(
                 run_id=run_id,
                 step=step,
                 event_type="heartbeat",
-                payload={"phase": phase, "elapsed_seconds": elapsed},
+                payload=payload,
             )
 
         if "exc" in error:

@@ -131,7 +131,7 @@ Only `SCAFFOLD.md`, `setup.sh`, and `SOUL.md` are tracked by git. Everything els
 | `gemini_cli_connector.py` | Stateless CLI connector using `gemini -p` |
 | `cline_connector.py` | Agentic CLI connector using `cline -y`, supports any model provider |
 | `codex_connector.py` | Stateful app-server connector via JSON-RPC (deprecated fallback) |
-| `main.py` | FastAPI admin endpoints (/sessions, /approvals, /events, POST /task) |
+| `main.py` | FastAPI admin endpoints (/health, /sessions, /approvals, /audit/events, POST /task) |
 | `admin_client.py` | Admin API client library (programmatic access to admin endpoints) |
 | `protocols.py` | Protocol interfaces for type-safe component injection (StoreProtocol, ConnectorProtocol, EgressProtocol) |
 | `models.py` | Data models and enums (RunState, ApprovalStatus, CommandKind, InboundMessage, ApprovalRequest) |
@@ -159,15 +159,15 @@ Only `SCAFFOLD.md`, `setup.sh`, and `SOUL.md` are tracked by git. Everything els
 
 ```python
 class RunState(str, Enum):
-    RECEIVED, PLANNING, AWAITING_APPROVAL, EXECUTING,
-    VERIFYING, COMPLETED, FAILED, DENIED
+    RECEIVED, PLANNING, AWAITING_APPROVAL, QUEUED, RUNNING, EXECUTING,
+    VERIFYING, CHECKPOINTED, COMPLETED, FAILED, DENIED, CANCELLED
 
 class ApprovalStatus(str, Enum):
     PENDING, APPROVED, DENIED, EXPIRED
 
 class CommandKind(str, Enum):
     CHAT, IDEA, PLAN, TASK, PROJECT, CLEAR_CONTEXT,
-    APPROVE, DENY, STATUS, HEALTH, HISTORY
+    APPROVE, DENY, DENY_ALL, STATUS, HEALTH, HISTORY, USAGE, SYSTEM, LOGS
 ```
 
 ### Dataclasses (models.py)
@@ -196,13 +196,14 @@ class ApprovalRequest:
 
 ## Command Types
 
-- **Non-mutating** (execute immediately): `relay:`, `idea:`, `plan:`
+- **Non-mutating** (execute immediately): `<anything>`, `relay:` (when prefix mode enabled), `idea:`, `plan:`
 - **Mutating** (require approval): `task:`, `project:`
 - **Control**: `approve <id>`, `deny <id>`, `deny all`, `status`, `clear context`
-- **Dashboard**: `health:` (daemon stats, uptime, session count)
+- **Dashboard**: `health` (daemon stats, uptime, session count)
 - **Memory**: `history:` (recent messages), `history: <query>` (search messages)
 - **Workspace routing**: `@alias` prefix on any command (e.g. `task: @web-app deploy`)
 - **Companion control**: `system: mute` (silence proactive messages), `system: unmute` (re-enable)
+- **Tooling controls**: `logs`, `usage`, `system: stop`, `system: restart`, `system: kill provider`, `system: cancel run <run_id>`, `system: killswitch`
 
 ## Safety Invariants
 
@@ -230,14 +231,14 @@ All settings use the `apple_flow_` env prefix. Configured via `.env` file.
 ### Safety Settings
 
 - `apple_flow_only_poll_allowed_senders` -- filter at SQL query time (default: true)
-- `apple_flow_require_chat_prefix` -- require `relay:` prefix on messages (default: true)
+- `apple_flow_require_chat_prefix` -- require `relay:` prefix on messages (default: false)
 - `apple_flow_chat_prefix` -- custom prefix string (default: "relay:")
 - `apple_flow_approval_ttl_minutes` -- how long approvals remain valid (default: 20)
 - `apple_flow_max_messages_per_minute` -- rate limit per sender (default: 30)
 
 ### Connector Settings
 
-- `apple_flow_connector` -- connector to use: `"codex-cli"` (default), `"claude-cli"`, `"gemini-cli"`, `"cline"`, `"codex-app-server"` (deprecated)
+- `apple_flow_connector` -- connector to use: `"codex-cli"` (default), `"claude-cli"`, `"gemini-cli"`, `"cline"`, `"kilo-cli"` , `"codex-app-server"` (deprecated)
 - `apple_flow_codex_turn_timeout_seconds` -- timeout for all connectors (default: 300s/5min)
 
 Connector-specific settings (CLI binary path, model, context window, etc.) are documented in `.env.example`. See also the **Connector selection** section under Development Conventions below.
@@ -254,10 +255,12 @@ The admin API runs on port 8787 by default (`python -m apple_flow admin`).
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
+| `/health` | GET | Health check |
 | `/sessions` | GET | List active sender threads |
 | `/approvals/pending` | GET | List pending approval requests |
-| `/events` | GET | Audit log |
+| `/audit/events` | GET | Audit log |
 | `/task` | POST | Submit a task programmatically (Siri Shortcuts / curl) |
+| `/metrics` | GET | Basic runtime metrics |
 
 ## Testing
 
@@ -420,7 +423,7 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 
 - Never disable sender allowlist by default
 - Keep `apple_flow_only_poll_allowed_senders=true`
-- Keep `apple_flow_require_chat_prefix=true` unless explicitly requested
+- Keep `apple_flow_require_chat_prefix=false` unless explicitly requested
 - Keep mutating workflows behind approval (`task:` / `project:`)
 - Respect duplicate outbound suppression; do not remove echo suppression without explicit request
 

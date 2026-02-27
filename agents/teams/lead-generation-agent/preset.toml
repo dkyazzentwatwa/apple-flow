@@ -1,0 +1,19 @@
+[agents.default]
+description = "Lead Generation Team orchestrator."
+config_file = "../agents/teams/lead-generation-agent/roles/default.toml"
+
+[agents.explorer]
+description = "Lead Generation Team context mapper."
+config_file = "../agents/teams/lead-generation-agent/roles/explorer.toml"
+
+[agents.reviewer]
+description = "Lead Generation Team risk and quality reviewer."
+config_file = "../agents/teams/lead-generation-agent/roles/reviewer.toml"
+
+[agents.worker]
+description = "Lead Generation Team execution specialist."
+config_file = "../agents/teams/lead-generation-agent/roles/worker.toml"
+
+[agents.monitor]
+description = "Lead Generation Team runtime and outcome monitor."
+config_file = "../agents/teams/lead-generation-agent/roles/monitor.toml"
