@@ -410,6 +410,7 @@ class RelayDaemon:
             )
             self.mail_egress = AppleMailEgress(
                 from_address=settings.mail_from_address,
+                response_subject=settings.mail_response_subject,
                 signature=settings.mail_signature,
             )
             self._mail_owner = settings.allowed_senders[0] if settings.allowed_senders else ""

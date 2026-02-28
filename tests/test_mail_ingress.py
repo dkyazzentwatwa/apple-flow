@@ -84,6 +84,8 @@ def test_fetch_new_converts_to_inbound_messages(monkeypatch):
     assert "task: build feature" in msg.text
     assert "Please build the new feature" in msg.text
     assert msg.is_from_me is False
+    assert msg.context.get("channel") == "mail"
+    assert msg.context.get("mail_subject") == "task: build feature"
 
 
 def test_fetch_new_skips_empty_messages(monkeypatch):

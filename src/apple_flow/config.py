@@ -107,6 +107,7 @@ class RelaySettings(BaseSettings):
     mail_from_address: str = ""
     mail_allowed_senders: list[str] = Field(default_factory=list)
     mail_max_age_days: int = 2
+    mail_response_subject: str = "AGENT:"
     mail_signature: str = "\n\n—\nApple Flow 🤖, Your 24/7 Assistant"
 
     # Apple Reminders integration settings

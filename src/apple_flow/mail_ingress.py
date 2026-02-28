@@ -86,6 +86,10 @@ class AppleMailIngress:
                     text=text,
                     received_at=received_at,
                     is_from_me=False,
+                    context={
+                        "channel": "mail",
+                        "mail_subject": subject,
+                    },
                 )
             )
             processed_ids.append(msg_id)

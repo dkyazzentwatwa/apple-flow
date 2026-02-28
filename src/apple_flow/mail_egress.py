@@ -23,6 +23,7 @@ class AppleMailEgress:
     def __init__(
         self,
         from_address: str = "",
+        response_subject: str = "AGENT:",
         max_chunk_chars: int = 50000,
         retries: int = 3,
         echo_window_seconds: float = 300.0,
@@ -30,6 +31,7 @@ class AppleMailEgress:
         signature: str = "\n\n—\nApple Flow 🤖, Your 24/7 Assistant",
     ):
         self.from_address = from_address
+        self.response_subject = response_subject or "AGENT:"
         self.max_chunk_chars = max_chunk_chars
         self.retries = retries
         self.echo_window_seconds = echo_window_seconds
@@ -59,15 +61,11 @@ class AppleMailEgress:
 
         logger.info("Sending email to %s (%s chars)", recipient, len(text_with_signature))
         chunks = self._chunk(text_with_signature)
-        for i, chunk in enumerate(chunks):
-            subject = "Apple Flow Response"
-            if len(chunks) > 1:
-                subject = f"Apple Flow Response (part {i + 1}/{len(chunks)})"
-
+        for chunk in chunks:
             last_error: Exception | None = None
             for attempt in range(1, self.retries + 1):
                 try:
-                    self._osascript_send(recipient, subject, chunk)
+                    self._osascript_send(recipient, self.response_subject, chunk)
                     logger.info("Sent email chunk to %s (%s chars)", recipient, len(chunk))
                     last_error = None
                     break
@@ -83,11 +81,7 @@ class AppleMailEgress:
         self.mark_outbound(recipient, text)
 
     def _osascript_send(self, recipient: str, subject: str, body: str) -> None:
-        """Send an email reply using Apple Mail via osascript.
-
-        Attempts to reply to the most recent message from the recipient to maintain
-        thread continuity. Falls back to creating a new message if no recent message found.
-        """
+        """Send an outbound email via Apple Mail using osascript."""
         escaped_body = body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         escaped_subject = subject.replace("\\", "\\\\").replace('"', '\\"')
         escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
@@ -98,31 +92,13 @@ class AppleMailEgress:
         else:
             sender_prop = ""
 
-        # Try to find and reply to the most recent message from this sender
         script = f'''
         tell application "Mail"
-            -- Try to find the most recent message from this sender
-            set recentMessages to (every message of inbox whose sender contains "{escaped_recipient}")
-
-            if (count of recentMessages) > 0 then
-                -- Reply to the most recent message
-                set originalMessage to item 1 of recentMessages
-                set replyMessage to reply originalMessage with opening window without reply to all
-
-                tell replyMessage
-                    set content to "{escaped_body}"
-                    set visible to false
-                end tell
-
-                send replyMessage
-            else
-                -- Fallback: create a new message if no recent message found
-                set newMessage to make new outgoing message with properties {{subject:"{escaped_subject}", content:"{escaped_body}", visible:false{sender_prop}}}
-                tell newMessage
-                    make new to recipient at end of to recipients with properties {{address:"{escaped_recipient}"}}
-                end tell
-                send newMessage
-            end if
+            set newMessage to make new outgoing message with properties {{subject:"{escaped_subject}", content:"{escaped_body}", visible:false{sender_prop}}}
+            tell newMessage
+                make new to recipient at end of to recipients with properties {{address:"{escaped_recipient}"}}
+            end tell
+            send newMessage
         end tell
         '''
 

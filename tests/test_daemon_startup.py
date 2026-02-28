@@ -204,6 +204,9 @@ def test_relaydaemon_initializes_memory_v2(monkeypatch, tmp_path):
         def set_state(self, _key, _value):
             pass
 
+        def _connect(self):
+            return self._conn
+
         def close(self):
             pass
 

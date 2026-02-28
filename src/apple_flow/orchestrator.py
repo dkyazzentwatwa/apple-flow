@@ -219,6 +219,7 @@ class RelayOrchestrator:
         if (
             command.kind is CommandKind.CHAT
             and not self.require_chat_prefix
+            and message.context.get("channel") != "mail"
             and is_likely_mutating(command.payload)
         ):
             command = ParsedCommand(kind=CommandKind.TASK, payload=command.payload, workspace=command.workspace)

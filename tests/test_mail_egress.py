@@ -37,6 +37,34 @@ def test_sends_different_messages(monkeypatch):
     assert len(sent_calls) == 2
 
 
+def test_default_response_subject_is_agent(monkeypatch):
+    sent_calls: list[tuple[str, str, str]] = []
+
+    def fake_send(_recipient: str, _subject: str, _body: str) -> None:
+        sent_calls.append((_recipient, _subject, _body))
+
+    egress = AppleMailEgress()
+    monkeypatch.setattr(egress, "_osascript_send", fake_send)
+
+    egress.send("test@example.com", "Hello")
+    assert sent_calls
+    assert sent_calls[0][1] == "AGENT:"
+
+
+def test_custom_response_subject_used(monkeypatch):
+    sent_calls: list[tuple[str, str, str]] = []
+
+    def fake_send(_recipient: str, _subject: str, _body: str) -> None:
+        sent_calls.append((_recipient, _subject, _body))
+
+    egress = AppleMailEgress(response_subject="Custom Subject")
+    monkeypatch.setattr(egress, "_osascript_send", fake_send)
+
+    egress.send("test@example.com", "Hello")
+    assert sent_calls
+    assert sent_calls[0][1] == "Custom Subject"
+
+
 def test_chunking_large_messages():
     egress = AppleMailEgress(max_chunk_chars=100)
     chunks = egress._chunk("x" * 250)
@@ -51,6 +79,37 @@ def test_no_chunking_small_messages():
     chunks = egress._chunk("hello")
     assert len(chunks) == 1
     assert chunks[0] == "hello"
+
+
+def test_chunked_messages_keep_same_subject(monkeypatch):
+    sent_calls: list[tuple[str, str, str]] = []
+
+    def fake_send(_recipient: str, _subject: str, _body: str) -> None:
+        sent_calls.append((_recipient, _subject, _body))
+
+    egress = AppleMailEgress(max_chunk_chars=5)
+    monkeypatch.setattr(egress, "_osascript_send", fake_send)
+
+    egress.send("test@example.com", "abcdefghij")
+    assert len(sent_calls) > 1
+    assert all(call[1] == "AGENT:" for call in sent_calls)
+
+
+def test_osascript_send_does_not_use_reply_threading(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return None
+
+    monkeypatch.setattr("apple_flow.mail_egress.subprocess.run", fake_run)
+    egress = AppleMailEgress()
+    egress._osascript_send("test@example.com", "AGENT:", "hello")
+
+    script = str(captured["cmd"][2])
+    assert "reply originalMessage" not in script
+    assert "make new outgoing message" in script
 
 
 def test_echo_detection():

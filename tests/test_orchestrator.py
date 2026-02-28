@@ -586,6 +586,42 @@ def test_natural_language_mutating_auto_promotes():
     assert any("Here's my plan" in text for _, text in egress.messages)
 
 
+def test_mail_channel_mutating_chat_does_not_auto_promote():
+    """Mail channel uses explicit task:/project: for approval-required actions."""
+    orch, connector, egress, _ = _make_orchestrator(require_chat_prefix=False)
+
+    msg = InboundMessage(
+        id="nl_mail_1",
+        sender="user@example.com",
+        text="create a Python script to parse CSV files",
+        received_at="2026-02-18T10:00:00Z",
+        is_from_me=False,
+        context={"channel": "mail"},
+    )
+    result = orch.handle_message(msg)
+    assert result.kind is CommandKind.CHAT
+    assert result.approval_request_id is None
+    assert connector.turns
+    assert egress.messages
+
+
+def test_mail_channel_explicit_task_still_requires_approval():
+    orch, _, egress, _ = _make_orchestrator(require_chat_prefix=False)
+
+    msg = InboundMessage(
+        id="nl_mail_2",
+        sender="user@example.com",
+        text="task: create a Python script to parse CSV files",
+        received_at="2026-02-18T10:00:00Z",
+        is_from_me=False,
+        context={"channel": "mail"},
+    )
+    result = orch.handle_message(msg)
+    assert result.kind is CommandKind.TASK
+    assert result.approval_request_id is not None
+    assert any("Here's my plan" in text for _, text in egress.messages)
+
+
 def test_personality_prompt_injected():
     """Custom personality_prompt is stored on the orchestrator and passed to the connector."""
     custom_prompt = "You are a pirate. Arr."
