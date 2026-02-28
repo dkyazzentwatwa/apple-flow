@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🍎 Apple Flow
+# Apple Flow
 
 **Your Apple-Native AI Assistant**
 
-*Control AI w/ your Apple Apps. Get things done.*
+Control AI from iMessage, Mail, Reminders, Notes, and Calendar on macOS.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -13,229 +13,76 @@
 
 **[apple-flow-site.vercel.app](https://apple-flow-site.vercel.app/)**
 
-*A local-first macOS daemon that bridges iMessage, Mail, Reminders, Notes, and Calendar to your favorite AI assistant. No cloud. Optional local Swift app. Just your Apple Apps.*
-
 </div>
 
----
+Apple Flow is a local-first macOS daemon that bridges Apple apps to AI CLIs (Codex, Claude, Gemini, Cline, and Kilo). It enforces sender allowlists, approval gates for mutating work, and workspace restrictions by default.
 
-## ✨ What is Apple Flow?
+## Start Here
 
-Apple Flow turns your Apple apps into an AI command center. Interact through any of these gateways:
+Choose one setup path:
 
-### 💬 Chat Gateways
-| Gateway | How it works |
-|---------|--------------|
-| **iMessage** | Text yourself — no bot tokens, no setup beyond Full Disk Access |
-| **Apple Mail** | Send emails to your AI, get replies in your inbox |
+| Path | Best for | Time | Entry point |
+|---|---|---:|---|
+| **AI-guided setup (recommended)** | Most users, safest onboarding | ~10 min | [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md) |
+| **One-command script** | Fast local install/autostart | ~5-10 min | `./scripts/setup_autostart.sh` |
+| **Manual setup** | Advanced/custom environments | ~15+ min | [docs/AUTO_START_SETUP.md](docs/AUTO_START_SETUP.md), [docs/ENV_SETUP.md](docs/ENV_SETUP.md) |
 
-### 📥 Task Ingress (Create tasks from Apple apps)
-| Gateway | How it works |
-|---------|--------------|
-| **Apple Reminders** | Add a reminder → becomes a task for AI |
-| **Apple Notes** | Tag a note with `!!agent` → AI processes it |
-| **Apple Calendar** | Create an event → AI executes when it's due |
+## Quick Start (AI-Guided)
 
-### 📤 Response & Logging
-| Gateway | How it works |
-|---------|--------------|
-| **iMessage** | All AI responses sent here by default |
-| **Apple Notes** | Optional: log every AI response as a new note |
+### 1) Prerequisites
 
-### 🤖 Proactive Companion
-Your AI companion watches your life and sends proactive iMessage updates:
-- ⏰ **Stale approvals** — "Hey, you have a task waiting for approval"
-- 📅 **Upcoming events** — "Meeting in 30 minutes"
-- 🔔 **Overdue reminders** — "That task is 2 days overdue"
-- 🌅 **Daily digest** — Morning briefing at 8 AM
-- 📊 **Weekly review** — Summary every Sunday evening
-
-**The best part?** It's 100% local-first. Your data never leaves your Mac.
-
-## 🧠 Agent Teams (Codex Multi-Agent Presets)
-
-Apple Flow includes a codex-native team library under `/agents` with 37 niche, reusable multi-agent workflows:
-
-- 12 Apple Flow Ops teams
-- 13 Software/GTM teams
-- 12 Business Ops teams
-
-Each team bundle includes:
-
-- `TEAM.md` (purpose, triggers, inputs, outputs, guardrails)
-- `preset.toml` (`[agents.<role>]` mappings)
-- `roles/*.toml` (`default`, `explorer`, `reviewer`, `worker`, `monitor`)
-
-Default usage is natural language via iMessage (no scripts required):
-
-- `list available agent teams`
-- `load up the codebase-exploration-team and research new features`
-- `load up the "customer-support-resolution-team" and analyze these emails from test@gmail.com`
-- `what team is active`
-- `unload team`
-
-### iMessage-native team commands (new)
-
-You can now manage teams directly from iMessage in a natural way. Team activation is **per sender** and **auto-resets after the next work request** (`idea`, `plan`, `task`, `project`).
-
-This is the recommended way for everyday team usage.
-
-Explicit `system:` forms also work:
-
-- `system: teams list`
-- `system: team load <slug>`
-- `system: team current`
-- `system: team unload`
-
-Optional advanced/manual path: copy `agents/teams/<slug>/preset.toml` into your project `.codex/config.toml` if you want static preset wiring.
-
-Connector behavior:
-
-- `codex-cli`: applies the selected team preset at runtime.
-- Other CLI connectors (`claude-cli`, `gemini-cli`, `kilo-cli`, `cline`): use `TEAM.md` prompt fallback for that turn.
-
-See [docs/AGENT_TEAMS.md](docs/AGENT_TEAMS.md) for details and command semantics.
-
-### 🖥️ Optional Swift Onboarding + Dashboard App
-Prefer a desktop UI? Apple Flow includes a native macOS Swift app for guided onboarding plus runtime operations:
-- Intro + system checks (Python, connector, iMessage DB, token)
-- Full `.env` preview and apply flow
-- Gateway setup (Mail, Reminders, Notes, Calendar)
-- Runtime control panel tabs (Overview, Approvals, Sessions, Events, Logs, Config)
-- Exportable standalone app bundle/zip (`AppleFlowApp.app`, `AppleFlowApp-macOS.zip`)
-
----
-
-## 📸 Screenshots
-
-### Dashboard + Operations
-
-<table>
-  <tr>
-    <td align="center"><b>Dashboard</b></td>
-    <td align="center"><b>Agent Log</b></td>
-    <td align="center"><b>Task Management</b></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/dashboard.png" alt="Dashboard" width="250"/></td>
-    <td><img src="docs/screenshots/ai-policy-log.png" alt="Agent Log" width="250"/></td>
-    <td><img src="docs/screenshots/task-management.png" alt="Task Management" width="250"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Calendar Automation</b></td>
-    <td align="center"><b>Office Brainstorm</b></td>
-    <td></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/calendar-event.png" alt="Calendar" width="250"/></td>
-    <td><img src="docs/screenshots/office-brainstorm.png" alt="Brainstorm" width="250"/></td>
-    <td></td>
-  </tr>
-</table>
-
-### Swift Onboarding Flow
-
-<table>
-  <tr>
-    <td align="center"><b>Audit Events Timeline</b></td>
-    <td align="center"><b>Log Stream Viewer</b></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/onboarding-apple-flow1.png" alt="Swift Dashboard Events Tab" width="420"/></td>
-    <td><img src="docs/screenshots/onboarding-apple-flow2.png" alt="Swift Dashboard Logs Tab" width="420"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Control Panel Overview</b></td>
-    <td align="center"><b>Config Editor</b></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/onboarding-apple-flow3.png" alt="Swift Dashboard Overview Tab" width="420"/></td>
-    <td><img src="docs/screenshots/onboarding-apple-flow4.png" alt="Swift Dashboard Config Tab" width="420"/></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Onboarding Error (Doctor Checks)</b></td>
-    <td></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/apple-flow-onboarding-error..png" alt="Swift Onboarding Error: Full Disk Access Needed" width="420"/></td>
-    <td></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Setup Configuration + Env Preview</b></td>
-    <td></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/AppleFlowApp-setup-configuration-screen..png" alt="Swift Onboarding Setup Configuration and Env Preview" width="420"/></td>
-    <td></td>
-  </tr>
-</table>
-
----
-
-## 🚀 Quick Start (10 minutes)
-
-**Preferred vibe-coding method (recommended):**
-1. Clone the repo and `cd` into it
-2. Paste [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md) into Codex/Claude/Cline
-3. Let the AI run `./scripts/setup_autostart.sh` and finish full customization + validation safely (with explicit confirmations)
-
-### Prerequisites
-
-- ✅ A Mac with iMessage signed in
-- ✅ About 10 minutes
-
-### Step 1 — Install Dependencies
+- macOS with iMessage signed in
+- 10 minutes
+- Homebrew + Python 3.11 + Node
 
 ```bash
-# Install Homebrew (if you don't have it)
+# Install Homebrew (if needed)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# Install Python and Node
+# Install Python + Node
 brew install python@3.11 node
 ```
 
-### Step 2 — Install an AI CLI
+### 2) Install One AI CLI Connector
 
-Choose your AI backend:
+Pick one:
 
-<table>
-  <tr>
-    <th>🟠 Claude CLI</th>
-    <th>🔵 Codex CLI</th>
-    <th>🟣 Gemini CLI</th>
-    <th>🟢 Cline CLI</th>
-  </tr>
-  <tr>
-    <td>
-      <i>Recommended for most users</i><br><br>
-      <code>curl -fsSL https://claude.ai/install.sh | bash</code><br>
-      <code>claude auth login</code>
-    </td>
-    <td>
-      <i>OpenAI's official CLI</i><br><br>
-      <code>npm install -g @openai/codex</code><br>
-      <code>codex login</code>
-    </td>
-    <td>
-      <i>Google Gemini CLI</i><br><br>
-      <code>npm install -g @google/gemini-cli</code><br>
-      <code>gemini auth login</code>
-    </td>
-    <td>
-      <i>Multi-provider agentic AI</i><br><br>
-      <code>npm install -g cline</code><br>
-      <code>cline auth</code>
-    </td>
-  </tr>
-  <tr>
-    <td>Uses Anthropic account</td>
-    <td>Uses OpenAI account</td>
-    <td>Uses Google Gemini account</td>
-    <td>Kimi, GLM, DeepSeek, Groq, and more</td>
-  </tr>
-</table>
+- Claude CLI
 
-### Step 3 — Clone and Setup
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+claude auth login
+```
+
+- Codex CLI
+
+```bash
+npm install -g @openai/codex
+codex login
+```
+
+- Gemini CLI
+
+```bash
+npm install -g @google/gemini-cli
+gemini auth login
+```
+
+- Cline CLI
+
+```bash
+npm install -g cline
+cline auth
+```
+
+- Kilo CLI (optional advanced connector)
+
+```bash
+npm install -g @kilocode/cli
+kilo auth login
+```
+
+### 3) Clone + Bootstrap
 
 ```bash
 git clone https://github.com/dkyazzentwatwa/apple-flow.git
@@ -243,415 +90,220 @@ cd apple-flow
 ./scripts/setup_autostart.sh
 ```
 
-### Step 4 — Let Your AI Finalize Setup (Recommended)
+### 4) Finalize Config with the Master Prompt
 
-After the installer finishes, open Codex/Claude/Cline and paste the master prompt:
+Open your AI CLI and paste:
 
 - [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md)
 
-This AI-led flow safely:
-- checks health (`wizard doctor --json`)
-- collects your full customization preferences
-- generates full `.env` preview from `.env.example`
-- applies settings with explicit confirmation gates
-- ensures gateway resources
-- validates config and restarts service
+That flow handles:
 
-Optional after install: use the Swift onboarding/dashboard app guide at [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md).
+- health checks (`wizard doctor --json`)
+- full `.env` generation from `.env.example`
+- explicit confirmation gates before writes/restarts
+- gateway resource setup (Reminders/Notes/Calendar)
+- validation + service status verification
 
-### Step 4b — Optional Swift Onboarding + Dashboard App
+### 5) Grant Full Disk Access
 
-If you prefer a local desktop UI for setup and operations, the app is already included under `dashboard-app/`:
-
-```bash
-# Open the bundled app directly
-open ./dashboard-app/AppleFlowApp.app
-```
-
-After opening, grant permissions when prompted:
-- Full Disk Access for your terminal/app running Apple Flow (System Settings → Privacy & Security → Full Disk Access)
-- Accessibility/Automation prompts (if macOS requests control permissions for Apple apps)
-
-`dashboard-app/AppleFlowApp-macOS.zip` is also included if you want to share/install it elsewhere.
-
-### Step 5 — Configure Manually (Optional)
-
-If you already have a `.env`, `setup_autostart.sh` validates it and installs auto-start.
-If `.env` is missing, it launches `python -m apple_flow setup` to generate one, then continues.
-
-To edit settings manually:
-
-```bash
-nano .env
-# Or: code .env  |  vim .env  |  open -a TextEdit .env
-```
-
-Verify these required fields:
-
-```env
-apple_flow_allowed_senders=+15551234567       # your own phone number in +1... format
-apple_flow_allowed_workspaces=/Users/you/code # folder(s) the AI can read/write
-apple_flow_timezone=America/Los_Angeles       # optional; set if host timezone differs
-
-# Choose your AI connector (pick one):
-apple_flow_connector=claude-cli   # Claude Code CLI  — requires: claude auth login
-apple_flow_connector=codex-cli    # Codex CLI        — requires: codex login
-apple_flow_connector=gemini-cli   # Gemini CLI       — requires: gemini auth login
-apple_flow_connector=cline        # Cline CLI        — supports any model provider
-```
-
-**Enable any additional gateways you want to use** (all optional, off by default):
-
-```env
-# Apple Mail
-apple_flow_enable_mail_polling=true
-apple_flow_mail_allowed_senders=you@example.com
-
-# Apple Reminders (list names are auto-created/verified by setup)
-apple_flow_enable_reminders_polling=true
-
-# Apple Notes (folder names are auto-created/verified by setup)
-apple_flow_enable_notes_polling=true
-
-# Apple Calendar (calendar name is auto-created/verified by setup)
-apple_flow_enable_calendar_polling=true
-```
-
-Default gateway names:
-- Reminders: `agent-task`, `agent-archive`
-- Notes: `agent-task`, `agent-archive`, `agent-logs`
-- Calendar: `agent-schedule`
-
-### Step 6 — Grant Full Disk Access
-
-1. Open **System Settings → Privacy & Security → Full Disk Access**
-2. Click **+** and add the Python binary path (printed by setup script)
+1. Open `System Settings -> Privacy & Security -> Full Disk Access`
+2. Add the Python binary used by Apple Flow (the setup output shows the path)
 3. Enable the toggle
 
-### Step 7 — Text Yourself! 🎉
+### 6) Smoke Test
 
-```
+Text yourself in iMessage:
+
+```text
 what files are in my home directory?
 ```
 
-You should get a reply within seconds.
+You should receive a reply within seconds.
 
----
+## Setup Paths (Detailed)
 
-## 🎮 Commands
+### A) One-command script only
 
-| Command | Description |
-|---------|-------------|
-| `<anything>` | 💬 Natural chat — no prefix needed |
-| `idea: <prompt>` | 💡 Brainstorming and options |
-| `plan: <goal>` | 📋 Implementation plan (no changes) |
-| `task: <instruction>` | ⚡ Queue a task (needs approval) |
-| `project: <spec>` | 🚀 Multi-step pipeline (needs approval) |
-| `help` | ❓ Show command list + practical tips |
-| `approve <id>` | ✅ Execute a queued task |
-| `deny <id>` | ❌ Cancel a queued task |
-| `deny all` | 🗑️ Cancel all pending approvals |
-| `status` | 📊 Show pending approvals + active runs |
-| `status <run_id|request_id>` | 🔎 Show timeline/details for one run/request |
-| `health` | 🏥 Daemon health check |
-| `history: [query]` | 🔍 Message history |
-| `usage` | 📈 Token usage stats |
-| `clear context` | 🔄 Reset conversation |
-| `system: mute/unmute` | 🔇 Control companion messages |
-| `system: stop/restart/kill provider` | ⏹️ Daemon/provider controls |
-| `system: cancel run <run_id>` | 🧨 Cancel one active run and kill its CLI process |
-| `system: killswitch` | 🚨 Emergency stop for all active provider CLI processes |
+If you do not want AI-guided setup:
 
-### Multi-Workspace Routing
-
-Prefix any command with `@alias` to target a specific workspace:
-
+```bash
+./scripts/setup_autostart.sh
 ```
+
+If `.env` is missing, it launches `python -m apple_flow setup` to generate one.
+
+### B) Manual setup
+
+Edit `.env` directly:
+
+```bash
+nano .env
+```
+
+Minimum keys:
+
+```env
+apple_flow_allowed_senders=+15551234567
+apple_flow_allowed_workspaces=/Users/you/code
+apple_flow_default_workspace=/Users/you/code
+apple_flow_connector=claude-cli
+apple_flow_admin_api_token=<long-random-secret>
+```
+
+Then validate and restart:
+
+```bash
+python -m apple_flow config validate --json --env-file .env
+python -m apple_flow service restart --json
+python -m apple_flow service status --json
+```
+
+## Core Commands
+
+| Command | What it does |
+|---|---|
+| `<anything>` | Natural chat |
+| `idea: <prompt>` | Brainstorming |
+| `plan: <goal>` | Plan only (no changes) |
+| `task: <instruction>` | Mutating task (approval required) |
+| `project: <spec>` | Multi-step task (approval required) |
+| `approve <id>` / `deny <id>` / `deny all` | Approval controls |
+| `status` / `status <run_or_request_id>` | Run/request status |
+| `health` | Daemon health |
+| `history: [query]` | Message history |
+| `usage` | Usage stats |
+| `help` | Help + practical tips |
+| `system: mute` / `system: unmute` | Companion controls |
+| `system: stop` / `system: restart` / `system: kill provider` | Runtime controls |
+| `system: cancel run <run_id>` | Cancel one run |
+| `system: killswitch` | Kill all active provider processes |
+
+### Multi-workspace routing
+
+Prefix with `@alias`:
+
+```text
 task: @web-app deploy to staging
 @api show recent errors
 ```
 
-### Approval Lifecycle Guarantees
+## Optional Integrations
 
-- Every approved run now attempts to send a terminal outcome: completed, failed, or checkpoint/re-approval needed.
-- Long-running work sends milestone and heartbeat updates by default (bounded to avoid spam).
-- Timeout or blocker output creates a checkpoint approval on the same run (`awaiting_approval`) so you can resume with:
-  - `approve <new_request_id>`
-  - `approve <new_request_id> <extra instructions>`
-- Use `status` to see what is currently running, and `status <run_id|request_id>` to inspect recent timeline events.
+All optional gateways are off by default.
 
----
+Trigger behavior:
 
-## 🔌 AI Backends
+- Default trigger tag is `!!agent`
+- For Mail/Reminders/Notes/Calendar, only items containing that tag are processed
+- Tag is stripped before prompt execution
+- Configure via `apple_flow_trigger_tag`
 
-### Claude CLI (Recommended)
-
-```env
-apple_flow_connector=claude-cli
-apple_flow_claude_cli_model=claude-sonnet-4-6  # optional
-```
-
-- Uses `claude -p` for stateless execution
-- Best for general-purpose tasks
-- Requires Anthropic subscription
-
-### Codex CLI
-
-```env
-apple_flow_connector=codex-cli
-apple_flow_codex_cli_model=  # uses Codex default
-```
-
-- Uses `codex exec` for stateless execution
-- OpenAI's official CLI
-- Requires OpenAI account
-
-### Gemini CLI
-
-```env
-apple_flow_connector=gemini-cli
-apple_flow_gemini_cli_model=gemini-3-flash-preview  # default
-apple_flow_gemini_cli_approval_mode=yolo            # default
-```
-
-- Uses `gemini -p` for stateless execution
-- Default model: `gemini-3-flash-preview`
-- Default approval mode: `yolo` (auto-approve tool actions)
-- Requires Google Gemini account
-
-### Cline CLI (Multi-Provider)
-
-```env
-apple_flow_connector=cline
-apple_flow_cline_model=kimi-k2  # or gpt-4o, deepseek, etc.
-```
-
-- Full agentic execution with any model provider
-- Supports: Kimi k2, GLM-5, Minimax, DeepSeek, Groq, and more
-- Best for users without Claude/OpenAI subscriptions
-
-### Kilo CLI
-
-```env
-apple_flow_connector=kilo-cli
-apple_flow_kilo_cli_model=google/gemini-3-flash-preview
-apple_flow_kilo_cli_context_window=10
-```
-
-- Uses `kilo` for stateless execution
-- Good balance between tool orchestration and model flexibility
-- Requires `npm install -g @kilocode/cli` and `kilo auth login`
-
----
-
-## 🔔 Optional Integrations
-
-> **Trigger tag:** All optional gateways use the `!!agent` trigger tag by default. Only items containing `!!agent` in their title, subject, or body are picked up — everything else is ignored. The tag is stripped before the task is sent to your AI. You can customize it with `apple_flow_trigger_tag` in your `.env`.
-
-<details>
-<summary><b>📧 Apple Mail</b></summary>
-
-Include `!!agent` anywhere in the subject or body of an email to have it processed by AI. Replies are sent back to the same thread.
+Enable examples:
 
 ```env
 apple_flow_enable_mail_polling=true
-apple_flow_mail_allowed_senders=you@example.com
-apple_flow_mail_from_address=you@example.com
-```
-
-**Example:** Send yourself an email with subject `!!agent refactor the auth module` — Apple Flow picks it up and replies with the result.
-
-</details>
-
-<details>
-<summary><b>☑️ Apple Reminders</b></summary>
-
-Add `!!agent` to a reminder's name or notes to turn it into an AI task.
-
-- No due date: runs immediately on the next poll.
-- Due date set: runs only after the due time (plus `apple_flow_reminders_due_delay_seconds`, default 60s).
-- Due-time interpretation uses `apple_flow_timezone` when set.
-- Repeating reminders: each due occurrence is processed once.
-
-The reminder is completed and annotated with the result once done.
-
-```env
 apple_flow_enable_reminders_polling=true
-apple_flow_reminders_list_name=agent-task
-apple_flow_reminders_due_delay_seconds=60
-```
-
-**Example:** Create a reminder `!!agent summarize today's meeting notes` in your "agent-task" list.
-
-</details>
-
-<details>
-<summary><b>📝 Apple Notes</b></summary>
-
-Include `!!agent` in a note's title or body to have it processed as a task. The AI result is appended back to the note.
-
-```env
 apple_flow_enable_notes_polling=true
-apple_flow_notes_folder_name=agent-task
-```
-
-**Example:** Create a note titled `!!agent draft a project brief` in your "agent-task" folder.
-
-</details>
-
-<details>
-<summary><b>📅 Apple Calendar</b></summary>
-
-Add `!!agent` to an event's title or description. When the event comes due, it's picked up as a scheduled task and the result is written into the event description.
-
-```env
 apple_flow_enable_calendar_polling=true
-apple_flow_calendar_name=agent-schedule
 ```
 
-**Example:** Create an event `!!agent generate weekly report` at 9am Monday in your "agent-schedule" calendar.
-
-</details>
-
-<details>
-<summary><b>🤖 Autonomous Companion</b></summary>
-
-A proactive AI that checks in on you:
+Companion + memory examples:
 
 ```env
 apple_flow_enable_companion=true
-apple_flow_companion_poll_interval_seconds=300
-apple_flow_companion_quiet_hours_start=22:00
-apple_flow_companion_quiet_hours_end=07:00
-apple_flow_companion_max_proactive_per_hour=4
-
-# Daily digest
-apple_flow_companion_enable_daily_digest=true
-apple_flow_companion_digest_time=08:00
-
-# Persistent memory
 apple_flow_enable_memory=true
-apple_flow_memory_max_context_chars=2000
 
-# Optional canonical memory rollout (safe defaults)
+# Canonical memory v2 rollout (safe defaults)
 apple_flow_enable_memory_v2=false
 apple_flow_memory_v2_shadow_mode=true
 apple_flow_memory_v2_migrate_on_start=true
 ```
 
-**Features:**
-- Stale approval notifications
-- Upcoming calendar event reminders
-- Overdue reminder alerts
-- Daily morning briefing
-- Weekly review summaries
+See full settings in [docs/ENV_SETUP.md](docs/ENV_SETUP.md).
 
-</details>
+## AI Backends
 
----
+| Connector | Key |
+|---|---|
+| Claude CLI | `apple_flow_connector=claude-cli` |
+| Codex CLI | `apple_flow_connector=codex-cli` |
+| Gemini CLI | `apple_flow_connector=gemini-cli` |
+| Cline CLI | `apple_flow_connector=cline` |
+| Kilo CLI | `apple_flow_connector=kilo-cli` |
 
-## 🔒 Security
+Notes:
 
-Apple Flow is designed with **security-first principles**:
+- `codex-cli`, `claude-cli`, and `gemini-cli` run stateless commands.
+- `cline` is agentic and supports multiple providers.
+- `kilo-cli` is supported as a connector, but setup wizard `generate-env` currently validates only `claude-cli`, `codex-cli`, `gemini-cli`, and `cline`. For `kilo-cli`, set connector fields via manual config write after generation.
 
-| Feature | Protection |
-|---------|------------|
-| **Sender Allowlist** | Only your phone number can interact |
-| **Workspace Restrictions** | AI can only access designated folders |
-| **Approval Workflow** | Mutating operations require explicit approval |
-| **Sender Verification** | Only original requester can approve |
-| **Rate Limiting** | Prevents abuse (30 msgs/min default) |
-| **Read-Only iMessage** | Database opened in read-only mode |
-| **Echo Suppression** | Prevents message loops |
+## Agent Teams
 
-See [SECURITY.md](SECURITY.md) for full details.
+Apple Flow includes codex-native multi-agent presets under `agents/teams/`.
 
----
+Natural iMessage usage:
 
-## 📚 Documentation
+- `list available agent teams`
+- `load up the codebase-exploration-team and research new features`
+- `what team is active`
+- `unload team`
 
-| Document | Description |
-|----------|-------------|
-| [SECURITY.md](SECURITY.md) | Security policy and threat model |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
-| [CHANGELOG.md](CHANGELOG.md) | Version history |
-| [CLAUDE.md](CLAUDE.md) | Architecture and development guide |
-| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Quick reference |
-| [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md) | AI-led installer prompt and safety checklist |
-| [docs/AUTO_START_SETUP.md](docs/AUTO_START_SETUP.md) | Beginner auto-start onboarding |
-| [docs/ENV_SETUP.md](docs/ENV_SETUP.md) | Full config reference |
-| [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md) | Optional SwiftUI control-board build/export guide |
-| [docs/SKILLS_AND_MCP.md](docs/SKILLS_AND_MCP.md) | Skills and MCP integration |
+Explicit forms:
 
----
+- `system: teams list`
+- `system: team load <slug>`
+- `system: team current`
+- `system: team unload`
 
-## 🆚 vs OpenClaw / nanobot
+Details: [docs/AGENT_TEAMS.md](docs/AGENT_TEAMS.md)
 
-| Feature | Apple Flow | nanobot / OpenClaw |
-|---------|------------|-------------------|
-| **Apple-native** | ✅ Direct iMessage, no bot tokens | ❌ Requires Telegram/Discord |
-| **Privacy** | ✅ 100% local-first | ⚠️ Depends on provider |
-| **Security** | ✅ Approval workflow + sender verification | ⚠️ Basic allowlist |
-| **Proactive AI** | ✅ Companion with SOUL.md personality | ⚠️ Basic scheduling |
-| **Memory** | ✅ File-based, git-versioned | ⚠️ SQLite or vector DB |
-| **Platforms** | ❌ macOS only | ✅ macOS, Windows, Linux |
-| **Chat platforms** | ❌ iMessage, Mail | ✅ Telegram, Discord, WhatsApp, Slack, QQ |
-| **LLM providers** | ⚠️ Claude, Codex, Cline | ✅ Many providers |
+## Optional macOS App
 
-**Apple Flow is for you if:**
-- You're on macOS and use iMessage
-- You want the deepest Apple integration possible
-- You care about privacy and security
-- You want a proactive AI companion
+A local Swift onboarding/dashboard app is bundled:
 
----
+- app bundle: `dashboard-app/AppleFlow.app`
+- distributable zip: `dashboard-app/AppleFlowApp-macOS.zip`
 
-## 🛠️ Service Management
+Or build/export from source docs: [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md)
+
+## Security Defaults
+
+- Sender allowlist enforcement
+- Workspace restrictions
+- Approval workflow for mutating tasks
+- Approval sender verification
+- Rate limiting
+- Read-only iMessage DB access
+- Duplicate outbound suppression
+
+Details: [SECURITY.md](SECURITY.md)
+
+## Service Management
 
 ```bash
-# Start / stop / restart
 launchctl start local.apple-flow
 launchctl stop local.apple-flow
-
-# Check status
 launchctl list local.apple-flow
-
-# View logs
 tail -f logs/apple-flow.err.log
-
-# Uninstall auto-start
 ./scripts/uninstall_autostart.sh
 ```
 
----
+## Documentation
 
-## 🤝 Contributing
+- [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md)
+- [docs/AUTO_START_SETUP.md](docs/AUTO_START_SETUP.md)
+- [docs/BEGINNER_SETUP_10_MIN.md](docs/BEGINNER_SETUP_10_MIN.md)
+- [docs/QUICKSTART.md](docs/QUICKSTART.md)
+- [docs/ENV_SETUP.md](docs/ENV_SETUP.md)
+- [docs/AGENT_TEAMS.md](docs/AGENT_TEAMS.md)
+- [docs/SKILLS_AND_MCP.md](docs/SKILLS_AND_MCP.md)
+- [CHANGELOG.md](CHANGELOG.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
-- Development setup
-- Code style guidelines
-- Pull request process
-- Testing requirements
+## Contributing
 
----
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## 📄 License
+## License
 
-MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-## 🙏 Acknowledgments
-
-- Inspired by [OpenClaw](https://github.com/openclaw/openclaw) and [nanobot](https://github.com/HKUDS/nanobot)
-- Built for the Apple ecosystem with love
-
----
-
-<div align="center">
-
-**[⬆ Back to Top](#-apple-flow)**
-
-Made with 🍎 for macOS
-
-</div>
+MIT — see [LICENSE](LICENSE).
