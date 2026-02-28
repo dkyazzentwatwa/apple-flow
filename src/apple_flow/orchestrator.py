@@ -24,6 +24,7 @@ logger = logging.getLogger("apple_flow.orchestrator")
 
 if TYPE_CHECKING:
     from .memory import FileMemory
+    from .memory_v2 import MemoryService
     from .office_sync import OfficeSyncer
     from .run_executor import RunExecutor
     from .scheduler import FollowUpScheduler
@@ -63,6 +64,7 @@ class RelayOrchestrator:
         log_notes_egress: Any = None,
         notes_log_folder_name: str = "agent-logs",
         memory: FileMemory | None = None,
+        memory_service: MemoryService | None = None,
         scheduler: FollowUpScheduler | None = None,
         run_executor: RunExecutor | None = None,
         office_syncer: OfficeSyncer | None = None,
@@ -87,6 +89,7 @@ class RelayOrchestrator:
         self.log_notes_egress = log_notes_egress
         self.notes_log_folder_name = notes_log_folder_name
         self.memory = memory
+        self.memory_service = memory_service
         self.office_syncer = office_syncer
         self.log_file_path = log_file_path
         self.team_catalog = AgentTeamCatalog(Path(__file__).resolve().parents[2])
@@ -1151,14 +1154,36 @@ class RelayOrchestrator:
     # --- Memory Context Injection ---
 
     def _inject_memory_context(self, prompt: str) -> str:
-        if not self.memory:
-            return prompt
-        try:
-            context = self.memory.get_context_for_prompt()
-            if context:
-                return f"Persistent memory context:\n{context}\n\n{prompt}"
-        except Exception:
-            logger.debug("Failed to inject memory context", exc_info=True)
+        if self.memory_service is not None:
+            try:
+                canonical_context = self.memory_service.get_canonical_context()
+                if self.memory_service.shadow_mode:
+                    legacy_context = ""
+                    if self.memory is not None:
+                        legacy_context = self.memory.get_context_for_prompt()
+                    self.memory_service.log_shadow_diff(
+                        legacy_context=legacy_context,
+                        canonical_context=canonical_context,
+                    )
+                    if legacy_context:
+                        return f"Persistent memory context:\n{legacy_context}\n\n{prompt}"
+                    if canonical_context:
+                        return f"Persistent memory context:\n{canonical_context}\n\n{prompt}"
+                    return prompt
+
+                context = self.memory_service.get_context_for_prompt()
+                if context:
+                    return f"Persistent memory context:\n{context}\n\n{prompt}"
+            except Exception:
+                logger.debug("Failed to inject memory v2 context", exc_info=True)
+
+        if self.memory is not None:
+            try:
+                context = self.memory.get_context_for_prompt()
+                if context:
+                    return f"Persistent memory context:\n{context}\n\n{prompt}"
+            except Exception:
+                logger.debug("Failed to inject legacy memory context", exc_info=True)
         return prompt
 
     # --- Attachment Context ---

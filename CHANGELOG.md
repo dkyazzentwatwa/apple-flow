@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-02-28
+
+### Added
+- **Canonical memory v2 (feature-flagged)**: Added `memory_v2.py` with a SQLite-backed canonical memory store, stable project ID marker (`.apple-flow-project`), recency+salience retrieval, TTL pruning, and storage-cap maintenance.
+- **Shadow-mode rollout controls**: Added safe rollout support where canonical retrieval runs in shadow mode while legacy FileMemory remains injected.
+- **Memory v2 tests**: Added dedicated tests for canonical store behavior and orchestrator memory-injection semantics.
+
+### Changed
+- **Daemon memory wiring**: Daemon now initializes optional memory v2 service, supports startup backfill from legacy memory files, and runs periodic memory maintenance when enabled.
+- **Orchestrator memory injection**: Prompt memory injection now supports canonical active mode, shadow-mode diff logging, and legacy fallback behavior.
+- **Configuration surface**: Added new memory v2 env settings to `config.py`, `.env.example`, `README.md`, and `docs/ENV_SETUP.md`.
+
 ## [0.3.0] - 2026-02-26
 
 ### Added
@@ -148,6 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.3.1 | 2026-02-28 | Canonical memory v2 rollout (feature-flagged), shadow mode, maintenance, and docs/tests updates |
 | 0.3.0 | 2026-02-26 | Codex agent teams, Kilo connector, reliability/ops improvements |
 | 0.2.1 | 2026-02-20 | Cross-gateway approval fix, CI, branding cleanup |
 | 0.2.0 | 2026-02-20 | Security hardening, admin API auth, version unification |
@@ -155,7 +168,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.1.0...v0.2.0

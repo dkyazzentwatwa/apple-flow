@@ -94,6 +94,10 @@ def test_empty_admin_port_and_memory_fall_back_to_defaults(monkeypatch, tmp_path
             [
                 "apple_flow_admin_port=",
                 "apple_flow_enable_memory=",
+                "apple_flow_enable_memory_v2=",
+                "apple_flow_memory_v2_shadow_mode=",
+                "apple_flow_memory_v2_migrate_on_start=",
+                "apple_flow_memory_v2_include_legacy_fallback=",
             ]
         ),
         encoding="utf-8",
@@ -104,6 +108,10 @@ def test_empty_admin_port_and_memory_fall_back_to_defaults(monkeypatch, tmp_path
 
     assert settings.admin_port == 8787
     assert settings.enable_memory is False
+    assert settings.enable_memory_v2 is False
+    assert settings.memory_v2_shadow_mode is False
+    assert settings.memory_v2_migrate_on_start is True
+    assert settings.memory_v2_include_legacy_fallback is True
 
 
 def test_gemini_cli_model_default(monkeypatch, tmp_path):

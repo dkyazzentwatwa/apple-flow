@@ -185,6 +185,14 @@ class RelaySettings(BaseSettings):
     # File-based memory (agent-office)
     enable_memory: bool = False
     memory_max_context_chars: int = 2000
+    enable_memory_v2: bool = False
+    memory_v2_shadow_mode: bool = False
+    memory_v2_migrate_on_start: bool = True
+    memory_v2_db_path: str = ""  # empty -> <agent-office>/.apple-flow-memory.sqlite3
+    memory_v2_scope: str = "global"
+    memory_v2_maintenance_interval_seconds: float = 3600.0
+    memory_max_storage_mb: int = 256
+    memory_v2_include_legacy_fallback: bool = True
 
     # Follow-up scheduler
     enable_follow_ups: bool = False
@@ -247,7 +255,15 @@ class RelaySettings(BaseSettings):
             return [part.strip() for part in stripped.split(" ") if part.strip()]
         return value
 
-    @field_validator("admin_port", "enable_memory", mode="before")
+    @field_validator(
+        "admin_port",
+        "enable_memory",
+        "enable_memory_v2",
+        "memory_v2_shadow_mode",
+        "memory_v2_migrate_on_start",
+        "memory_v2_include_legacy_fallback",
+        mode="before",
+    )
     @classmethod
     def _empty_string_uses_default(cls, value: Any, info: ValidationInfo) -> Any:
         if value == "":

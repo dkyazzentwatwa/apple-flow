@@ -528,6 +528,11 @@ apple_flow_companion_digest_time=08:00
 # Persistent memory
 apple_flow_enable_memory=true
 apple_flow_memory_max_context_chars=2000
+
+# Optional canonical memory rollout (safe defaults)
+apple_flow_enable_memory_v2=false
+apple_flow_memory_v2_shadow_mode=true
+apple_flow_memory_v2_migrate_on_start=true
 ```
 
 **Features:**

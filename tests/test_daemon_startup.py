@@ -187,6 +187,89 @@ def test_relaydaemon_wires_gemini_approval_mode(monkeypatch, tmp_path):
     assert daemon.connector is not None
 
 
+def test_relaydaemon_initializes_memory_v2(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+
+    class _FakeStore:
+        def __init__(self, _path):
+            self._conn = sqlite3.connect(":memory:")
+            self._lock = threading.Lock()
+
+        def bootstrap(self):
+            pass
+
+        def get_state(self, _key):
+            return None
+
+        def set_state(self, _key, _value):
+            pass
+
+        def close(self):
+            pass
+
+    class _FakeIngress:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def latest_rowid(self):
+            return None
+
+    class _FakeOrchestrator:
+        def __init__(self, *_args, **kwargs):
+            captured["orchestrator_memory_service"] = kwargs.get("memory_service")
+            self._approval = object()
+
+        def set_run_executor(self, _executor):
+            pass
+
+    class _FakeRunExecutor:
+        def __init__(self, **_kwargs):
+            pass
+
+    class _FakeMemoryService:
+        def __init__(self, **kwargs):
+            captured["memory_service_kwargs"] = kwargs
+
+        def backfill_from_legacy(self):
+            captured["backfill_called"] = True
+
+        def close(self):
+            pass
+
+        def run_maintenance(self):
+            return {"expired_deleted": 0, "cap_deleted": 0}
+
+    monkeypatch.setattr(daemon_module, "ensure_gateway_resources", lambda **_kwargs: [])
+    monkeypatch.setattr(daemon_module, "SQLiteStore", _FakeStore)
+    monkeypatch.setattr(daemon_module, "PolicyEngine", lambda _settings: object())
+    monkeypatch.setattr(daemon_module, "IMessageIngress", _FakeIngress)
+    monkeypatch.setattr(daemon_module, "IMessageEgress", lambda **_kwargs: object())
+    monkeypatch.setattr(daemon_module, "RelayOrchestrator", _FakeOrchestrator)
+    monkeypatch.setattr(daemon_module, "RunExecutor", _FakeRunExecutor)
+    monkeypatch.setattr(daemon_module, "MemoryService", _FakeMemoryService)
+    monkeypatch.setattr(daemon_module, "CodexCliConnector", lambda **_kwargs: SimpleNamespace(shutdown=lambda: None))
+
+    office = tmp_path / "agent-office"
+    office.mkdir()
+    soul = office / "SOUL.md"
+    soul.write_text("identity", encoding="utf-8")
+
+    settings = RelaySettings(
+        db_path=tmp_path / "relay.db",
+        default_workspace=str(tmp_path),
+        allowed_workspaces=[str(tmp_path)],
+        soul_file=str(soul),
+        enable_memory=True,
+        enable_memory_v2=True,
+        memory_v2_shadow_mode=False,
+        memory_v2_migrate_on_start=True,
+    )
+
+    daemon = RelayDaemon(settings)
+    assert daemon.memory_service is not None
+    assert captured.get("backfill_called") is True
+    assert captured.get("orchestrator_memory_service") is daemon.memory_service
+
 @pytest.mark.asyncio
 async def test_mail_poll_loop_skips_forwarding_duplicate_response():
     daemon = RelayDaemon.__new__(RelayDaemon)

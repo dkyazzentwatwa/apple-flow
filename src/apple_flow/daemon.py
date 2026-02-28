@@ -29,6 +29,7 @@ from .kilo_cli_connector import KiloCliConnector
 from .mail_egress import AppleMailEgress
 from .mail_ingress import AppleMailIngress
 from .memory import FileMemory
+from .memory_v2 import MemoryService
 from .notes_egress import AppleNotesEgress
 from .notes_ingress import AppleNotesIngress
 from .office_sync import OfficeSyncer
@@ -246,6 +247,37 @@ class RelayDaemon:
             self.memory = FileMemory(self._office_path, max_context_chars=settings.memory_max_context_chars)
             logger.info("File-based memory enabled (office=%s)", self._office_path)
 
+        # Canonical memory v2 (active or shadow mode)
+        self.memory_service: MemoryService | None = None
+        if settings.enable_memory and self._office_path and (
+            settings.enable_memory_v2 or settings.memory_v2_shadow_mode
+        ):
+            db_path = (
+                Path(settings.memory_v2_db_path).expanduser()
+                if settings.memory_v2_db_path.strip()
+                else self._office_path / ".apple-flow-memory.sqlite3"
+            )
+            if not db_path.is_absolute():
+                db_path = (Path(__file__).resolve().parents[2] / db_path).resolve()
+            self.memory_service = MemoryService(
+                office_path=self._office_path,
+                db_path=db_path,
+                max_context_chars=settings.memory_max_context_chars,
+                enabled=settings.enable_memory_v2,
+                shadow_mode=settings.memory_v2_shadow_mode,
+                max_storage_mb=settings.memory_max_storage_mb,
+                include_legacy_fallback=settings.memory_v2_include_legacy_fallback,
+                default_scope=settings.memory_v2_scope,
+            )
+            if settings.memory_v2_migrate_on_start:
+                self.memory_service.backfill_from_legacy()
+            logger.info(
+                "Canonical memory v2 initialized (enabled=%s, shadow=%s, db=%s)",
+                settings.enable_memory_v2,
+                settings.memory_v2_shadow_mode,
+                db_path,
+            )
+
         # Follow-up scheduler (SQLite-backed)
         self.scheduler: FollowUpScheduler | None = None
         if settings.enable_follow_ups:
@@ -340,6 +372,7 @@ class RelayDaemon:
             log_notes_egress=notes_log_egress_obj,
             notes_log_folder_name=settings.notes_log_folder_name,
             memory=self.memory,
+            memory_service=self.memory_service,
             scheduler=self.scheduler,
             run_executor=None,
             office_syncer=self.office_syncer,
@@ -579,6 +612,12 @@ class RelayDaemon:
             self.store.close()
         except Exception as exc:
             logger.warning("Error closing store: %s", exc)
+        memory_service = getattr(self, "memory_service", None)
+        if memory_service is not None:
+            try:
+                memory_service.close()
+            except Exception as exc:
+                logger.warning("Error closing memory service: %s", exc)
         logger.info("Shutdown complete")
 
     async def run_forever(self) -> None:
@@ -595,6 +634,8 @@ class RelayDaemon:
             tasks.append(asyncio.create_task(self._companion_loop()))
         if self.ambient is not None:
             tasks.append(asyncio.create_task(self._ambient_loop()))
+        if getattr(self, "memory_service", None) is not None:
+            tasks.append(asyncio.create_task(self._memory_maintenance_loop()))
         try:
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
@@ -634,6 +675,25 @@ class RelayDaemon:
             await self.ambient.run_forever(lambda: self._shutdown_requested)
         except Exception as exc:
             logger.exception("Ambient scanner loop error: %s", exc)
+
+    async def _memory_maintenance_loop(self) -> None:
+        """Memory maintenance loop for v2 canonical store."""
+        assert self.memory_service is not None
+        logger.info("Memory maintenance loop started")
+        while not self._shutdown_requested:
+            try:
+                # Keep canonical memory aligned with legacy files during rollout.
+                self.memory_service.backfill_from_legacy()
+                stats = self.memory_service.run_maintenance()
+                if stats["expired_deleted"] or stats["cap_deleted"]:
+                    logger.info(
+                        "Memory maintenance pruned expired=%s cap=%s",
+                        stats["expired_deleted"],
+                        stats["cap_deleted"],
+                    )
+            except Exception as exc:
+                logger.exception("Memory maintenance loop error: %s", exc)
+            await asyncio.sleep(self.settings.memory_v2_maintenance_interval_seconds)
 
     async def _poll_imessage_loop(self) -> None:
         """iMessage polling loop (original behaviour)."""

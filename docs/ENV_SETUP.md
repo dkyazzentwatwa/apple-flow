@@ -306,6 +306,14 @@ Inject durable memory from `agent-office/MEMORY.md` and topic files in `agent-of
 |---|---|---|
 | `apple_flow_enable_memory` | `false` | Inject FileMemory into AI prompts before each turn. |
 | `apple_flow_memory_max_context_chars` | `2000` | Maximum characters of memory content to inject per turn. Oldest entries are trimmed first. |
+| `apple_flow_enable_memory_v2` | `false` | Use canonical SQLite memory retrieval for prompt injection (active mode). |
+| `apple_flow_memory_v2_shadow_mode` | `false` | Compute canonical retrieval but keep legacy prompt injection; logs rollout diff metrics. |
+| `apple_flow_memory_v2_migrate_on_start` | `true` | Backfill canonical memory from legacy files on daemon startup. |
+| `apple_flow_memory_v2_db_path` | `` | Canonical memory DB path; empty uses `<agent-office>/.apple-flow-memory.sqlite3`. |
+| `apple_flow_memory_v2_scope` | `global` | Retrieval scope selector for canonical memory entries. |
+| `apple_flow_memory_v2_maintenance_interval_seconds` | `3600` | How often to run canonical memory maintenance (prune + compaction checks). |
+| `apple_flow_memory_max_storage_mb` | `256` | Best-effort storage cap for canonical memory DB. |
+| `apple_flow_memory_v2_include_legacy_fallback` | `true` | If canonical retrieval is empty, fall back to legacy file memory context. |
 
 ---
 
