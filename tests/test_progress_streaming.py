@@ -1,7 +1,7 @@
 """Tests for progress streaming during long tasks."""
 
-from dataclasses import dataclass, field
 import time
+from dataclasses import dataclass, field
 
 from conftest import FakeEgress, FakeStore
 
