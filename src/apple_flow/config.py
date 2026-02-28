@@ -117,6 +117,7 @@ class RelaySettings(BaseSettings):
     reminders_owner: str = ""
     reminders_auto_approve: bool = False
     reminders_poll_interval_seconds: float = 5.0
+    reminders_due_delay_seconds: int = 60
 
     # Global trigger tag: items without this tag are skipped across all channels.
     # Empty string = disabled (process everything — backward compatible).

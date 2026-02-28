@@ -470,11 +470,18 @@ apple_flow_mail_from_address=you@example.com
 <details>
 <summary><b>☑️ Apple Reminders</b></summary>
 
-Add `!!agent` to a reminder's name or notes to turn it into an AI task. The reminder is completed and annotated with the result once done.
+Add `!!agent` to a reminder's name or notes to turn it into an AI task.
+
+- No due date: runs immediately on the next poll.
+- Due date set: runs only after the due time (plus `apple_flow_reminders_due_delay_seconds`, default 60s).
+- Repeating reminders: each due occurrence is processed once.
+
+The reminder is completed and annotated with the result once done.
 
 ```env
 apple_flow_enable_reminders_polling=true
 apple_flow_reminders_list_name=agent-task
+apple_flow_reminders_due_delay_seconds=60
 ```
 
 **Example:** Create a reminder `!!agent summarize today's meeting notes` in your "agent-task" list.

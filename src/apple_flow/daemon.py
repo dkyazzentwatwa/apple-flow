@@ -440,6 +440,7 @@ class RelayDaemon:
                 owner_sender=owner,
                 auto_approve=settings.reminders_auto_approve,
                 trigger_tag=settings.trigger_tag,
+                due_delay_seconds=settings.reminders_due_delay_seconds,
                 store=self.store,
             )
             self.reminders_orchestrator = RelayOrchestrator(
@@ -1017,6 +1018,7 @@ class RelayDaemon:
                         continue
 
                     reminder_id = msg.context.get("reminder_id", "")
+                    occurrence_key = msg.context.get("occurrence_key", "") or f"{reminder_id}|"
                     reminder_name = msg.context.get("reminder_name", "")
                     logger.info(
                         "Inbound reminder id=%s name=%r sender=%s chars=%s",
@@ -1026,7 +1028,7 @@ class RelayDaemon:
                         len(msg.text),
                     )
 
-                    self.reminders_ingress.mark_processed(reminder_id)
+                    self.reminders_ingress.mark_processed_occurrence(occurrence_key)
                     dispatchable_reminders.append(msg)
 
                 async def _dispatch_reminder(msg):

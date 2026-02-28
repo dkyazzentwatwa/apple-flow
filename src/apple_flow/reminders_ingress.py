@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .models import InboundMessage
 from .protocols import StoreProtocol
@@ -19,8 +19,9 @@ from .utils import normalize_sender
 
 logger = logging.getLogger("apple_flow.reminders_ingress")
 
-# Store key prefix for tracking which reminder IDs have been processed.
+# Store keys for tracking processed reminders.
 _PROCESSED_IDS_KEY = "reminders_processed_ids"
+_PROCESSED_OCCURRENCES_KEY = "reminders_processed_occurrences"
 
 
 class AppleRemindersIngress:
@@ -32,22 +33,34 @@ class AppleRemindersIngress:
         owner_sender: str = "",
         auto_approve: bool = False,
         trigger_tag: str = "",
+        due_delay_seconds: int = 60,
         store: StoreProtocol | None = None,
     ):
         self.list_name = list_name
         self.owner_sender = normalize_sender(owner_sender)
         self.auto_approve = auto_approve
         self.trigger_tag = trigger_tag.strip()
+        self.due_delay_seconds = max(0, int(due_delay_seconds))
         self._store = store
-        self._processed_ids: set[str] = set()
-        # Hydrate processed IDs from persistent store on startup.
+        self._processed_occurrences: set[str] = set()
+        # Hydrate processed occurrence keys from persistent store on startup.
         if store is not None:
-            raw = store.get_state(_PROCESSED_IDS_KEY)
-            if raw:
+            raw_occurrences = store.get_state(_PROCESSED_OCCURRENCES_KEY)
+            if raw_occurrences:
                 try:
-                    self._processed_ids = set(json.loads(raw))
+                    self._processed_occurrences = set(json.loads(raw_occurrences))
                 except (json.JSONDecodeError, TypeError):
-                    self._processed_ids = set()
+                    self._processed_occurrences = set()
+            else:
+                # Backward-compatible migration from reminder-id-only dedupe.
+                raw_ids = store.get_state(_PROCESSED_IDS_KEY)
+                if raw_ids:
+                    try:
+                        legacy_ids = set(json.loads(raw_ids))
+                    except (json.JSONDecodeError, TypeError):
+                        legacy_ids = set()
+                    self._processed_occurrences = {self._occurrence_key(reminder_id, "") for reminder_id in legacy_ids}
+                    self._persist_processed_occurrences()
 
     def fetch_new(
         self,
@@ -69,14 +82,15 @@ class AppleRemindersIngress:
             if not reminder_id:
                 continue
 
-            # Skip already-processed reminders.
-            if reminder_id in self._processed_ids:
-                continue
-
             name = (raw.get("name", "") or "").strip()
             body = (raw.get("body", "") or "").strip()
             creation_date = raw.get("creation_date", "")
             due_date = raw.get("due_date", "")
+            occurrence_key = self._occurrence_key(reminder_id, due_date)
+
+            # Skip already-processed occurrences.
+            if occurrence_key in self._processed_occurrences:
+                continue
 
             # Skip reminders that don't contain the trigger tag (if configured).
             if self.trigger_tag:
@@ -84,6 +98,20 @@ class AppleRemindersIngress:
                     continue
                 name = name.replace(self.trigger_tag, "").strip()
                 body = body.replace(self.trigger_tag, "").strip()
+
+            # Due-tagged reminders are dispatched only after due time + configured delay.
+            if due_date:
+                due_at = self._parse_due_date(due_date)
+                if due_at is None:
+                    logger.warning(
+                        "Skipping reminder id=%s due to unparseable due date: %r",
+                        reminder_id,
+                        due_date,
+                    )
+                    continue
+                cutoff = datetime.now() - timedelta(seconds=self.due_delay_seconds)
+                if due_at > cutoff:
+                    continue
 
             # Build the task text from reminder name + notes.
             text = self._compose_text(name, body, due_date)
@@ -108,6 +136,7 @@ class AppleRemindersIngress:
                     context={
                         "channel": "reminders",
                         "reminder_id": reminder_id,
+                        "occurrence_key": occurrence_key,
                         "reminder_name": name,
                         "list_name": self.list_name,
                     },
@@ -116,19 +145,25 @@ class AppleRemindersIngress:
 
         return messages[:limit]
 
+    def mark_processed_occurrence(self, occurrence_key: str) -> None:
+        """Record an occurrence key as processed so it won't be fetched again."""
+        if not occurrence_key:
+            return
+        self._processed_occurrences.add(occurrence_key)
+        self._persist_processed_occurrences()
+
     def mark_processed(self, reminder_id: str) -> None:
-        """Record a reminder ID as processed so it won't be fetched again."""
-        self._processed_ids.add(reminder_id)
-        self._persist_processed_ids()
+        """Backward-compatible helper for id-only callers."""
+        self.mark_processed_occurrence(self._occurrence_key(reminder_id, ""))
 
     def latest_rowid(self) -> int | None:
         """Not applicable for Reminders.  Returns 0 as sentinel."""
         return 0
 
-    def _persist_processed_ids(self) -> None:
-        """Persist the set of processed reminder IDs to the store."""
+    def _persist_processed_occurrences(self) -> None:
+        """Persist processed reminder occurrence keys to the store."""
         if self._store is not None:
-            self._store.set_state(_PROCESSED_IDS_KEY, json.dumps(sorted(self._processed_ids)))
+            self._store.set_state(_PROCESSED_OCCURRENCES_KEY, json.dumps(sorted(self._processed_occurrences)))
 
     def _fetch_incomplete_via_applescript(self, limit: int) -> list[dict[str, str]]:
         """Run AppleScript to get incomplete reminders as tab-delimited records.
@@ -139,6 +174,24 @@ class AppleRemindersIngress:
         escaped_list_name = self.list_name.replace('"', '\\"')
 
         script = f'''
+        on pad2(n)
+            set nStr to n as text
+            if (length of nStr) is 1 then
+                return "0" & nStr
+            end if
+            return nStr
+        end pad2
+
+        on isoLocalDate(d)
+            set y to year of d as integer
+            set m to month of d as integer
+            set dd to day of d as integer
+            set hh to hours of d as integer
+            set mm to minutes of d as integer
+            set ss to seconds of d as integer
+            return (y as text) & "-" & my pad2(m) & "-" & my pad2(dd) & " " & my pad2(hh) & ":" & my pad2(mm) & ":" & my pad2(ss)
+        end isoLocalDate
+
         on sanitise(txt)
             set AppleScript's text item delimiters to tab
             set parts to text items of txt
@@ -214,7 +267,11 @@ class AppleRemindersIngress:
                     if rDue is missing value then
                         set rDueStr to ""
                     else
-                        set rDueStr to my sanitise(rDue as text)
+                        try
+                            set rDueStr to my isoLocalDate(rDue)
+                        on error
+                            set rDueStr to my sanitise(rDue as text)
+                        end try
                     end if
                 on error
                     set rDueStr to ""
@@ -287,3 +344,38 @@ class AppleRemindersIngress:
             f"{name} [due: {due_date}]" if name and due_date else name,
             body,
         ]))
+
+    @staticmethod
+    def _occurrence_key(reminder_id: str, due_date: str) -> str:
+        return f"{reminder_id}|{due_date.strip()}"
+
+    @staticmethod
+    def _parse_due_date(value: str) -> datetime | None:
+        """Parse reminder due date text into a local naive datetime."""
+        raw = (value or "").strip()
+        if not raw:
+            return None
+        if raw.endswith("Z"):
+            raw = f"{raw[:-1]}+00:00"
+
+        try:
+            parsed = datetime.fromisoformat(raw)
+            if parsed.tzinfo is not None:
+                return parsed.astimezone().replace(tzinfo=None)
+            return parsed
+        except ValueError:
+            pass
+
+        known_formats = [
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d",
+            "%a %b %d %H:%M:%S %Z %Y",
+            "%a %b %d %H:%M:%S %Y",
+        ]
+        for fmt in known_formats:
+            try:
+                return datetime.strptime(raw, fmt)
+            except ValueError:
+                continue
+        return None
