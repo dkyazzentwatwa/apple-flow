@@ -273,13 +273,19 @@ class AppleMailIngress:
         if not sanitized_ids:
             return {}
 
+        def _id_match_clause(mid: str) -> str:
+            if mid.isdigit():
+                return f"id is {int(mid)}"
+            return f'id as text is "{mid}"'
+
         def _id_block(mid: str) -> str:
+            id_match = _id_match_clause(mid)
             return f'''
 \tset statusForId to "not_found"
 \tset resolvedMsg to missing value
 \tset foundInPrimary to false
 \ttry
-\t\tset resolvedMsg to first message of {mailbox_ref} whose id as text is "{mid}"
+\t\tset resolvedMsg to first message of {mailbox_ref} whose {id_match}
 \t\tset foundInPrimary to true
 \ton error
 \t\tset resolvedMsg to missing value
@@ -289,7 +295,7 @@ class AppleMailIngress:
 \t\t\tset accountMailboxes to every mailbox of acc
 \t\t\trepeat with boxRef in accountMailboxes
 \t\t\t\ttry
-\t\t\t\t\tset resolvedMsg to first message of boxRef whose id as text is "{mid}"
+\t\t\t\t\tset resolvedMsg to first message of boxRef whose {id_match}
 \t\t\t\t\texit repeat
 \t\t\t\ton error
 \t\t\t\t\tset resolvedMsg to missing value

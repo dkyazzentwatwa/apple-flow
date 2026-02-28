@@ -210,10 +210,25 @@ def test_mark_as_read_targets_ids_directly(monkeypatch):
     ingress._mark_as_read(["42", "43"])
 
     script = captured["cmd"][2]
-    assert 'first message of inbox whose id as text is "42"' in script
-    assert 'first message of inbox whose id as text is "43"' in script
+    assert "first message of inbox whose id is 42" in script
+    assert "first message of inbox whose id is 43" in script
     assert "every message of inbox whose read status is false" not in script
     assert captured["kwargs"]["timeout"] == 30
+
+
+def test_mark_as_read_uses_text_match_for_non_numeric_ids(monkeypatch):
+    ingress = AppleMailIngress()
+    captured: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return SimpleNamespace(returncode=0, stdout="msg-abc\tmatched\n", stderr="")
+
+    monkeypatch.setattr("apple_flow.mail_ingress.subprocess.run", fake_run)
+
+    ingress._mark_as_read(["msg-abc"])
+    script = captured["cmd"][2]
+    assert 'first message of inbox whose id as text is "msg-abc"' in script
 
 
 def test_parse_mark_read_outcomes_defaults_missing_ids_to_error():
