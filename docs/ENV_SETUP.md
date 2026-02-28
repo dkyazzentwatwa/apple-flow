@@ -35,7 +35,7 @@ Pick one AI backend. The value of `apple_flow_connector` determines which is use
 
 | Variable | Default | Options / Description |
 |---|---|---|
-| `apple_flow_connector` | `codex-cli` | `codex-cli` — uses `codex exec` (requires `codex login`)<br>`claude-cli` — uses `claude -p` (requires `claude auth login`)<br>`gemini-cli` — uses `gemini -p` (requires `gemini auth login`)<br>`cline` — uses `cline -y` (supports multiple model providers)<br>`codex-app-server` — deprecated stateful connector |
+| `apple_flow_connector` | `codex-cli` | `codex-cli` — uses `codex exec` (requires `codex login`)<br>`claude-cli` — uses `claude -p` (requires `claude auth login`)<br>`gemini-cli` — uses `gemini -p` (requires `gemini auth login`)<br>`cline` — uses `cline -y` (supports multiple model providers) |
 
 ### Codex CLI settings (`connector=codex-cli`)
 

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger("apple_flow.config")
 
 
 class RelaySettings(BaseSettings):
@@ -27,16 +30,14 @@ class RelaySettings(BaseSettings):
     approval_ttl_minutes: int = 20
     max_messages_per_minute: int = 30
 
-    codex_app_server_cmd: list[str] = Field(default_factory=lambda: ["codex", "app-server"])
-
-    # CLI connector settings (preferred over app-server)
+    # Legacy setting kept for migration messaging only; ignored for connector selection.
     use_codex_cli: bool = True
     codex_cli_command: str = "codex"
     codex_cli_context_window: int = 10
     codex_cli_model: str = ""  # e.g., "gpt-5.3-codex" (empty = use codex default)
 
-    # Connector selection (overrides use_codex_cli when set)
-    connector: str = ""  # "codex-cli" | "claude-cli" | "gemini-cli" | "kilo-cli" | "cline" | "codex-app-server"
+    # Connector selection.
+    connector: str = ""  # "codex-cli" | "claude-cli" | "gemini-cli" | "kilo-cli" | "cline"
 
     # Claude CLI connector settings (used when connector="claude-cli")
     claude_cli_command: str = "claude"
@@ -243,22 +244,6 @@ class RelaySettings(BaseSettings):
             return [part.strip() for part in stripped.split(",") if part.strip()]
         return value
 
-    @field_validator("codex_app_server_cmd", mode="before")
-    @classmethod
-    def _parse_command(cls, value: Any) -> Any:
-        if isinstance(value, list):
-            return value
-        if value is None:
-            return ["codex", "app-server"]
-        if isinstance(value, str):
-            stripped = value.strip()
-            if not stripped:
-                return ["codex", "app-server"]
-            if stripped.startswith("["):
-                return json.loads(stripped)
-            return [part.strip() for part in stripped.split(" ") if part.strip()]
-        return value
-
     @field_validator(
         "admin_port",
         "enable_memory",
@@ -302,14 +287,30 @@ class RelaySettings(BaseSettings):
         return value
 
     def get_connector_type(self) -> str:
-        """Return the active connector type string.
+        """Return active connector type, auto-migrating deprecated values."""
+        connector = (self.connector or "").strip()
+        if connector == "codex-app-server":
+            return "codex-cli"
+        if connector:
+            return connector
+        return "codex-cli"
 
-        Honors the explicit `connector` field first; falls back to the legacy
-        `use_codex_cli` boolean for backwards compatibility.
-        """
-        if self.connector:
-            return self.connector
-        return "codex-cli" if self.use_codex_cli else "codex-app-server"
+    def get_connector_warnings(self) -> list[str]:
+        """Return one-time migration warnings for deprecated connector config."""
+        warnings: list[str] = []
+        if (self.connector or "").strip() == "codex-app-server":
+            warnings.append(
+                "Deprecated connector 'codex-app-server' detected; auto-migrating to 'codex-cli'. "
+                "Please update apple_flow_connector in .env."
+            )
+        if not (self.connector or "").strip() and self.use_codex_cli is False:
+            warnings.append(
+                "Legacy key apple_flow_use_codex_cli=false is deprecated and ignored; "
+                "defaulting connector to 'codex-cli'."
+            )
+        for warning in warnings:
+            logger.warning(warning)
+        return warnings
 
     def get_workspace_aliases(self) -> dict[str, str]:
         """Parse workspace_aliases JSON string into a dict."""

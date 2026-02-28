@@ -10,7 +10,6 @@ def test_csv_dotenv_values_load_without_json(monkeypatch, tmp_path):
             [
                 "apple_flow_allowed_senders=+15551234567,+15550000000",
                 "apple_flow_allowed_workspaces=/Users/cypher/Public/code/codex-flow,/tmp/safe",
-                "apple_flow_codex_app_server_cmd=codex app-server",
             ]
         )
     )
@@ -24,4 +23,4 @@ def test_csv_dotenv_values_load_without_json(monkeypatch, tmp_path):
         str(Path("/Users/cypher/Public/code/codex-flow").resolve()),
         str(Path("/tmp/safe").resolve()),
     ]
-    assert settings.codex_app_server_cmd == ["codex", "app-server"]
+    assert settings.get_connector_type() == "codex-cli"

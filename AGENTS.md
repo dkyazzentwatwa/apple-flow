@@ -130,7 +130,6 @@ Only `SCAFFOLD.md`, `setup.sh`, and `SOUL.md` are tracked by git. Everything els
 | `claude_cli_connector.py` | Stateless CLI connector using `claude -p` |
 | `gemini_cli_connector.py` | Stateless CLI connector using `gemini -p` |
 | `cline_connector.py` | Agentic CLI connector using `cline -y`, supports any model provider |
-| `codex_connector.py` | Stateful app-server connector via JSON-RPC (deprecated fallback) |
 | `main.py` | FastAPI admin endpoints (/health, /sessions, /approvals, /audit/events, POST /task) |
 | `admin_client.py` | Admin API client library (programmatic access to admin endpoints) |
 | `protocols.py` | Protocol interfaces for type-safe component injection (StoreProtocol, ConnectorProtocol, EgressProtocol) |
@@ -238,7 +237,7 @@ All settings use the `apple_flow_` env prefix. Configured via `.env` file.
 
 ### Connector Settings
 
-- `apple_flow_connector` -- connector to use: `"codex-cli"` (default), `"claude-cli"`, `"gemini-cli"`, `"cline"`, `"kilo-cli"` , `"codex-app-server"` (deprecated)
+- `apple_flow_connector` -- connector to use: `"codex-cli"` (default), `"claude-cli"`, `"gemini-cli"`, `"cline"`, `"kilo-cli"`
 - `apple_flow_codex_turn_timeout_seconds` -- timeout for all connectors (default: 300s/5min)
 
 Connector-specific settings (CLI binary path, model, context window, etc.) are documented in `.env.example`. See also the **Connector selection** section under Development Conventions below.
@@ -403,8 +402,7 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 - `"claude-cli"`: `claude_cli_connector.py` -- stateless `claude -p`, requires `claude auth login`
 - `"gemini-cli"`: `gemini_cli_connector.py` -- stateless `gemini -p`, requires `gemini auth login`
 - `"cline"`: `cline_connector.py` -- agentic `cline -y`, supports any model provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
-- `"codex-app-server"` (deprecated): `codex_connector.py` -- stateful JSON-RPC, prone to state corruption
-- Selection controlled by `apple_flow_connector` config field (falls back to `apple_flow_use_codex_cli` for backwards compat)
+- Selection controlled by `apple_flow_connector` config field
 
 ### Key patterns
 

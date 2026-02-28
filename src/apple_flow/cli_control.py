@@ -93,8 +93,6 @@ def _connector_command_key(connector: str) -> str:
         return "apple_flow_gemini_cli_command"
     if connector == "cline":
         return "apple_flow_cline_command"
-    if connector == "codex-app-server":
-        return "apple_flow_codex_app_server_cmd"
     return ""
 
 
@@ -368,7 +366,18 @@ def _wizard_doctor(args: Any) -> dict[str, Any]:
     messages_db_exists = (Path.home() / "Library" / "Messages" / "chat.db").exists()
     readable, read_reason = check_messages_db_access()
 
-    connector = env.get("apple_flow_connector", "codex-cli").strip() or "codex-cli"
+    warnings: list[str] = []
+    raw_connector = env.get("apple_flow_connector", "").strip()
+    connector = raw_connector or "codex-cli"
+    if connector == "codex-app-server":
+        warnings.append(
+            "Deprecated connector 'codex-app-server' detected in .env; auto-migrating to codex-cli."
+        )
+        connector = "codex-cli"
+    if not raw_connector and env.get("apple_flow_use_codex_cli", "").strip().lower() == "false":
+        warnings.append(
+            "Legacy key apple_flow_use_codex_cli=false is ignored; defaulting to codex-cli."
+        )
     connector_key = _connector_command_key(connector)
     connector_command = env.get(connector_key, "").strip() if connector_key else ""
     if not connector_command:
@@ -377,7 +386,6 @@ def _wizard_doctor(args: Any) -> dict[str, Any]:
             "codex-cli": "codex",
             "gemini-cli": "gemini",
             "cline": "cline",
-            "codex-app-server": "codex app-server",
         }
         connector_command = default_commands.get(connector, "")
 
@@ -417,6 +425,7 @@ def _wizard_doctor(args: Any) -> dict[str, Any]:
         connector_binary_path=resolved_binary or "",
         admin_api_token_present=token_present,
         env_file_path=env_path_display,
+        warnings=warnings,
         errors=errors,
     )
 
@@ -435,9 +444,11 @@ def _wizard_generate_env(args: Any) -> dict[str, Any]:
         validation_errors.append("phone must be E.164 format, e.g. +15551234567")
 
     connector = (args.connector or "").strip()
-    if connector not in {"claude-cli", "codex-cli", "gemini-cli", "cline", "codex-app-server"}:
+    if connector == "codex-app-server":
+        connector = "codex-cli"
+    if connector not in {"claude-cli", "codex-cli", "gemini-cli", "cline"}:
         validation_errors.append(
-            "connector must be one of: claude-cli, codex-cli, gemini-cli, cline, codex-app-server"
+            "connector must be one of: claude-cli, codex-cli, gemini-cli, cline"
         )
 
     workspace = validate_workspace_path(args.workspace or "")

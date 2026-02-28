@@ -42,7 +42,6 @@ _ENUM_OPTIONS: dict[str, list[str]] = {
         "gemini-cli",
         "kilo-cli",
         "cline",
-        "codex-app-server",
     ],
     "apple_flow_gemini_cli_approval_mode": ["default", "auto_edit", "yolo", "plan"],
     "apple_flow_companion_weekly_review_day": [
@@ -54,6 +53,10 @@ _ENUM_OPTIONS: dict[str, list[str]] = {
         "saturday",
         "sunday",
     ],
+}
+
+_SKIP_KEYS = {
+    "apple_flow_use_codex_cli",
 }
 
 
@@ -91,7 +94,6 @@ def _section_for_key(key: str) -> str:
             "apple_flow_gemini_",
             "apple_flow_kilo_",
             "apple_flow_cline_",
-            "apple_flow_use_codex_cli",
         )
     ):
         return "connectors"
@@ -193,6 +195,8 @@ def build_config_schema() -> dict[str, Any]:
     fields: list[dict[str, Any]] = []
     for name, field in RelaySettings.model_fields.items():
         key = _field_to_key(name)
+        if key in _SKIP_KEYS:
+            continue
         section_id = _section_for_key(key)
         enum_options = _ENUM_OPTIONS.get(key, [])
         sensitive = _is_sensitive(key)

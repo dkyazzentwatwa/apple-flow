@@ -17,7 +17,6 @@ from .calendar_ingress import AppleCalendarIngress
 from .claude_cli_connector import ClaudeCliConnector
 from .cline_connector import ClineConnector
 from .codex_cli_connector import CodexCliConnector
-from .codex_connector import CodexAppServerConnector
 from .commanding import CommandKind, parse_command
 from .companion import CompanionLoop
 from .config import RelaySettings
@@ -129,6 +128,8 @@ class RelayDaemon:
         )
 
         # Choose connector based on configuration
+        for warning in settings.get_connector_warnings():
+            logger.warning(warning)
         connector_type = settings.get_connector_type()
         known_connectors = {
             "codex-cli",
@@ -136,7 +137,6 @@ class RelayDaemon:
             "gemini-cli",
             "kilo-cli",
             "cline",
-            "codex-app-server",
         }
         if connector_type not in known_connectors:
             raise ValueError(
@@ -144,18 +144,7 @@ class RelayDaemon:
                 f"Valid options: {', '.join(sorted(known_connectors))}"
             )
 
-        if connector_type == "codex-app-server":
-            logger.warning(
-                "app-server connector is deprecated and may cause state corruption. "
-                "Set apple_flow_connector=codex-cli, apple_flow_connector=claude-cli, or "
-                "apple_flow_connector=gemini-cli instead."
-            )
-            logger.info("Using app-server connector (JSON-RPC with persistent threads)")
-            self.connector: ConnectorProtocol = CodexAppServerConnector(
-                settings.codex_app_server_cmd,
-                turn_timeout_seconds=settings.codex_turn_timeout_seconds,
-            )
-        elif connector_type == "claude-cli":
+        if connector_type == "claude-cli":
             logger.info("Using Claude CLI connector (claude -p) for stateless execution")
             self.connector = ClaudeCliConnector(
                 claude_command=settings.claude_cli_command,
@@ -1213,9 +1202,6 @@ class RelayDaemon:
         elif connector_type == "cline":
             model_val = self.settings.cline_model or "cline default"
             connector_line = "⚙️  Engine: cline -y (agentic)"
-        elif connector_type == "codex-app-server":
-            model_val = self.settings.codex_cli_model or "codex default"
-            connector_line = "⚙️  Engine: app-server (stateful, deprecated)"
         else:
             model_val = self.settings.codex_cli_model or "codex default"
             connector_line = "⚙️  Engine: codex exec (stateless)"
