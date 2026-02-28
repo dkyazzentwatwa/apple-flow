@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from conftest import FakeStore
 
@@ -315,6 +316,35 @@ def test_unparseable_due_date_skips(monkeypatch):
     ]
     monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
     assert ingress.fetch_new() == []
+
+
+def test_parse_due_date_uses_configured_timezone():
+    ingress = AppleRemindersIngress(timezone_name="UTC")
+    parsed = ingress._parse_due_date("2026-03-01 10:00:00")
+    assert parsed is not None
+    assert parsed.tzinfo == ZoneInfo("UTC")
+
+
+def test_due_date_with_configured_timezone_runs(monkeypatch):
+    ingress = AppleRemindersIngress(
+        owner_sender="+15551234567",
+        trigger_tag="!!agent",
+        due_delay_seconds=60,
+        timezone_name="UTC",
+    )
+    due_utc = (datetime.now(ZoneInfo("UTC")) - timedelta(seconds=180)).strftime("%Y-%m-%d %H:%M:%S")
+    raw = [
+        {
+            "id": "rem_tz_due",
+            "name": "Deploy !!agent",
+            "body": "",
+            "creation_date": "",
+            "due_date": due_utc,
+        },
+    ]
+    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
+    messages = ingress.fetch_new()
+    assert len(messages) == 1
 
 
 def test_recurrence_runs_new_due_occurrence(monkeypatch):

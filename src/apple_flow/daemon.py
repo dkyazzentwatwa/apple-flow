@@ -441,6 +441,7 @@ class RelayDaemon:
                 auto_approve=settings.reminders_auto_approve,
                 trigger_tag=settings.trigger_tag,
                 due_delay_seconds=settings.reminders_due_delay_seconds,
+                timezone_name=settings.timezone,
                 store=self.store,
             )
             self.reminders_orchestrator = RelayOrchestrator(

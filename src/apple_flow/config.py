@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,6 +21,7 @@ class RelaySettings(BaseSettings):
     allowed_workspaces: list[str] = Field(default_factory=list)
 
     default_workspace: str = str(Path.home())
+    timezone: str = ""  # e.g. "America/Los_Angeles"; empty = system local timezone
     db_path: Path = Path.home() / ".apple-flow" / "relay.db"
     poll_interval_seconds: float = 2.0
     approval_ttl_minutes: int = 20
@@ -285,6 +287,19 @@ class RelaySettings(BaseSettings):
     def _resolve_default_workspace(cls, value: str) -> str:
         """Resolve default workspace to absolute path."""
         return str(Path(value).resolve())
+
+    @field_validator("timezone", mode="after")
+    @classmethod
+    def _validate_timezone(cls, value: str) -> str:
+        if not value:
+            return value
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(
+                f"Invalid timezone {value!r}. Use an IANA timezone like 'America/Los_Angeles'."
+            ) from exc
+        return value
 
     def get_connector_type(self) -> str:
         """Return the active connector type string.

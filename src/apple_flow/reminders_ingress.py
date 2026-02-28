@@ -12,6 +12,7 @@ import json
 import logging
 import subprocess
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .models import InboundMessage
 from .protocols import StoreProtocol
@@ -34,6 +35,7 @@ class AppleRemindersIngress:
         auto_approve: bool = False,
         trigger_tag: str = "",
         due_delay_seconds: int = 60,
+        timezone_name: str = "",
         store: StoreProtocol | None = None,
     ):
         self.list_name = list_name
@@ -41,6 +43,8 @@ class AppleRemindersIngress:
         self.auto_approve = auto_approve
         self.trigger_tag = trigger_tag.strip()
         self.due_delay_seconds = max(0, int(due_delay_seconds))
+        self.timezone_name = timezone_name.strip()
+        self._tzinfo = self._load_timezone(self.timezone_name)
         self._store = store
         self._processed_occurrences: set[str] = set()
         # Hydrate processed occurrence keys from persistent store on startup.
@@ -109,7 +113,7 @@ class AppleRemindersIngress:
                         due_date,
                     )
                     continue
-                cutoff = datetime.now() - timedelta(seconds=self.due_delay_seconds)
+                cutoff = self._now() - timedelta(seconds=self.due_delay_seconds)
                 if due_at > cutoff:
                     continue
 
@@ -349,9 +353,8 @@ class AppleRemindersIngress:
     def _occurrence_key(reminder_id: str, due_date: str) -> str:
         return f"{reminder_id}|{due_date.strip()}"
 
-    @staticmethod
-    def _parse_due_date(value: str) -> datetime | None:
-        """Parse reminder due date text into a local naive datetime."""
+    def _parse_due_date(self, value: str) -> datetime | None:
+        """Parse reminder due date text into local/system or configured timezone."""
         raw = (value or "").strip()
         if not raw:
             return None
@@ -361,8 +364,10 @@ class AppleRemindersIngress:
         try:
             parsed = datetime.fromisoformat(raw)
             if parsed.tzinfo is not None:
+                if self._tzinfo is not None:
+                    return parsed.astimezone(self._tzinfo)
                 return parsed.astimezone().replace(tzinfo=None)
-            return parsed
+            return self._with_configured_timezone(parsed)
         except ValueError:
             pass
 
@@ -375,7 +380,33 @@ class AppleRemindersIngress:
         ]
         for fmt in known_formats:
             try:
-                return datetime.strptime(raw, fmt)
+                parsed = datetime.strptime(raw, fmt)
+                return self._with_configured_timezone(parsed)
             except ValueError:
                 continue
         return None
+
+    def _now(self) -> datetime:
+        if self._tzinfo is not None:
+            return datetime.now(self._tzinfo)
+        return datetime.now()
+
+    def _with_configured_timezone(self, value: datetime) -> datetime:
+        if self._tzinfo is None:
+            return value
+        if value.tzinfo is not None:
+            return value.astimezone(self._tzinfo)
+        return value.replace(tzinfo=self._tzinfo)
+
+    @staticmethod
+    def _load_timezone(timezone_name: str) -> ZoneInfo | None:
+        if not timezone_name:
+            return None
+        try:
+            return ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError:
+            logger.warning(
+                "Invalid timezone %r; falling back to system local time for reminders scheduling.",
+                timezone_name,
+            )
+            return None

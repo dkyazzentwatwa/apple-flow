@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from apple_flow.config import RelaySettings
 
 
@@ -124,3 +126,15 @@ def test_gemini_cli_approval_mode_default(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = RelaySettings()
     assert settings.gemini_cli_approval_mode == "yolo"
+
+
+def test_timezone_accepts_valid_iana_name(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings(timezone="America/Los_Angeles")
+    assert settings.timezone == "America/Los_Angeles"
+
+
+def test_timezone_rejects_invalid_name(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError, match="Invalid timezone"):
+        RelaySettings(timezone="Not/A_Real_Zone")

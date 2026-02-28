@@ -296,6 +296,7 @@ Verify these required fields:
 ```env
 apple_flow_allowed_senders=+15551234567       # your own phone number in +1... format
 apple_flow_allowed_workspaces=/Users/you/code # folder(s) the AI can read/write
+apple_flow_timezone=America/Los_Angeles       # optional; set if host timezone differs
 
 # Choose your AI connector (pick one):
 apple_flow_connector=claude-cli   # Claude Code CLI  — requires: claude auth login
@@ -474,6 +475,7 @@ Add `!!agent` to a reminder's name or notes to turn it into an AI task.
 
 - No due date: runs immediately on the next poll.
 - Due date set: runs only after the due time (plus `apple_flow_reminders_due_delay_seconds`, default 60s).
+- Due-time interpretation uses `apple_flow_timezone` when set.
 - Repeating reminders: each due occurrence is processed once.
 
 The reminder is completed and annotated with the result once done.
