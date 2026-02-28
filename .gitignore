@@ -61,9 +61,8 @@ agent-office/20_projects/workspace-dashboard/*
 !agent-office/20_projects/workspace-dashboard/snapshot.py
 !agent-office/20_projects/workspace-dashboard/server.py
 
-# Swift GUI app source (keep private/local), publish only dist artifacts.
+# Swift GUI app source (legacy /app path kept private/local).
 /app/
-/apps/
 
 # AppleFlowApp local build artifacts
 apps/macos/AppleFlowApp/.build/
