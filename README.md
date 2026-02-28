@@ -66,20 +66,7 @@ Each team bundle includes:
 - `preset.toml` (`[agents.<role>]` mappings)
 - `roles/*.toml` (`default`, `explorer`, `reviewer`, `worker`, `monitor`)
 
-Quick usage:
-
-```bash
-./scripts/agents/list_teams.sh
-./scripts/agents/use_team.sh imessage-command-center
-```
-
-This writes a managed team preset block into `.codex/config.toml` with backup support.
-
-### iMessage-native team commands (new)
-
-You can now manage teams directly from iMessage in a natural way. Team activation is **per sender** and **auto-resets after the next work request** (`idea`, `plan`, `task`, `project`).
-
-Examples:
+Default usage is natural language via iMessage (no scripts required):
 
 - `list available agent teams`
 - `load up the codebase-exploration-team and research new features`
@@ -87,12 +74,20 @@ Examples:
 - `what team is active`
 - `unload team`
 
+### iMessage-native team commands (new)
+
+You can now manage teams directly from iMessage in a natural way. Team activation is **per sender** and **auto-resets after the next work request** (`idea`, `plan`, `task`, `project`).
+
+This is the recommended way for everyday team usage.
+
 Explicit `system:` forms also work:
 
 - `system: teams list`
 - `system: team load <slug>`
 - `system: team current`
 - `system: team unload`
+
+Optional advanced/manual path: copy `agents/teams/<slug>/preset.toml` into your project `.codex/config.toml` if you want static preset wiring.
 
 Connector behavior:
 

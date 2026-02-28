@@ -4,30 +4,37 @@ This directory provides a Codex-native multi-agent catalog for Apple Flow and ad
 
 ## What You Get
 
-- 36 self-contained team bundles under `agents/teams/`
+- 37 self-contained team bundles under `agents/teams/`
 - Team-level `preset.toml` files with `[agents.<role>]` mappings
 - Role prompt files in `roles/*.toml`
 - Machine-readable `agents/catalog.toml`
-- Activation scripts:
-  - `scripts/agents/list_teams.sh`
-  - `scripts/agents/use_team.sh <team-slug>`
+- iMessage-native natural language team loading/unloading
 
 ## Team Tracks
 
 - Apple Flow Ops (12)
-- Software/GTM (12)
+- Software/GTM (13)
 - Business Ops (12)
 
-## Quick Start
+## Quick Start (Natural Language)
 
-```bash
-./scripts/agents/list_teams.sh
-./scripts/agents/use_team.sh imessage-command-center
-```
+Use plain language from iMessage:
 
-This writes a managed block into `./.codex/config.toml` by default.
+- `list available agent teams`
+- `load up the imessage-command-center team and triage my inbox`
+- `what team is active`
+- `unload team`
 
-## Manual Activation
+Team activation is per sender and one-shot (it applies to the next work request).
+
+## Explicit Command Form
+
+- `system: teams list`
+- `system: team load <team-slug>`
+- `system: team current`
+- `system: team unload`
+
+## Optional Manual Activation (Advanced)
 
 Copy the desired `agents/teams/<slug>/preset.toml` entries into your project `.codex/config.toml`.
 

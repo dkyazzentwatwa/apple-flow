@@ -15,21 +15,9 @@ Apple Flow now ships a codex-native multi-agent team library under `/agents`.
 - Software/GTM (13)
 - Business Ops (12)
 
-## Activation
+## Activation (Recommended: Natural Language)
 
-List teams:
-
-```bash
-./scripts/agents/list_teams.sh
-```
-
-Activate one team preset into `.codex/config.toml`:
-
-```bash
-./scripts/agents/use_team.sh <team-slug>
-```
-
-The activation script writes a managed block and keeps a timestamped backup.
+Control teams directly from iMessage using natural language. No scripts are required.
 
 ## iMessage-Native Team Control
 
@@ -73,6 +61,17 @@ If a requested team slug does not exist, Apple Flow returns close matches plus a
 ## Manual mode
 
 You can manually copy from `agents/teams/<slug>/preset.toml` into your project-level `.codex/config.toml`.
+
+## Script mode (optional legacy workflow)
+
+If you explicitly want script-driven local config wiring, you can still use:
+
+```bash
+./scripts/agents/list_teams.sh
+./scripts/agents/use_team.sh <team-slug>
+```
+
+This writes a managed block in `.codex/config.toml` and keeps a timestamped backup.
 
 ## Guardrails
 
