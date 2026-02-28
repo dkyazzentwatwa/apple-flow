@@ -3,14 +3,17 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from .config import RelaySettings
+from .config_schema import build_config_schema, stringify_value
 from .gateway_setup import ensure_gateway_resources, resolve_binary
 from .setup_wizard import (
     check_messages_db_access,
@@ -586,18 +589,57 @@ def _config_write(args: Any) -> dict[str, Any]:
     if not updates:
         return _response_error("missing_updates", ["no --set values provided"])
 
+    backup_path = ""
+    if env_path.exists():
+        stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+        backup = env_path.with_name(f"{env_path.name}.bak.{stamp}")
+        shutil.copy2(env_path, backup)
+        backup_path = str(backup)
+
     updated_keys = _write_env(env_path, updates)
-    return _response_ok(updated_keys=updated_keys, errors=[])
+    return _response_ok(
+        updated_keys=updated_keys,
+        written_count=len(updated_keys),
+        backup_path=backup_path,
+        errors=[],
+    )
 
 
 def _config_read(args: Any) -> dict[str, Any]:
     env_path = Path(args.env_file)
     env = _parse_env(env_path)
     keys = args.keys or []
-    if not keys:
+    effective = bool(getattr(args, "effective", False))
+    if not keys and not effective:
         return _response_ok(values=env)
-    values = {key: env.get(key, "") for key in keys}
-    return _response_ok(values=values)
+    if not effective:
+        values = {key: env.get(key, "") for key in keys}
+        return _response_ok(values=values)
+
+    settings = RelaySettings(_env_file=str(env_path)) if env_path.exists() else RelaySettings()
+    schema = build_config_schema()
+    schema_keys = [field["key"] for field in schema["fields"]]
+    query_keys = keys or sorted(set(schema_keys).union(env.keys()))
+    values: dict[str, str] = {}
+    value_states: dict[str, dict[str, str]] = {}
+    for key in query_keys:
+        setting_name = key.removeprefix("apple_flow_")
+        if key in env:
+            raw = env.get(key, "")
+            effective_value = stringify_value(getattr(settings, setting_name, raw))
+            source = "env"
+        else:
+            raw = ""
+            effective_value = stringify_value(getattr(settings, setting_name, ""))
+            source = "default"
+        values[key] = effective_value
+        value_states[key] = {"raw": raw, "effective": effective_value, "source": source}
+    return _response_ok(values=values, value_states=value_states, effective=True)
+
+
+def _config_schema(_args: Any) -> dict[str, Any]:
+    schema = build_config_schema()
+    return _response_ok(**schema)
 
 
 def _service_status(_args: Any) -> dict[str, Any]:
@@ -658,6 +700,7 @@ def run_cli_control(mode: str, args: Any) -> int:
         ("config", "validate"): _config_validate,
         ("config", "write"): _config_write,
         ("config", "read"): _config_read,
+        ("config", "schema"): _config_schema,
         ("service", "status"): _service_status,
         ("service", "install"): _service_install,
         ("service", "start"): _service_start,

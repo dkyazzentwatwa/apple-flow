@@ -9,7 +9,8 @@ protocol CommandServiceProtocol {
 
     func configValidate() async throws -> ConfigValidateResponse
     func configWrite(setValues: [String]) async throws -> ConfigWriteResponse
-    func configRead(keys: [String]) async throws -> ConfigReadResponse
+    func configRead(keys: [String], effective: Bool) async throws -> ConfigReadResponse
+    func configSchema() async throws -> ConfigSchemaResponse
 
     func serviceStatus() async throws -> ServiceStatusResponse
     func serviceInstall() async throws -> ServiceActionResponse
@@ -115,12 +116,19 @@ final class CommandService: CommandServiceProtocol {
         return try await runJSON(arguments: args, as: ConfigWriteResponse.self)
     }
 
-    func configRead(keys: [String]) async throws -> ConfigReadResponse {
+    func configRead(keys: [String], effective: Bool = false) async throws -> ConfigReadResponse {
         var args = ["config", "read", "--json"]
+        if effective {
+            args.append("--effective")
+        }
         for key in keys {
             args += ["--key", key]
         }
         return try await runJSON(arguments: args, as: ConfigReadResponse.self)
+    }
+
+    func configSchema() async throws -> ConfigSchemaResponse {
+        try await runJSON(arguments: ["config", "schema", "--json"], as: ConfigSchemaResponse.self)
     }
 
     func serviceStatus() async throws -> ServiceStatusResponse {

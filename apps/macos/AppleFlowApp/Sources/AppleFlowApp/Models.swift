@@ -43,6 +43,36 @@ struct WizardEnsureGatewaysResponse: Decodable {
 struct ConfigReadResponse: Decodable {
     let ok: Bool
     let values: [String: String]
+    let valueStates: [String: ConfigValueState]?
+    let effective: Bool?
+    let errors: [String]?
+
+    init(
+        ok: Bool,
+        values: [String: String],
+        valueStates: [String: ConfigValueState]? = nil,
+        effective: Bool? = nil,
+        errors: [String]? = nil
+    ) {
+        self.ok = ok
+        self.values = values
+        self.valueStates = valueStates
+        self.effective = effective
+        self.errors = errors
+    }
+}
+
+struct ConfigValueState: Decodable {
+    let raw: String
+    let effective: String
+    let source: String
+}
+
+struct ConfigSchemaResponse: Decodable {
+    let ok: Bool
+    let schemaVersion: String
+    let sections: [ConfigSectionDescriptor]
+    let fields: [ConfigFieldDescriptor]
     let errors: [String]?
 }
 

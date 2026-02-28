@@ -52,6 +52,49 @@ struct SectionCard<Content: View>: View {
     }
 }
 
+struct CollapsibleSectionCard<Content: View>: View {
+    let title: String
+    let subtitle: String?
+    let isCollapsed: Bool
+    let onToggle: () -> Void
+    @ViewBuilder let content: Content
+
+    init(
+        _ title: String,
+        subtitle: String? = nil,
+        isCollapsed: Bool,
+        onToggle: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.isCollapsed = isCollapsed
+        self.onToggle = onToggle
+        self.content = content()
+    }
+
+    var body: some View {
+        SectionCard(title, subtitle: subtitle) {
+            VStack(alignment: .leading, spacing: 10) {
+                Button(action: onToggle) {
+                    HStack(spacing: 8) {
+                        Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                            .font(.caption.weight(.bold))
+                        Text(isCollapsed ? "Expand" : "Collapse")
+                            .font(.caption.weight(.semibold))
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if !isCollapsed {
+                    content
+                }
+            }
+        }
+    }
+}
+
 struct StatusChip: View {
     let text: String
     let tone: StatusTone

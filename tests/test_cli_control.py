@@ -13,6 +13,7 @@ def _args(**kwargs):
         "env_file": ".env",
         "set_values": [],
         "keys": [],
+        "effective": False,
         "stream_name": "stderr",
         "lines": 200,
         "phone": "",
@@ -241,6 +242,56 @@ def test_config_write_then_read(capsys, tmp_path):
     assert read_payload["ok"] is True
     assert read_payload["values"]["apple_flow_admin_api_token"] == "test"
     assert read_payload["values"]["apple_flow_allowed_senders"] == "+15551234567"
+    assert write_payload["written_count"] == 2
+    assert write_payload["backup_path"] == ""
+
+
+def test_config_write_creates_backup_when_env_exists(capsys, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("apple_flow_admin_api_token=old\n", encoding="utf-8")
+    args = _args(
+        tool_args=["write"],
+        env_file=str(env_file),
+        set_values=["apple_flow_admin_api_token=new"],
+    )
+    code = cli_control.run_cli_control("config", args)
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["backup_path"]
+    assert Path(payload["backup_path"]).exists()
+
+
+def test_config_read_effective_returns_sources(capsys, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("apple_flow_admin_api_token=test\n", encoding="utf-8")
+    args = _args(
+        tool_args=["read"],
+        env_file=str(env_file),
+        keys=["apple_flow_admin_api_token", "apple_flow_admin_port"],
+        effective=True,
+    )
+    code = cli_control.run_cli_control("config", args)
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["effective"] is True
+    assert payload["value_states"]["apple_flow_admin_api_token"]["source"] == "env"
+    assert payload["value_states"]["apple_flow_admin_port"]["source"] == "default"
+
+
+def test_config_schema_contains_fields_and_sections(capsys):
+    args = _args(tool_args=["schema"])
+    code = cli_control.run_cli_control("config", args)
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["schema_version"] == "1"
+    assert payload["sections"]
+    assert payload["fields"]
+    keys = {field["key"] for field in payload["fields"]}
+    assert "apple_flow_admin_api_token" in keys
+    assert "apple_flow_connector" in keys
 
 
 def test_config_validate_requires_token(capsys, tmp_path):

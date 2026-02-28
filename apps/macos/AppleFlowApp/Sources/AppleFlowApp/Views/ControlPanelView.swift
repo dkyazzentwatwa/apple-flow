@@ -31,6 +31,18 @@ struct ControlPanelView: View {
                 .tabItem { Label("Config", systemImage: "slider.horizontal.3") }
         }
         .padding(12)
+        .confirmationDialog(
+            "Restart services now?",
+            isPresented: $viewModel.showRestartPrompt,
+            titleVisibility: .visible
+        ) {
+            Button("Restart (Stop/Start)") {
+                Task { await viewModel.restartServiceStopStart() }
+            }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text("Configuration was saved and validated. Restart is recommended for changes to take effect.")
+        }
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Button("Return to Config") {
@@ -93,7 +105,7 @@ struct ControlPanelView: View {
                                 Button("Install") { Task { await viewModel.installService() } }
                                 Button("Start") { Task { await viewModel.startService() } }
                                 Button("Stop") { Task { await viewModel.stopService() } }
-                                Button("Restart") { Task { await viewModel.restartService() } }
+                                Button("Restart (Stop/Start)") { Task { await viewModel.restartServiceStopStart() } }
                             }
                             .buttonStyle(.bordered)
                         }
@@ -254,13 +266,30 @@ struct ControlPanelView: View {
                         }
                         .pickerStyle(.segmented)
                         .frame(maxWidth: 420)
+
+                        Spacer()
+
+                        Button("Collapse All") {
+                            viewModel.collapseAllConfigSections()
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("Expand All") {
+                            viewModel.expandAllConfigSections()
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
 
-                ForEach(viewModel.groupedFilteredConfigDescriptors, id: \.0.id) { category, descriptors in
-                    SectionCard(category.rawValue, subtitle: "\(descriptors.count) field\(descriptors.count == 1 ? "" : "s")") {
+                ForEach(viewModel.groupedFilteredConfigDescriptors) { group in
+                    CollapsibleSectionCard(
+                        group.section.label,
+                        subtitle: "\(group.fields.count) field\(group.fields.count == 1 ? "" : "s")",
+                        isCollapsed: viewModel.isConfigSectionCollapsed(group.section.id),
+                        onToggle: { viewModel.toggleConfigSectionCollapse(group.section.id) }
+                    ) {
                         VStack(alignment: .leading, spacing: 12) {
-                            ForEach(descriptors) { descriptor in
+                            ForEach(group.fields) { descriptor in
                                 configFieldRow(descriptor)
                             }
                         }
@@ -274,7 +303,7 @@ struct ControlPanelView: View {
                         }
                         .buttonStyle(.bordered)
 
-                        Button("Apply + Validate + Restart") {
+                        Button("Apply + Validate") {
                             Task { await viewModel.applyConfigValidateAndRestart() }
                         }
                         .buttonStyle(.borderedProminent)
@@ -375,6 +404,24 @@ struct ControlPanelView: View {
             set: { viewModel.configValues[descriptor.key] = $0 }
         )
 
+        if !descriptor.enumOptions.isEmpty {
+            Picker(descriptor.label, selection: binding) {
+                ForEach(descriptor.enumOptions, id: \.self) { option in
+                    Text(option).tag(option)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(maxWidth: 260, alignment: .leading)
+            .labelsHidden()
+        } else if descriptor.inputType == .bool {
+            Picker(descriptor.label, selection: binding) {
+                Text("true").tag("true")
+                Text("false").tag("false")
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 180, alignment: .leading)
+            .labelsHidden()
+        } else
         if descriptor.sensitive && !viewModel.isSensitiveRevealed(descriptor.key) {
             SecureField(descriptor.placeholder, text: binding)
                 .textFieldStyle(.roundedBorder)

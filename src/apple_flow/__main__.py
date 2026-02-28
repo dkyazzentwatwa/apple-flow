@@ -327,6 +327,7 @@ def main() -> None:
     parser.add_argument("--env-file", dest="env_file", default=".env", help="Path to .env file")
     parser.add_argument("--set", dest="set_values", action="append", help="Set key=value pairs in .env")
     parser.add_argument("--key", dest="keys", action="append", help="Read specific key(s) from .env")
+    parser.add_argument("--effective", dest="effective", action="store_true", help="Return effective config values with defaults")
     parser.add_argument("--stream", dest="stream_name", choices=["stderr", "stdout"], default="stderr")
     parser.add_argument("--lines", dest="lines", type=int, default=200)
 

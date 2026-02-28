@@ -31,6 +31,11 @@ final class AppViewModel: ObservableObject {
     @Published var configSearchQuery = ""
     @Published var configFilter: ConfigFilterScope = .all
     @Published var revealedSensitiveKeys: Set<String> = []
+    @Published var showRestartPrompt = false
+    @Published var configSections: [ConfigSectionDescriptor] = []
+    @Published var configFields: [ConfigFieldDescriptor] = []
+    @Published var collapsedConfigSectionIDs: Set<String> = []
+    @Published var collapsedOnboardingSectionIDs: Set<String> = []
 
     @Published var statusMessage = ""
     @Published var statusTone: StatusTone = .info
@@ -49,9 +54,11 @@ final class AppViewModel: ObservableObject {
     private var serverFieldErrors: [String: String] = [:]
     private var lastAction: RetryableAction?
     private let introSeenKey = "appleFlowApp.introSeen.v1"
+    private let configCollapsedSectionsKey = "appleFlowApp.config.collapsedSections.v1"
+    private let onboardingCollapsedSectionsKey = "appleFlowApp.onboarding.collapsedSections.v1"
 
     var editableConfigKeys: [String] {
-        ConfigFieldCatalog.all.map(\.key)
+        configFields.map(\.key)
     }
 
     var envFilePath: String { envPath }
@@ -60,8 +67,8 @@ final class AppViewModel: ObservableObject {
         editableConfigKeys.filter { isFieldChanged($0) }.count
     }
 
-    var groupedFilteredConfigDescriptors: [(ConfigFieldCategory, [ConfigFieldDescriptor])] {
-        let filtered = ConfigFieldCatalog.all.filter { descriptor in
+    var groupedFilteredConfigDescriptors: [ConfigFieldGroup] {
+        let filtered = configFields.filter { descriptor in
             if !configSearchQuery.isEmpty {
                 let query = configSearchQuery.lowercased()
                 let keyMatch = descriptor.key.lowercased().contains(query)
@@ -84,12 +91,12 @@ final class AppViewModel: ObservableObject {
             }
         }
 
-        return ConfigFieldCategory.allCases.compactMap { category in
-            let group = filtered.filter { $0.category == category }
+        return configSections.sorted { $0.order < $1.order }.compactMap { section in
+            let group = filtered.filter { $0.sectionId == section.id }
             if group.isEmpty {
                 return nil
             }
-            return (category, group)
+            return ConfigFieldGroup(section: section, fields: group)
         }
     }
 
@@ -108,6 +115,7 @@ final class AppViewModel: ObservableObject {
         self.commandService = commandService
         self.adminClientFactory = adminClientFactory
         self.envPath = commandService.envFilePath
+        loadCollapsedState()
     }
 
     func onAppear() {
@@ -154,6 +162,7 @@ final class AppViewModel: ObservableObject {
         do {
             let doctorResponse = try await commandService.wizardDoctor()
             doctor = doctorResponse
+            try? await loadConfigSchema()
             await loadOnboardingDefaults()
 
             if shouldShowControlPanel(doctor: doctorResponse) {
@@ -274,6 +283,10 @@ final class AppViewModel: ObservableObject {
         switch onboarding.connector {
         case "claude-cli":
             command = "claude auth login"
+        case "gemini-cli":
+            command = "gemini auth login"
+        case "kilo-cli":
+            command = "kilo auth login"
         case "cline":
             command = "cline auth"
         default:
@@ -305,6 +318,12 @@ final class AppViewModel: ObservableObject {
             serviceStatus = try await commandService.serviceStatus()
         } catch {
             warnings.append("Service status: \(error.localizedDescription)")
+        }
+
+        do {
+            try await loadConfigSchema()
+        } catch {
+            warnings.append("Config schema: \(error.localizedDescription)")
         }
 
         do {
@@ -355,6 +374,48 @@ final class AppViewModel: ObservableObject {
 
     func restartService() async {
         await runServiceAction(.restartService, "Restarting service", action: commandService.serviceRestart)
+    }
+
+    func restartServiceStopStart() async {
+        errorMessage = nil
+        statusMessage = "Restarting service (stop/start)..."
+        statusTone = .loading
+        setLastAction(.restartServiceStopStart)
+
+        var stopError: String?
+        do {
+            let stopResponse = try await commandService.serviceStop()
+            if !stopResponse.ok {
+                stopError = (stopResponse.errors ?? ["Failed to stop service."]).joined(separator: "\n")
+            }
+        } catch {
+            stopError = error.localizedDescription
+        }
+
+        do {
+            let startResponse = try await commandService.serviceStart()
+            if !startResponse.ok {
+                throw AppViewError.commandFailed((startResponse.errors ?? ["Failed to start service."]).joined(separator: "\n"))
+            }
+        } catch {
+            statusTone = .error
+            if let stopError {
+                errorMessage = "Stop error: \(stopError)\nStart error: \(error.localizedDescription)"
+            } else {
+                errorMessage = error.localizedDescription
+            }
+            return
+        }
+
+        await refreshControlPanel()
+        if let stopError {
+            statusTone = .warning
+            statusMessage = "Restarted with warning."
+            errorMessage = "Stop warning: \(stopError)"
+        } else {
+            statusTone = .success
+            statusMessage = "Service restarted via stop/start."
+        }
     }
 
     func approve(_ requestID: String) async {
@@ -418,6 +479,8 @@ final class AppViewModel: ObservableObject {
                 await stopService()
             case .restartService:
                 await restartService()
+            case .restartServiceStopStart:
+                await restartServiceStopStart()
             case .approve(let requestID):
                 await approve(requestID)
             case .deny(let requestID):
@@ -465,13 +528,9 @@ final class AppViewModel: ObservableObject {
                 throw AppViewError.commandFailed(validate.errors.joined(separator: "\n"))
             }
 
-            let restart = try await commandService.serviceRestart()
-            if !restart.ok {
-                throw AppViewError.commandFailed((restart.errors ?? ["Service restart failed"]).joined(separator: "\n"))
-            }
-
             await refreshControlPanel()
-            statusMessage = "Config applied, validated, and service restarted."
+            showRestartPrompt = true
+            statusMessage = "Config applied and validated. Restart recommended."
             statusTone = .success
         } catch {
             statusTone = .error
@@ -516,12 +575,59 @@ final class AppViewModel: ObservableObject {
         statusTone = .info
     }
 
+    func isConfigSectionCollapsed(_ sectionID: String) -> Bool {
+        collapsedConfigSectionIDs.contains(sectionID)
+    }
+
+    func toggleConfigSectionCollapse(_ sectionID: String) {
+        if collapsedConfigSectionIDs.contains(sectionID) {
+            collapsedConfigSectionIDs.remove(sectionID)
+        } else {
+            collapsedConfigSectionIDs.insert(sectionID)
+        }
+        persistCollapsedState()
+    }
+
+    func collapseAllConfigSections() {
+        collapsedConfigSectionIDs = Set(configSections.map(\.id))
+        persistCollapsedState()
+    }
+
+    func expandAllConfigSections() {
+        collapsedConfigSectionIDs.removeAll()
+        persistCollapsedState()
+    }
+
+    func isOnboardingSectionCollapsed(_ sectionID: String) -> Bool {
+        collapsedOnboardingSectionIDs.contains(sectionID)
+    }
+
+    func toggleOnboardingSectionCollapse(_ sectionID: String) {
+        if collapsedOnboardingSectionIDs.contains(sectionID) {
+            collapsedOnboardingSectionIDs.remove(sectionID)
+        } else {
+            collapsedOnboardingSectionIDs.insert(sectionID)
+        }
+        persistCollapsedState()
+    }
+
+    func collapseAllOnboardingSections() {
+        collapsedOnboardingSectionIDs = Set(OnboardingSection.allCases.map(\.rawValue))
+        collapsedOnboardingSectionIDs.remove(OnboardingSection.core.rawValue)
+        persistCollapsedState()
+    }
+
+    func expandAllOnboardingSections() {
+        collapsedOnboardingSectionIDs.removeAll()
+        persistCollapsedState()
+    }
+
     func isFieldChanged(_ key: String) -> Bool {
         configValues[key, default: ""] != loadedConfigValues[key, default: ""]
     }
 
     func descriptor(for key: String) -> ConfigFieldDescriptor? {
-        ConfigFieldCatalog.byKey[key]
+        configFields.first(where: { $0.key == key })
     }
 
     func isSensitiveRevealed(_ key: String) -> Bool {
@@ -639,7 +745,7 @@ final class AppViewModel: ObservableObject {
                 "apple_flow_enable_memory",
                 "apple_flow_soul_file",
                 "apple_flow_admin_api_token",
-            ])
+            ], effective: false)
             if !response.ok {
                 return
             }
@@ -659,6 +765,10 @@ final class AppViewModel: ObservableObject {
             switch onboarding.connector {
             case "claude-cli":
                 onboarding.connectorCommand = response.values["apple_flow_claude_cli_command"] ?? "claude"
+            case "gemini-cli":
+                onboarding.connectorCommand = response.values["apple_flow_gemini_cli_command"] ?? "gemini"
+            case "kilo-cli":
+                onboarding.connectorCommand = response.values["apple_flow_kilo_cli_command"] ?? "kilo"
             case "cline":
                 onboarding.connectorCommand = response.values["apple_flow_cline_command"] ?? "cline"
             default:
@@ -695,7 +805,7 @@ final class AppViewModel: ObservableObject {
     }
 
     private func loadConfigEditorValues() async throws {
-        let response = try await commandService.configRead(keys: editableConfigKeys)
+        let response = try await commandService.configRead(keys: editableConfigKeys, effective: true)
         if !response.ok {
             throw AppViewError.commandFailed((response.errors ?? ["config read failed"]).joined(separator: "\n"))
         }
@@ -792,7 +902,7 @@ final class AppViewModel: ObservableObject {
     private func buildServerFieldErrors(from errors: [String]) -> [String: String] {
         guard !errors.isEmpty else { return [:] }
         var result: [String: String] = [:]
-        for descriptor in ConfigFieldCatalog.all {
+        for descriptor in configFields {
             let full = descriptor.key.lowercased()
             let short = descriptor.key.replacingOccurrences(of: "apple_flow_", with: "").lowercased()
             if let match = errors.first(where: { error in
@@ -832,6 +942,48 @@ final class AppViewModel: ObservableObject {
         get { UserDefaults.standard.bool(forKey: introSeenKey) }
         set { UserDefaults.standard.set(newValue, forKey: introSeenKey) }
     }
+
+    private func loadConfigSchema() async throws {
+        let response = try await commandService.configSchema()
+        if !response.ok {
+            throw AppViewError.commandFailed((response.errors ?? ["config schema failed"]).joined(separator: "\n"))
+        }
+        configSections = response.sections
+        configFields = response.fields
+        applySectionDefaultsIfNeeded()
+    }
+
+    private func loadCollapsedState() {
+        let defaults = UserDefaults.standard
+        let configCollapsed = defaults.array(forKey: configCollapsedSectionsKey) as? [String] ?? []
+        let onboardingCollapsed = defaults.array(forKey: onboardingCollapsedSectionsKey) as? [String] ?? []
+        collapsedConfigSectionIDs = Set(configCollapsed)
+        if onboardingCollapsed.isEmpty {
+            collapsedOnboardingSectionIDs = Set(OnboardingSection.allCases.map(\.rawValue))
+            collapsedOnboardingSectionIDs.remove(OnboardingSection.core.rawValue)
+        } else {
+            collapsedOnboardingSectionIDs = Set(onboardingCollapsed)
+        }
+    }
+
+    private func persistCollapsedState() {
+        let defaults = UserDefaults.standard
+        defaults.set(Array(collapsedConfigSectionIDs), forKey: configCollapsedSectionsKey)
+        defaults.set(Array(collapsedOnboardingSectionIDs), forKey: onboardingCollapsedSectionsKey)
+    }
+
+    private func applySectionDefaultsIfNeeded() {
+        if collapsedConfigSectionIDs.isEmpty {
+            let collapsed = configSections.filter { !$0.defaultExpanded }.map(\.id)
+            collapsedConfigSectionIDs = Set(collapsed)
+            persistCollapsedState()
+        }
+        if collapsedOnboardingSectionIDs.isEmpty {
+            collapsedOnboardingSectionIDs = Set(OnboardingSection.allCases.map(\.rawValue))
+            collapsedOnboardingSectionIDs.remove(OnboardingSection.core.rawValue)
+            persistCollapsedState()
+        }
+    }
 }
 
 private enum RetryableAction {
@@ -846,6 +998,16 @@ private enum RetryableAction {
     case startService
     case stopService
     case restartService
+    case restartServiceStopStart
     case approve(String)
     case deny(String)
+}
+
+enum OnboardingSection: String, CaseIterable {
+    case progress
+    case checks
+    case core
+    case gateways
+    case agentOffice
+    case preview
 }

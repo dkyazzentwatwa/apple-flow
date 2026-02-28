@@ -3,12 +3,13 @@ import XCTest
 
 final class AppViewModelTests: XCTestCase {
     @MainActor
-    func testDescriptorCatalogCoversEditableKeys() async {
+    func testSchemaDrivesEditableKeys() async {
         let command = MockCommandService()
         let viewModel = AppViewModel(commandService: command) { _ in MockAdminClient() }
+        await viewModel.refreshControlPanel()
 
         let editable = Set(viewModel.editableConfigKeys)
-        let described = Set(ConfigFieldCatalog.all.map(\.key))
+        let described = Set(command.configSchemaResponse.fields.map(\.key))
 
         XCTAssertEqual(editable, described)
     }
@@ -176,7 +177,7 @@ final class AppViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testApplyConfigValidateAndRestartInvokesRestart() async {
+    func testApplyConfigValidateAndRestartShowsPrompt() async {
         let command = MockCommandService()
         command.configWriteResponse = ConfigWriteResponse(ok: true, updatedKeys: ["a"], errors: [], code: nil)
         command.configValidateResponse = ConfigValidateResponse(ok: true, errors: [], warnings: [], code: nil)
@@ -204,7 +205,23 @@ final class AppViewModelTests: XCTestCase {
 
         await viewModel.applyConfigValidateAndRestart()
 
-        XCTAssertEqual(command.serviceRestartCallCount, 1)
+        XCTAssertTrue(viewModel.showRestartPrompt)
+    }
+
+    @MainActor
+    func testRestartServiceStopStartCallsStopAndStart() async {
+        let command = MockCommandService()
+        command.configReadResponse = ConfigReadResponse(ok: true, values: [
+            "apple_flow_admin_host": "127.0.0.1",
+            "apple_flow_admin_port": "8787",
+            "apple_flow_admin_api_token": "token",
+        ], valueStates: nil, effective: nil, errors: nil)
+        let viewModel = AppViewModel(commandService: command) { _ in MockAdminClient() }
+
+        await viewModel.restartServiceStopStart()
+
+        XCTAssertEqual(command.serviceStopCallCount, 1)
+        XCTAssertEqual(command.serviceStartCallCount, 1)
     }
 
     @MainActor
@@ -408,11 +425,66 @@ private final class MockCommandService: CommandServiceProtocol {
     var configValidateResponse = ConfigValidateResponse(ok: true, errors: [], warnings: [], code: nil)
     var configWriteResponse = ConfigWriteResponse(ok: true, updatedKeys: [], errors: [], code: nil)
     var configReadResponse = ConfigReadResponse(ok: true, values: [:], errors: nil)
+    var configSchemaResponse = ConfigSchemaResponse(
+        ok: true,
+        schemaVersion: "1",
+        sections: [
+            ConfigSectionDescriptor(id: "core", label: "Core", order: 0, defaultExpanded: true),
+            ConfigSectionDescriptor(id: "admin", label: "Admin API", order: 1, defaultExpanded: false),
+        ],
+        fields: [
+            ConfigFieldDescriptor(
+                key: "apple_flow_admin_host",
+                name: "admin_host",
+                label: "Admin Host",
+                sectionId: "admin",
+                description: "",
+                required: true,
+                sensitive: false,
+                inputType: .text,
+                defaultValue: "127.0.0.1",
+                validationHint: "",
+                enumOptions: [],
+                restartRecommended: true
+            ),
+            ConfigFieldDescriptor(
+                key: "apple_flow_admin_port",
+                name: "admin_port",
+                label: "Admin Port",
+                sectionId: "admin",
+                description: "",
+                required: true,
+                sensitive: false,
+                inputType: .number,
+                defaultValue: "8787",
+                validationHint: "",
+                enumOptions: [],
+                restartRecommended: true
+            ),
+            ConfigFieldDescriptor(
+                key: "apple_flow_admin_api_token",
+                name: "admin_api_token",
+                label: "Admin API Token",
+                sectionId: "admin",
+                description: "",
+                required: true,
+                sensitive: true,
+                inputType: .token,
+                defaultValue: "",
+                validationHint: "",
+                enumOptions: [],
+                restartRecommended: true
+            ),
+        ],
+        errors: nil
+    )
     var serviceStatusResponse = ServiceStatusResponse(ok: true, launchdLoaded: false, launchdPid: nil, daemonProcessDetected: false, plistPath: "", healthy: false, errors: nil)
     var serviceActionResponse = ServiceActionResponse(ok: true, label: nil, plistPath: nil, pythonBin: nil, errors: nil, code: nil)
     var logsResponse = ServiceLogsResponse(ok: true, path: "", lines: [], errors: nil)
 
     var serviceRestartCallCount = 0
+    var serviceStopCallCount = 0
+    var serviceStartCallCount = 0
     var serviceStatusCallCount = 0
     var createAgentOfficeScaffoldCallCount = 0
     var serviceStatusError: Error?
@@ -425,12 +497,13 @@ private final class MockCommandService: CommandServiceProtocol {
     func wizardEnsureGateways(onboarding: OnboardingState) async throws -> WizardEnsureGatewaysResponse { ensureGatewaysResponse }
     func configValidate() async throws -> ConfigValidateResponse { configValidateResponse }
     func configWrite(setValues: [String]) async throws -> ConfigWriteResponse { configWriteResponse }
-    func configRead(keys: [String]) async throws -> ConfigReadResponse {
+    func configRead(keys: [String], effective: Bool) async throws -> ConfigReadResponse {
         if let error = configReadError {
             throw error
         }
         return configReadResponse
     }
+    func configSchema() async throws -> ConfigSchemaResponse { configSchemaResponse }
     func serviceStatus() async throws -> ServiceStatusResponse {
         serviceStatusCallCount += 1
         if serviceStatusDelayNanoseconds > 0 {
@@ -442,8 +515,14 @@ private final class MockCommandService: CommandServiceProtocol {
         return serviceStatusResponse
     }
     func serviceInstall() async throws -> ServiceActionResponse { serviceActionResponse }
-    func serviceStart() async throws -> ServiceActionResponse { serviceActionResponse }
-    func serviceStop() async throws -> ServiceActionResponse { serviceActionResponse }
+    func serviceStart() async throws -> ServiceActionResponse {
+        serviceStartCallCount += 1
+        return serviceActionResponse
+    }
+    func serviceStop() async throws -> ServiceActionResponse {
+        serviceStopCallCount += 1
+        return serviceActionResponse
+    }
     func serviceRestart() async throws -> ServiceActionResponse {
         serviceRestartCallCount += 1
         return serviceActionResponse
