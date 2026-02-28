@@ -86,6 +86,9 @@ def test_fetch_new_converts_to_inbound_messages(monkeypatch):
     assert msg.is_from_me is False
     assert msg.context.get("channel") == "mail"
     assert msg.context.get("mail_subject") == "task: build feature"
+    assert msg.context.get("mail_subject_raw") == "task: build feature"
+    assert msg.context.get("mail_subject_sanitized") == "task: build feature"
+    assert msg.context.get("mail_message_id") == "42"
 
 
 def test_fetch_new_skips_empty_messages(monkeypatch):
@@ -150,6 +153,8 @@ def test_trigger_tag_in_subject_passes_and_stripped(monkeypatch):
     assert len(messages) == 1
     assert "!!agent" not in messages[0].text
     assert "Deploy to staging" in messages[0].text
+    assert messages[0].context.get("mail_subject_raw") == "!!agent Deploy to staging"
+    assert messages[0].context.get("mail_subject_sanitized") == "Deploy to staging"
 
 
 def test_trigger_tag_in_body_passes(monkeypatch):

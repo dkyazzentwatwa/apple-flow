@@ -269,6 +269,8 @@ class ApprovalHandler:
             event_type="execution_started",
             payload={"request_id": request_id, "attempt": attempt},
         )
+        source_context = self.store.get_run_source_context(run_id) or {}
+        egress_context = self._egress_context_from_source_context(source_context)
         if send_started:
             self._safe_send(
                 sender,
@@ -276,10 +278,10 @@ class ApprovalHandler:
                     f"✅ Approved {request_id}. Starting execution "
                     f"(run `{run_id}`, attempt {attempt}/{self.max_resume_attempts})."
                 ),
+                context=egress_context,
             )
 
         thread_id = self.connector.get_or_create_thread(sender)
-        source_context = self.store.get_run_source_context(run_id) or {}
         team_context = None
         if isinstance(source_context, dict):
             maybe_team = source_context.get("team_context")
@@ -313,6 +315,7 @@ class ApprovalHandler:
             step="executor",
             phase=f"execution attempt {attempt}",
             team_context=team_context,
+            egress_context=egress_context,
         )
 
         outcome, reason = self._classify_execution_outcome(execution_output)
@@ -326,6 +329,7 @@ class ApprovalHandler:
                 output=execution_output,
                 approval_sender=approval_sender,
                 previous_request_id=request_id,
+                egress_context=egress_context,
             )
             self._log(kind.value, sender, run.get("intent", ""), checkpoint_message)
             return OrchestrationResult(
@@ -345,7 +349,7 @@ class ApprovalHandler:
         if outcome != "success":
             self.store.update_run_state(run_id, RunState.FAILED.value)
             final = f"❌ Execution failed ({reason}).\n\n{execution_output}"
-            self._safe_send(sender, final)
+            self._safe_send(sender, final, context=egress_context)
             self._log(kind.value, sender, run.get("intent", ""), final)
             return OrchestrationResult(kind=kind, run_id=run_id, response=final)
 
@@ -361,6 +365,7 @@ class ApprovalHandler:
                 step="verifier",
                 phase=f"verification attempt {attempt}",
                 team_context=team_context,
+                egress_context=egress_context,
             )
             verifier_outcome, verifier_reason = self._classify_execution_outcome(verification_output)
             self._create_event(
@@ -375,7 +380,7 @@ class ApprovalHandler:
                     f"❌ Verification failed ({verifier_reason}).\n\n"
                     f"Execution:\n{execution_output}\n\nVerification:\n{verification_output}"
                 )
-                self._safe_send(sender, final)
+                self._safe_send(sender, final, context=egress_context)
                 self._log(kind.value, sender, run.get("intent", ""), final)
                 return OrchestrationResult(kind=kind, run_id=run_id, response=final)
             final = f"Execution:\n{execution_output}\n\nVerification:\n{verification_output}"
@@ -383,7 +388,7 @@ class ApprovalHandler:
             final = execution_output
 
         self.store.update_run_state(run_id, RunState.COMPLETED.value)
-        self._safe_send(sender, final)
+        self._safe_send(sender, final, context=egress_context)
         self._log(kind.value, sender, run.get("intent", ""), final)
 
         if source_context:
@@ -449,6 +454,14 @@ class ApprovalHandler:
                     "event_name": message.context.get("event_summary"),
                     "calendar_name": message.context.get("calendar_name"),
                 }
+            elif channel == "mail":
+                source_context = {
+                    "channel": "mail",
+                    "mail_message_id": message.context.get("mail_message_id"),
+                    "mail_subject": message.context.get("mail_subject"),
+                    "mail_subject_raw": message.context.get("mail_subject_raw"),
+                    "mail_subject_sanitized": message.context.get("mail_subject_sanitized"),
+                }
         if team_context:
             if source_context is None:
                 source_context = {}
@@ -503,7 +516,7 @@ class ApprovalHandler:
             f"Here's my plan:\n{plan_output}\n\n"
             f"Reply `approve {request_id}` to proceed, or `deny {request_id}` to cancel."
         )
-        self._safe_send(message.sender, outbound)
+        self._safe_send(message.sender, outbound, context=message.context)
         self._log(kind.value, message.sender, payload, outbound)
         return OrchestrationResult(kind=kind, run_id=run_id, approval_request_id=request_id, response=outbound)
 
@@ -564,6 +577,7 @@ class ApprovalHandler:
         step: str,
         phase: str,
         team_context: dict[str, Any] | None = None,
+        egress_context: dict[str, Any] | None = None,
     ) -> str:
         if self.enable_progress_streaming and hasattr(self.connector, "run_turn_streaming"):
             return self._run_with_progress(
@@ -574,6 +588,7 @@ class ApprovalHandler:
                 step=step,
                 phase=phase,
                 team_context=team_context,
+                egress_context=egress_context,
             )
         return self._run_with_heartbeat(
             sender=sender,
@@ -581,6 +596,7 @@ class ApprovalHandler:
             run_id=run_id,
             step=step,
             phase=phase,
+            egress_context=egress_context,
         )
 
     def _get_run_request_text(self, run_id: str) -> str:
@@ -612,6 +628,7 @@ class ApprovalHandler:
         step: str,
         phase: str,
         team_context: dict[str, Any] | None = None,
+        egress_context: dict[str, Any] | None = None,
     ) -> str:
         last_update = 0.0
         progress_state: dict[str, Any] = {
@@ -629,7 +646,7 @@ class ApprovalHandler:
 
             if (now - last_update) >= self.progress_update_interval_seconds:
                 if preview:
-                    self._safe_send(sender, f"[Progress] {preview}")
+                    self._safe_send(sender, f"[Progress] {preview}", context=egress_context)
                     self._create_event(
                         run_id=run_id,
                         step=step,
@@ -645,6 +662,7 @@ class ApprovalHandler:
             step=step,
             phase=phase,
             progress_state=progress_state,
+            egress_context=egress_context,
         )
 
     def _run_with_heartbeat(
@@ -655,6 +673,7 @@ class ApprovalHandler:
         step: str,
         phase: str,
         progress_state: dict[str, Any] | None = None,
+        egress_context: dict[str, Any] | None = None,
     ) -> str:
         done = threading.Event()
         result: dict[str, str] = {}
@@ -691,7 +710,7 @@ class ApprovalHandler:
                     payload["no_output_seconds"] = elapsed
 
             msg = f"⏳ Still working ({phase}) — {elapsed}s elapsed; {detail}."
-            self._safe_send(sender, msg)
+            self._safe_send(sender, msg, context=egress_context)
             self._create_event(
                 run_id=run_id,
                 step=step,
@@ -750,8 +769,16 @@ class ApprovalHandler:
                 payload=payload,
             )
 
-    def _safe_send(self, recipient: str, text: str) -> bool:
+    def _safe_send(
+        self,
+        recipient: str,
+        text: str,
+        context: dict[str, Any] | None = None,
+    ) -> bool:
         try:
+            self.egress.send(recipient, text, context=context)
+            return True
+        except TypeError:
             self.egress.send(recipient, text)
             return True
         except Exception as exc:  # pragma: no cover - runtime safety
@@ -802,6 +829,7 @@ class ApprovalHandler:
         output: str,
         approval_sender: str,
         previous_request_id: str,
+        egress_context: dict[str, Any] | None = None,
     ) -> tuple[str, str]:
         self.store.update_run_state(run_id, RunState.AWAITING_APPROVAL.value)
         checkpoint_request_id = f"req_{uuid4().hex[:8]}"
@@ -837,8 +865,22 @@ class ApprovalHandler:
             f"`approve {checkpoint_request_id} <extra instructions>`\n\n"
             f"Or cancel with `deny {checkpoint_request_id}`."
         )
-        self._safe_send(sender, message)
+        self._safe_send(sender, message, context=egress_context)
         return message, checkpoint_request_id
+
+    @staticmethod
+    def _egress_context_from_source_context(source_context: dict[str, Any]) -> dict[str, Any] | None:
+        if not isinstance(source_context, dict):
+            return None
+        if source_context.get("channel") != "mail":
+            return None
+        return {
+            "channel": "mail",
+            "mail_message_id": source_context.get("mail_message_id"),
+            "mail_subject": source_context.get("mail_subject"),
+            "mail_subject_raw": source_context.get("mail_subject_raw"),
+            "mail_subject_sanitized": source_context.get("mail_subject_sanitized"),
+        }
 
     @staticmethod
     def _parse_dt(value: str | None) -> datetime | None:

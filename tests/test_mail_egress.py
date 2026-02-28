@@ -95,7 +95,60 @@ def test_chunked_messages_keep_same_subject(monkeypatch):
     assert all(call[1] == "AGENT:" for call in sent_calls)
 
 
-def test_osascript_send_does_not_use_reply_threading(monkeypatch):
+def test_send_uses_reply_threading_for_mail_context(monkeypatch):
+    reply_calls: list[tuple[str, str, str, str]] = []
+    send_calls: list[tuple[str, str, str]] = []
+
+    def fake_reply(_recipient: str, _message_id: str, _subject: str, _body: str) -> None:
+        reply_calls.append((_recipient, _message_id, _subject, _body))
+
+    def fake_send(_recipient: str, _subject: str, _body: str) -> None:
+        send_calls.append((_recipient, _subject, _body))
+
+    egress = AppleMailEgress(signature="")
+    monkeypatch.setattr(egress, "_osascript_reply", fake_reply)
+    monkeypatch.setattr(egress, "_osascript_send", fake_send)
+
+    egress.send(
+        "test@example.com",
+        "hello",
+        context={
+            "channel": "mail",
+            "mail_message_id": "123",
+            "mail_subject_sanitized": "!!agent Deploy to staging".replace("!!agent", "").strip(),
+        },
+    )
+
+    assert len(reply_calls) == 1
+    assert send_calls == []
+    assert reply_calls[0][1] == "123"
+    assert reply_calls[0][2] == "Re: Deploy to staging"
+
+
+def test_send_falls_back_to_new_email_when_reply_fails(monkeypatch):
+    send_calls: list[tuple[str, str, str]] = []
+
+    def failing_reply(_recipient: str, _message_id: str, _subject: str, _body: str) -> None:
+        raise RuntimeError("boom")
+
+    def fake_send(_recipient: str, _subject: str, _body: str) -> None:
+        send_calls.append((_recipient, _subject, _body))
+
+    egress = AppleMailEgress(signature="")
+    monkeypatch.setattr(egress, "_osascript_reply", failing_reply)
+    monkeypatch.setattr(egress, "_osascript_send", fake_send)
+
+    egress.send(
+        "test@example.com",
+        "hello",
+        context={"channel": "mail", "mail_message_id": "123", "mail_subject_sanitized": "deploy"},
+    )
+
+    assert len(send_calls) == 1
+    assert send_calls[0][1] == "Re: deploy"
+
+
+def test_osascript_reply_uses_reply_threading(monkeypatch):
     captured: dict[str, object] = {}
 
     def fake_run(cmd, **kwargs):
@@ -105,11 +158,11 @@ def test_osascript_send_does_not_use_reply_threading(monkeypatch):
 
     monkeypatch.setattr("apple_flow.mail_egress.subprocess.run", fake_run)
     egress = AppleMailEgress()
-    egress._osascript_send("test@example.com", "AGENT:", "hello")
+    egress._osascript_reply("test@example.com", "123", "Re: hello", "hello")
 
     script = str(captured["cmd"][2])
-    assert "reply originalMessage" not in script
-    assert "make new outgoing message" in script
+    assert "reply originalMessage" in script
+    assert "id is 123" in script
 
 
 def test_echo_detection():

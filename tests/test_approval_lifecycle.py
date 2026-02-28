@@ -1,6 +1,7 @@
 """Approval lifecycle reliability and checkpoint/resume tests."""
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from conftest import FakeEgress, FakeStore
 
@@ -68,10 +69,20 @@ class FailOnSubstringEgress(FakeEgress):
         super().__init__()
         self.failure_substring = failure_substring
 
-    def send(self, recipient: str, text: str) -> None:
+    def send(self, recipient: str, text: str, context: dict | None = None) -> None:
         self.messages.append((recipient, text))
         if self.failure_substring and self.failure_substring in text:
             raise RuntimeError("egress failure")
+
+
+class ContextCapturingEgress(FakeEgress):
+    def __init__(self) -> None:
+        super().__init__()
+        self.contexts: list[dict[str, Any] | None] = []
+
+    def send(self, recipient: str, text: str, context: dict[str, Any] | None = None) -> None:
+        self.contexts.append(context)
+        super().send(recipient, text, context=context)
 
 
 @dataclass
@@ -328,6 +339,42 @@ def test_repeated_timeout_honors_max_resume_attempts_and_fails():
     assert store.count_run_events(run_id, "checkpoint_created") == 1
     assert store.count_run_events(run_id, "execution_started") == 2
     assert store.list_pending_approvals() == []
+
+
+def test_mail_task_approval_and_execution_preserve_mail_context_for_egress():
+    connector = SequenceConnector(executor_outputs=["done"])
+    store = FakeStore()
+    egress = ContextCapturingEgress()
+    orch = _make_orchestrator(connector=connector, egress=egress, store=store)
+
+    task_msg = InboundMessage(
+        id="task_mail_ctx",
+        sender="requester@example.com",
+        text="task: draft the response",
+        received_at="2026-02-17T12:00:00Z",
+        is_from_me=False,
+        context={
+            "channel": "mail",
+            "mail_message_id": "mail-abc",
+            "mail_subject": "!!agent Budget update",
+            "mail_subject_raw": "!!agent Budget update",
+            "mail_subject_sanitized": "Budget update",
+        },
+    )
+    task_result = orch.handle_message(task_msg)
+    assert task_result.approval_request_id is not None
+
+    approve_msg = InboundMessage(
+        id="approve_mail_ctx",
+        sender="requester@example.com",
+        text=f"approve {task_result.approval_request_id}",
+        received_at="2026-02-17T12:01:00Z",
+        is_from_me=False,
+    )
+    orch.handle_message(approve_msg)
+
+    assert any((ctx or {}).get("channel") == "mail" for ctx in egress.contexts)
+    assert any((ctx or {}).get("mail_message_id") == "mail-abc" for ctx in egress.contexts)
 
 
 def test_approve_enqueues_background_execution_when_executor_attached():

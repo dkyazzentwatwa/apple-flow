@@ -58,7 +58,8 @@ class AppleMailIngress:
         for raw in raw_messages:
             msg_id = raw.get("id", "")
             sender_raw = raw.get("sender", "")
-            subject = (raw.get("subject", "") or "").strip()
+            subject_raw = (raw.get("subject", "") or "").strip()
+            subject = subject_raw
             body = (raw.get("body", "") or "").strip()
             date_str = raw.get("date", "")
 
@@ -89,6 +90,9 @@ class AppleMailIngress:
                     context={
                         "channel": "mail",
                         "mail_subject": subject,
+                        "mail_subject_raw": subject_raw,
+                        "mail_subject_sanitized": subject,
+                        "mail_message_id": msg_id,
                     },
                 )
             )

@@ -52,7 +52,7 @@ class FakeEgress:
     def __init__(self) -> None:
         self.messages: list[tuple[str, str]] = []
 
-    def send(self, recipient: str, text: str) -> None:
+    def send(self, recipient: str, text: str, context: dict[str, Any] | None = None) -> None:
         self.messages.append((recipient, text))
 
     def was_recent_outbound(self, sender: str, text: str) -> bool:

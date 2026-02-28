@@ -125,7 +125,7 @@ class ConnectorProtocol(Protocol):
 class EgressProtocol(Protocol):
     """Protocol for outbound message handlers."""
 
-    def send(self, recipient: str, text: str) -> None:
+    def send(self, recipient: str, text: str, context: dict[str, Any] | None = None) -> None:
         """Send a message to a recipient."""
         ...
 

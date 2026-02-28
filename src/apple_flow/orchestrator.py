@@ -122,6 +122,12 @@ class RelayOrchestrator:
         """Attach a background run executor after orchestrator construction."""
         self._approval.run_executor = run_executor
 
+    def _send(self, recipient: str, text: str, context: dict[str, Any] | None = None) -> None:
+        try:
+            self.egress.send(recipient, text, context=context)
+        except TypeError:
+            self.egress.send(recipient, text)
+
     # --- Workspace Resolution ---
 
     def _resolve_workspace(self, alias: str) -> str:
@@ -165,7 +171,7 @@ class RelayOrchestrator:
                     f"Use `{self.chat_prefix} <message>` for general chat.\n"
                     "Or use `help`, `idea:`, `plan:`, `task:`, `project:`, `health`, `history:`, or `usage`."
                 )
-                self.egress.send(message.sender, hint)
+                self._send(message.sender, hint, context=message.context)
                 return OrchestrationResult(kind=CommandKind.CHAT, response=hint)
         elif command.kind is CommandKind.CHAT and not self.require_chat_prefix:
             if raw_text.lower().startswith(self.chat_prefix.lower()):
@@ -173,22 +179,22 @@ class RelayOrchestrator:
                 command = ParsedCommand(kind=CommandKind.CHAT, payload=stripped, workspace=command.workspace)
 
         if command.kind is CommandKind.HEALTH:
-            return self._handle_health(message.sender)
+            return self._handle_health(message.sender, context=message.context)
 
         if command.kind is CommandKind.HELP:
-            return self._handle_help(message.sender, command.payload)
+            return self._handle_help(message.sender, command.payload, context=message.context)
 
         if command.kind is CommandKind.HISTORY:
-            return self._handle_history(message.sender, command.payload)
+            return self._handle_history(message.sender, command.payload, context=message.context)
 
         if command.kind is CommandKind.USAGE:
-            return self._handle_usage(message.sender, command.payload)
+            return self._handle_usage(message.sender, command.payload, context=message.context)
 
         if command.kind is CommandKind.LOGS:
-            return self._handle_logs(message.sender, command.payload)
+            return self._handle_logs(message.sender, command.payload, context=message.context)
 
         if command.kind is CommandKind.STATUS:
-            return self._handle_status(message.sender, command.payload)
+            return self._handle_status(message.sender, command.payload, context=message.context)
 
         if command.kind is CommandKind.DENY_ALL:
             if not hasattr(self.store, "deny_all_approvals"):
@@ -196,7 +202,7 @@ class RelayOrchestrator:
             else:
                 count = self.store.deny_all_approvals()
                 response = f"Cancelled {count} pending approval{'s' if count != 1 else ''}." if count else "No pending approvals to cancel."
-            self.egress.send(message.sender, response)
+            self._send(message.sender, response, context=message.context)
             return OrchestrationResult(kind=command.kind, response=response)
 
         if command.kind is CommandKind.CLEAR_CONTEXT:
@@ -206,7 +212,7 @@ class RelayOrchestrator:
                 thread_id = self.connector.get_or_create_thread(message.sender)
             self.store.upsert_session(message.sender, thread_id, CommandKind.CHAT.value)
             response = "Started a fresh chat context for this sender."
-            self.egress.send(message.sender, response)
+            self._send(message.sender, response, context=message.context)
             return OrchestrationResult(kind=command.kind, response=response)
 
         if command.kind in {CommandKind.APPROVE, CommandKind.DENY}:
@@ -255,20 +261,20 @@ class RelayOrchestrator:
         prompt = self._inject_memory_context(prompt)
 
         response = self._run_connector_turn(thread_id, prompt, team_context)
-        self.egress.send(message.sender, response)
+        self._send(message.sender, response, context=message.context)
         self._log_to_notes(command.kind.value, message.sender, command.payload, response)
         return OrchestrationResult(kind=command.kind, response=response)
 
     # --- Health Dashboard ---
 
-    def _handle_help(self, sender: str, payload: str) -> OrchestrationResult:
+    def _handle_help(self, sender: str, payload: str, context: dict[str, Any] | None = None) -> OrchestrationResult:
         topic = payload.strip().lower()
         if topic:
             response = (
                 "Help topics are not yet segmented.\n"
                 "Send `help` to see all commands and tips."
             )
-            self.egress.send(sender, response)
+            self._send(sender, response, context=context)
             return OrchestrationResult(kind=CommandKind.HELP, response=response)
 
         lines = [
@@ -306,15 +312,15 @@ class RelayOrchestrator:
             "- Use `@alias` right after `idea:/plan:/task:/project:` to target a workspace.",
         ]
         response = "\n".join(lines)
-        self.egress.send(sender, response)
+        self._send(sender, response, context=context)
         return OrchestrationResult(kind=CommandKind.HELP, response=response)
 
-    def _handle_status(self, sender: str, payload: str) -> OrchestrationResult:
+    def _handle_status(self, sender: str, payload: str, context: dict[str, Any] | None = None) -> OrchestrationResult:
         if payload:
             response = self._status_for_target(payload)
         else:
             response = self._status_overview()
-        self.egress.send(sender, response)
+        self._send(sender, response, context=context)
         return OrchestrationResult(kind=CommandKind.STATUS, response=response)
 
     def _status_overview(self) -> str:
@@ -429,7 +435,7 @@ class RelayOrchestrator:
 
         return "\n".join(lines)
 
-    def _handle_health(self, sender: str) -> OrchestrationResult:
+    def _handle_health(self, sender: str, context: dict[str, Any] | None = None) -> OrchestrationResult:
         parts = ["Apple Flow Health"]
 
         if hasattr(self.store, "get_stats"):
@@ -484,12 +490,12 @@ class RelayOrchestrator:
                 parts.append("Companion: enabled (no check recorded yet)")
 
         response = "\n".join(parts)
-        self.egress.send(sender, response)
+        self._send(sender, response, context=context)
         return OrchestrationResult(kind=CommandKind.HEALTH, response=response)
 
     # --- Logs ---
 
-    def _handle_logs(self, sender: str, payload: str) -> OrchestrationResult:
+    def _handle_logs(self, sender: str, payload: str, context: dict[str, Any] | None = None) -> OrchestrationResult:
         n = 20
         if payload.strip():
             try:
@@ -518,12 +524,12 @@ class RelayOrchestrator:
             except OSError as exc:
                 response = f"Could not read log file: {exc}"
 
-        self.egress.send(sender, response)
+        self._send(sender, response, context=context)
         return OrchestrationResult(kind=CommandKind.LOGS, response=response)
 
     # --- Token Usage (ccusage) ---
 
-    def _handle_usage(self, sender: str, payload: str) -> OrchestrationResult:
+    def _handle_usage(self, sender: str, payload: str, context: dict[str, Any] | None = None) -> OrchestrationResult:
         sub = payload.lower().strip()
 
         if sub in ("monthly", "month"):
@@ -546,11 +552,11 @@ class RelayOrchestrator:
             data = json.loads(result.stdout)
         except subprocess.TimeoutExpired:
             response = "Usage data unavailable: ccusage timed out."
-            self.egress.send(sender, response)
+            self._send(sender, response, context=context)
             return OrchestrationResult(kind=CommandKind.USAGE, response=response)
         except (json.JSONDecodeError, FileNotFoundError, Exception) as exc:
             response = f"Usage data unavailable: {exc}"
-            self.egress.send(sender, response)
+            self._send(sender, response, context=context)
             return OrchestrationResult(kind=CommandKind.USAGE, response=response)
 
         lines: list[str] = []
@@ -598,12 +604,12 @@ class RelayOrchestrator:
                     lines.append(f"  {start}: {tok_str}  ${cost:.2f}{active_tag}")
 
         response = "\n".join(lines)
-        self.egress.send(sender, response)
+        self._send(sender, response, context=context)
         return OrchestrationResult(kind=CommandKind.USAGE, response=response)
 
     # --- Conversation Memory ---
 
-    def _handle_history(self, sender: str, query: str) -> OrchestrationResult:
+    def _handle_history(self, sender: str, query: str, context: dict[str, Any] | None = None) -> OrchestrationResult:
         if query and hasattr(self.store, "search_messages"):
             results = self.store.search_messages(sender, query, limit=10)
             if not results:
@@ -629,7 +635,7 @@ class RelayOrchestrator:
         else:
             response = "History not available (store does not support message queries)."
 
-        self.egress.send(sender, response)
+        self._send(sender, response, context=context)
         return OrchestrationResult(kind=CommandKind.HISTORY, response=response)
 
     # --- System Command ---
@@ -933,13 +939,13 @@ class RelayOrchestrator:
         sub = subcommand.strip().lower()
         if sub == "stop":
             response = "Apple Flow shutting down..."
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
             if self.shutdown_callback is not None:
                 self.shutdown_callback()
         elif sub == "restart":
             response = "Apple Flow restarting... (text 'health' to confirm it's back)"
             self._mark_restart_echo_suppress(sender, response)
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
             restarted = self._restart_launchd_service()
             if not restarted and self.shutdown_callback is not None:
                 # Fallback for non-launchd runs: perform a graceful shutdown and let
@@ -947,21 +953,21 @@ class RelayOrchestrator:
                 self.shutdown_callback()
         elif sub in {"kill provider", "killswitch", "kill ai"}:
             response = self._kill_provider_processes()
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
         elif sub.startswith("cancel run "):
             response = self._cancel_run_by_id(sub.split(" ", 2)[2])
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
         elif sub.startswith("cancel "):
             response = self._cancel_run_by_id(sub.split(" ", 1)[1])
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
         elif sub == "mute":
             self.store.set_state("companion_muted", "true")
             response = "Companion muted. Send 'system: unmute' to re-enable proactive messages."
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
         elif sub == "unmute":
             self.store.set_state("companion_muted", "false")
             response = "Companion unmuted. Proactive messages re-enabled."
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
         elif sub in ("sync office", "sync"):
             if self.office_syncer:
                 try:
@@ -971,14 +977,14 @@ class RelayOrchestrator:
                     response = f"Office sync failed: {exc}"
             else:
                 response = "Office sync not enabled. Set apple_flow_enable_office_sync=true and apple_flow_supabase_service_key."
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
         else:
             response = (
                 "Unknown system command. Use: "
                 "system: stop | restart | kill provider | cancel run <run_id> | mute | unmute | sync office | "
                 "teams list | team load <slug> | team current | team unload"
             )
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
         return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
 
     def _parse_team_system_command(self, subcommand: str) -> tuple[str, str, str]:
@@ -1020,7 +1026,7 @@ class RelayOrchestrator:
 
         if not self.team_catalog.is_available():
             response = "Agent teams are not available on this host (missing `agents/catalog.toml`)."
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
             return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
 
         if action == "list":
@@ -1035,7 +1041,7 @@ class RelayOrchestrator:
                 lines.append("")
                 lines.append("Use: `system: team load <slug>`")
                 response = "\n".join(lines)
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
             return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
 
         if action == "current":
@@ -1047,23 +1053,23 @@ class RelayOrchestrator:
                     f"Active team: `{active.get('slug', '?')}` ({active.get('title', 'unknown')}). "
                     "It will auto-reset after your next `idea`, `plan`, `task`, or `project` request."
                 )
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
             return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
 
         if action == "unload":
             self._clear_active_team(sender)
             response = "Unloaded active team for this sender."
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
             return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
 
         if action != "load":
             response = "Unsupported team system command."
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
             return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
 
         if not slug:
             response = "Usage: `system: team load <slug>`"
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
             return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
 
         team = self.team_catalog.get_team(slug)
@@ -1077,7 +1083,7 @@ class RelayOrchestrator:
             lines.append("")
             lines.append("Use: `system: teams list`")
             response = "\n".join(lines)
-            self.egress.send(sender, response)
+            self._send(sender, response, context=message.context)
             return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
 
         self._set_active_team(
@@ -1095,7 +1101,7 @@ class RelayOrchestrator:
             f"Loaded team `{team.slug}` ({team.title}). {mode_note} "
             "It will auto-reset after your next `idea`, `plan`, `task`, or `project` request."
         )
-        self.egress.send(sender, loaded_msg)
+        self._send(sender, loaded_msg, context=message.context)
 
         if not remainder:
             return OrchestrationResult(kind=CommandKind.SYSTEM, response=loaded_msg)

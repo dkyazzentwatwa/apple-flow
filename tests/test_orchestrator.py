@@ -1,10 +1,22 @@
 """Tests for the RelayOrchestrator."""
 
+from typing import Any
+
 from conftest import FakeConnector, FakeEgress, FakeStore
 
 from apple_flow.commanding import CommandKind
 from apple_flow.models import InboundMessage
 from apple_flow.orchestrator import RelayOrchestrator
+
+
+class ContextCapturingEgress(FakeEgress):
+    def __init__(self) -> None:
+        super().__init__()
+        self.contexts: list[dict[str, Any] | None] = []
+
+    def send(self, recipient: str, text: str, context: dict[str, Any] | None = None) -> None:
+        self.contexts.append(context)
+        super().send(recipient, text, context=context)
 
 
 def test_task_command_creates_approval_request():
@@ -91,6 +103,43 @@ def test_chat_with_prefix_runs_turn():
     assert result.response == "assistant-response"
     assert connector.turns
     assert egress.messages
+
+
+def test_mail_chat_response_preserves_mail_context_for_egress():
+    connector = FakeConnector()
+    egress = ContextCapturingEgress()
+    store = FakeStore()
+
+    orchestrator = RelayOrchestrator(
+        connector=connector,
+        egress=egress,
+        store=store,
+        allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
+        default_workspace="/Users/cypher/Public/code/codex-flow",
+        require_chat_prefix=True,
+        chat_prefix="relay:",
+    )
+
+    msg = InboundMessage(
+        id="m_mail_ctx_1",
+        sender="test@example.com",
+        text="relay: summarize this thread",
+        received_at="2026-02-16T12:00:00Z",
+        is_from_me=False,
+        context={
+            "channel": "mail",
+            "mail_message_id": "msg-123",
+            "mail_subject_sanitized": "Deploy update",
+        },
+    )
+
+    result = orchestrator.handle_message(msg)
+    assert result.kind is CommandKind.CHAT
+    assert result.response == "assistant-response"
+    assert egress.contexts
+    assert egress.contexts[-1] is not None
+    assert egress.contexts[-1].get("channel") == "mail"
+    assert egress.contexts[-1].get("mail_message_id") == "msg-123"
 
 
 def test_clear_context_resets_sender_thread():

@@ -11,6 +11,7 @@ import logging
 import re
 import subprocess
 import time
+from typing import Any
 
 from .utils import normalize_sender
 
@@ -40,7 +41,7 @@ class AppleMailEgress:
         self.signature = signature.replace("\\n", "\n")
         self._recent_fingerprints: dict[str, float] = {}
 
-    def send(self, recipient: str, text: str) -> None:
+    def send(self, recipient: str, text: str, context: dict[str, Any] | None = None) -> None:
         """Send an email reply to the recipient.
 
         Implements deduplication and chunking consistent with IMessageEgress.
@@ -59,13 +60,27 @@ class AppleMailEgress:
         # Add signature to the text
         text_with_signature = text + self.signature
 
+        mail_context = context if isinstance(context, dict) else {}
+        is_mail_context = mail_context.get("channel") == "mail"
+        reply_message_id = str(mail_context.get("mail_message_id", "")).strip() if is_mail_context else ""
+        subject = (
+            self._reply_subject_from_context(mail_context)
+            if is_mail_context
+            else self.response_subject
+        )
+
         logger.info("Sending email to %s (%s chars)", recipient, len(text_with_signature))
         chunks = self._chunk(text_with_signature)
         for chunk in chunks:
             last_error: Exception | None = None
             for attempt in range(1, self.retries + 1):
                 try:
-                    self._osascript_send(recipient, self.response_subject, chunk)
+                    self._send_chunk(
+                        recipient=recipient,
+                        subject=subject,
+                        body=chunk,
+                        reply_message_id=reply_message_id,
+                    )
                     logger.info("Sent email chunk to %s (%s chars)", recipient, len(chunk))
                     last_error = None
                     break
@@ -79,6 +94,20 @@ class AppleMailEgress:
         # Mark outbound using original text (without signature) for fingerprint consistency
         # This ensures the dedup check at the top of send() matches what we record here
         self.mark_outbound(recipient, text)
+
+    def _send_chunk(self, recipient: str, subject: str, body: str, reply_message_id: str = "") -> None:
+        if reply_message_id:
+            try:
+                self._osascript_reply(recipient, reply_message_id, subject, body)
+                return
+            except Exception as exc:
+                logger.warning(
+                    "Threaded reply failed for message_id=%s recipient=%s; falling back to new email: %s",
+                    reply_message_id,
+                    recipient,
+                    exc,
+                )
+        self._osascript_send(recipient, subject, body)
 
     def _osascript_send(self, recipient: str, subject: str, body: str) -> None:
         """Send an outbound email via Apple Mail using osascript."""
@@ -99,6 +128,74 @@ class AppleMailEgress:
                 make new to recipient at end of to recipients with properties {{address:"{escaped_recipient}"}}
             end tell
             send newMessage
+        end tell
+        '''
+
+        subprocess.run(
+            ["osascript", "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+    def _osascript_reply(self, recipient: str, message_id: str, subject: str, body: str) -> None:
+        """Reply to an existing Mail message to preserve conversation threading."""
+        escaped_body = body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        escaped_subject = subject.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_recipient = recipient.replace("\\", "\\\\").replace('"', '\\"')
+        escaped_message_id = message_id.replace("\\", "\\\\").replace('"', '\\"')
+
+        if message_id.isdigit():
+            id_match = f"id is {int(message_id)}"
+        else:
+            id_match = f'id as text is "{escaped_message_id}"'
+
+        if self.from_address:
+            escaped_from = self.from_address.replace("\\", "\\\\").replace('"', '\\"')
+            sender_line = f'set sender of replyMessage to "{escaped_from}"'
+        else:
+            sender_line = ""
+
+        script = f'''
+        tell application "Mail"
+            set originalMessage to missing value
+
+            try
+                set originalMessage to first message of inbox whose {id_match}
+            on error
+                set originalMessage to missing value
+            end try
+
+            if originalMessage is missing value then
+                repeat with acc in every account
+                    set accountMailboxes to every mailbox of acc
+                    repeat with boxRef in accountMailboxes
+                        try
+                            set originalMessage to first message of boxRef whose {id_match}
+                            exit repeat
+                        on error
+                            set originalMessage to missing value
+                        end try
+                    end repeat
+                    if originalMessage is not missing value then exit repeat
+                end repeat
+            end if
+
+            if originalMessage is missing value then
+                error "Original message not found for id={escaped_message_id}"
+            end if
+
+            set replyMessage to reply originalMessage opening window false
+            tell replyMessage
+                set subject to "{escaped_subject}"
+                set content to "{escaped_body}"
+                try
+                    set address of first to recipient to "{escaped_recipient}"
+                end try
+                {sender_line}
+            end tell
+            send replyMessage
         end tell
         '''
 
@@ -172,6 +269,19 @@ class AppleMailEgress:
         cleaned = (text or "").replace("\u2019", "'").replace("\u2018", "'")
         cleaned = re.sub(r"\s+", " ", cleaned).strip().lower()
         return cleaned
+
+    def _reply_subject_from_context(self, context: dict[str, Any]) -> str:
+        subject = str(
+            context.get("mail_subject_sanitized")
+            or context.get("mail_subject")
+            or self.response_subject
+            or ""
+        ).strip()
+        subject = re.sub(r"\s+", " ", subject).strip()
+        subject = re.sub(r"(?i)^re:\s*", "", subject).strip()
+        if not subject:
+            return self.response_subject
+        return f"Re: {subject}"
 
     def _gc_recent(self) -> None:
         now = time.time()

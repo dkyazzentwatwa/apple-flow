@@ -83,7 +83,7 @@ class IMessageEgress:
         self._gc_recent()
         self._recent_fingerprints[self._fingerprint(recipient, text)] = time.time()
 
-    def send(self, recipient: str, text: str) -> None:
+    def send(self, recipient: str, text: str, context: dict | None = None) -> None:
         outbound_fingerprint = self._fingerprint(recipient, text)
         last_ts = self._recent_fingerprints.get(outbound_fingerprint)
         if last_ts is not None and (time.time() - last_ts) <= self.suppress_duplicate_outbound_seconds:
