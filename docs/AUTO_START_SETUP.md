@@ -132,7 +132,7 @@ Then re-grant Full Disk Access to the **new** Python binary path.
 Check that:
 1. `.env` file is configured with correct `apple_flow_allowed_senders`
 2. Messages app is signed in to iMessage
-3. Database path is correct: `~/Library/Messages/chat.db`
+3. Database path is correct: `/Users/<you>/Library/Messages/chat.db`
 
 ## Security Notes
 

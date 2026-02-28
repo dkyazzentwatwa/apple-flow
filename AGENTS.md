@@ -225,7 +225,7 @@ All settings use the `apple_flow_` env prefix. Configured via `.env` file.
 - `apple_flow_allowed_senders` -- comma-separated phone numbers (E.164 format)
 - `apple_flow_allowed_workspaces` -- paths the AI agent may access (auto-resolved to absolute)
 - `apple_flow_default_workspace` -- default working directory
-- `apple_flow_messages_db_path` -- usually `~/Library/Messages/chat.db`
+- `apple_flow_messages_db_path` -- usually `/Users/<you>/Library/Messages/chat.db` (absolute path)
 
 ### Safety Settings
 

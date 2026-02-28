@@ -286,6 +286,22 @@ class RelaySettings(BaseSettings):
             ) from exc
         return value
 
+    @field_validator("db_path", "messages_db_path", mode="after")
+    @classmethod
+    def _validate_absolute_paths(cls, value: Path, info: ValidationInfo) -> Path:
+        if value.is_absolute():
+            return value
+
+        examples = {
+            "db_path": "/Users/<user>/.apple-flow/relay.db",
+            "messages_db_path": "/Users/<user>/Library/Messages/chat.db",
+        }
+        example = examples.get(info.field_name, "/absolute/path")
+        raise ValueError(
+            f"{info.field_name} must be an absolute path. "
+            f"Do not use '~' or relative paths. Example: {example}"
+        )
+
     def get_connector_type(self) -> str:
         """Return active connector type, auto-migrating deprecated values."""
         connector = (self.connector or "").strip()

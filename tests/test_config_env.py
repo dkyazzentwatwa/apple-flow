@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from apple_flow.config import RelaySettings
 
 
@@ -24,3 +26,20 @@ def test_csv_dotenv_values_load_without_json(monkeypatch, tmp_path):
         str(Path("/tmp/safe").resolve()),
     ]
     assert settings.get_connector_type() == "codex-cli"
+
+
+def test_dotenv_rejects_non_absolute_db_paths(monkeypatch, tmp_path):
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(
+        "\n".join(
+            [
+                "apple_flow_db_path=~/.apple-flow/relay.db",
+                "apple_flow_messages_db_path=chat.db",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError, match="absolute path"):
+        RelaySettings()

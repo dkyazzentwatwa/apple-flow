@@ -6,7 +6,9 @@ import atexit
 import fcntl
 import importlib.metadata
 import json
+import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import uvicorn
@@ -45,22 +47,70 @@ from .setup_wizard import run_wizard
 _LOCK_FILE = None
 
 
+def _daemon_lock_path(messages_db_path: Path) -> Path:
+    return messages_db_path.with_name(f"{messages_db_path.stem}.apple-flow.daemon.lock")
+
+
+def _read_lock_metadata(lock_file) -> dict[str, str]:
+    lock_file.seek(0)
+    raw = lock_file.read().strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+        if isinstance(payload, dict):
+            return {str(key): str(value) for key, value in payload.items()}
+    except json.JSONDecodeError:
+        pass
+    return {"raw": raw}
+
+
+def _release_daemon_lock() -> None:
+    global _LOCK_FILE
+    if _LOCK_FILE is None:
+        return
+    try:
+        fcntl.flock(_LOCK_FILE.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
+    try:
+        _LOCK_FILE.close()
+    except OSError:
+        pass
+    finally:
+        _LOCK_FILE = None
+
+
 def _acquire_daemon_lock() -> tuple[int, Path]:
     settings = RelaySettings()
-    lock_path = Path(settings.db_path).with_suffix(".daemon.lock")
+    lock_path = _daemon_lock_path(Path(settings.messages_db_path))
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_fd = lock_path.open("w")
+    lock_fd = lock_path.open("a+", encoding="utf-8")
     try:
         fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError as exc:
+        holder = _read_lock_metadata(lock_fd)
+        lock_fd.close()
+        details = f" Lock metadata: {json.dumps(holder, sort_keys=True)}" if holder else ""
         raise RuntimeError(
-            f"Another Apple Flow daemon appears to be running (lock: {lock_path})."
+            f"Another Apple Flow daemon appears to be running (lock: {lock_path}).{details}"
         ) from exc
-    lock_fd.write(str(Path.cwd()))
+    metadata = {
+        "pid": str(os.getpid()),
+        "started_at_utc": datetime.now(UTC).isoformat(),
+        "cwd": str(Path.cwd()),
+        "messages_db_path": str(settings.messages_db_path),
+        "db_path": str(settings.db_path),
+    }
+    lock_fd.seek(0)
+    lock_fd.truncate()
+    lock_fd.write(json.dumps(metadata, sort_keys=True))
     lock_fd.flush()
+    os.fsync(lock_fd.fileno())
+
     global _LOCK_FILE
     _LOCK_FILE = lock_fd
-    atexit.register(lock_fd.close)
+    atexit.register(_release_daemon_lock)
     return lock_fd.fileno(), lock_path
 
 
@@ -370,7 +420,10 @@ def main() -> None:
         except RuntimeError as exc:
             print(str(exc), file=sys.stderr)
             raise SystemExit(1) from exc
-        asyncio.run(run_daemon())
+        try:
+            asyncio.run(run_daemon())
+        finally:
+            _release_daemon_lock()
         return
 
     if args.mode == "tools":

@@ -82,6 +82,18 @@ def test_db_path_default_is_apple_flow(monkeypatch, tmp_path):
     assert settings.db_path == Path.home() / ".apple-flow" / "relay.db"
 
 
+@pytest.mark.parametrize("value", ["~/.apple-flow/relay.db", "./relay.db"])
+def test_db_path_requires_absolute_path(value):
+    with pytest.raises(ValueError, match="db_path must be an absolute path"):
+        RelaySettings(db_path=value)
+
+
+@pytest.mark.parametrize("value", ["~/Library/Messages/chat.db", "chat.db"])
+def test_messages_db_path_requires_absolute_path(value):
+    with pytest.raises(ValueError, match="messages_db_path must be an absolute path"):
+        RelaySettings(messages_db_path=value)
+
+
 def test_reminders_archive_default_is_agent_archive(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = RelaySettings()

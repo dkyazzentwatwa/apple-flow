@@ -21,7 +21,7 @@ These must be set before the daemon will start.
 | `apple_flow_allowed_senders` | `+15551234567` | Comma-separated phone numbers in E.164 format. Only messages from these numbers are processed. Your own number goes here. |
 | `apple_flow_allowed_workspaces` | `/Users/yourname/code` | Comma-separated absolute paths the AI is allowed to read/write. |
 | `apple_flow_default_workspace` | `/Users/yourname/code/my-project` | Default working directory for the AI connector. Must be inside `allowed_workspaces`. |
-| `apple_flow_db_path` | `~/.apple-flow/relay.db` | SQLite state database path. If not explicitly set, Apple Flow auto-migrates legacy `~/.codex/relay.db` to this location when safe. |
+| `apple_flow_db_path` | `/Users/yourname/.apple-flow/relay.db` | SQLite state database path. Must be an absolute path (no `~` or relative paths). If not explicitly set, Apple Flow auto-migrates legacy `~/.codex/relay.db` to this location when safe. |
 
 **Phone number format:**
 - Correct: `+15551234567`

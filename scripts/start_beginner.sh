@@ -213,19 +213,6 @@ if pgrep -f "apple_flow daemon" >/dev/null 2>&1; then
   sleep 1
 fi
 
-LOCK_PATH="$(PYTHONPATH="$ROOT_DIR/src" "$VENV_PYTHON" - <<'PY'
-from pathlib import Path
-from apple_flow.config import RelaySettings
-settings = RelaySettings()
-print(Path(settings.db_path).with_suffix('.daemon.lock'))
-PY
-)"
-
-if [[ -f "$LOCK_PATH" ]] && ! pgrep -f "apple_flow daemon" >/dev/null 2>&1; then
-  echo "Removing stale daemon lock: $LOCK_PATH"
-  rm -f "$LOCK_PATH"
-fi
-
 pin_selected_connector_binary
 run_fast_readiness_checks
 

@@ -83,7 +83,7 @@ In the terminal running the daemon, press `Ctrl+C`.
 - `Safety stop: apple_flow_allowed_senders is empty`
   - Set your number in `.env` (example: `+15551234567`).
 - `Messages DB not found`
-  - Check `apple_flow_messages_db_path` (default should be `~/Library/Messages/chat.db`).
+  - Check `apple_flow_messages_db_path` (default should be `/Users/<you>/Library/Messages/chat.db`).
 - No responses to your texts
   - Confirm your sender number exactly matches `apple_flow_allowed_senders`.
   - Confirm your message uses the prefix `relay:` (default safety setting).

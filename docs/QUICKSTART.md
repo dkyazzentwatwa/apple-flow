@@ -343,19 +343,18 @@ nano .env
 
 ### Daemon Keeps Stopping
 
-**Cause**: Existing process or stale lock file.
+**Cause**: Existing daemon process.
 
 **Fix**:
 ```bash
 # Kill any existing processes
 pkill -f "apple_flow daemon"
 
-# Remove stale lock
-rm -f ~/.apple-flow/relay.daemon.lock
-
 # Restart
 ./scripts/start_beginner.sh
 ```
+
+Do not manually delete lock files; Apple Flow uses OS-level file locks and manual deletion can make recovery harder.
 
 ---
 
