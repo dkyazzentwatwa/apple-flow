@@ -13,6 +13,16 @@ This guide gets `apple-flow` running fast on macOS with the safest default path.
 
 ## 10-minute quick path
 
+## Option A: Dashboard App (2 minutes, no terminal)
+
+1. Download `AppleFlowApp-macOS.zip` from the [latest release](https://github.com/dkyazzentwatwa/apple-flow/releases)
+2. Extract and open `AppleFlowApp.app`
+3. Follow the setup wizard to configure and start the daemon
+
+Done! Skip to step 6 to send your first message.
+
+## Option B: Terminal Setup (10 minutes)
+
 ## 1) Go to the project (30 sec)
 
 ```bash

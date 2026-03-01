@@ -2,7 +2,20 @@
 
 Get Apple Flow running in 5 steps. This guide assumes you're new to the project.
 
-## Preferred Vibe-Coding Method (Recommended)
+## Installation Options
+
+### Option 1: Dashboard App (Easiest)
+
+The fastest way to get started — no terminal required:
+
+1. Download `AppleFlowApp-macOS.zip` from the [latest release](https://github.com/dkyazzentwatwa/apple-flow/releases)
+2. Extract and move `AppleFlowApp.app` to your Applications folder
+3. Double-click to launch
+4. Follow the in-app setup wizard to configure your `.env` and start the daemon
+
+See [dashboard-app/README.md](../dashboard-app/README.md) for details.
+
+### Option 2: Vibe-Coding Method (Recommended for AI Users)
 
 1. Clone this repo and `cd` into it
 2. Paste [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md) into Codex/Claude/Cline
@@ -92,7 +105,9 @@ apple_flow_connector=gemini-cli  # for Gemini CLI
 apple_flow_connector=cline       # for Cline
 ```
 
-## Step 4: Run the Setup Script
+## Step 4: Run the Setup Script (Skip if using Dashboard App)
+
+If you installed via the Dashboard App, the daemon is already running. Otherwise, run:
 
 ```bash
 ./scripts/setup_autostart.sh

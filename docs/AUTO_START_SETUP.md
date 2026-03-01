@@ -1,10 +1,21 @@
 # Auto-Start Setup Guide
 
-This guide explains how to configure apple-flow to start automatically when your Mac boots.
+This guide explains how to configure Apple Flow to start automatically when your Mac boots.
 
-## One-Command Setup (Recommended)
+## Easiest Method: Dashboard App
 
-Just run:
+For a GUI-based setup without using the terminal:
+
+1. Download `AppleFlowApp-macOS.zip` from the [latest release](https://github.com/dkyazzentwatwa/apple-flow/releases)
+2. Extract `AppleFlowApp.app` and move it to your Applications folder
+3. Launch the app and follow the setup wizard
+4. The app will handle daemon configuration and auto-start for you
+
+See [dashboard-app/README.md](../dashboard-app/README.md) for detailed instructions.
+
+## One-Command Setup (Terminal Method)
+
+For terminal-based setup, run:
 
 ```bash
 ./scripts/setup_autostart.sh
