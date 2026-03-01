@@ -8,7 +8,7 @@ Apple Flow is a local-first daemon that bridges iMessage, Apple Mail, Apple Remi
 
 The project also ships an optional **Autonomous Companion Layer**: a proactive loop (`companion.py`) that watches for stale approvals, upcoming calendar events, overdue reminders, and office inbox items, synthesizes observations via AI, and sends proactive iMessages. Companion state is anchored in `agent-office/` — a structured workspace directory that holds the companion's identity (`SOUL.md`), durable memory (`MEMORY.md`), topic memory files, daily notes, project briefs, and automation playbooks.
 
-**Version:** 0.2.0 | **Python:** ≥3.11 | **Package name:** `apple-flow`
+**Version:** 0.3.1 | **Python:** ≥3.11 | **Package name:** `apple-flow`
 
 ## Development Commands
 
@@ -503,7 +503,7 @@ Follow the established pattern: create `<app>_ingress.py` and `<app>_egress.py`,
 |--------|-------|
 | Source modules | 30 |
 | Test files | 38 |
-| Tests passing | 487 |
+| Tests passing | 530+ |
 | Config options | 60+ |
 | Python requirement | ≥3.11 |
 | Core dependencies | fastapi, uvicorn, pydantic, pydantic-settings, httpx |

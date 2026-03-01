@@ -1,4 +1,4 @@
-# Codex Flow Beginner Setup in 10 Minutes
+# Apple Flow Beginner Setup in 10 Minutes
 
 This guide gets `apple-flow` running fast on macOS with the safest default path.
 

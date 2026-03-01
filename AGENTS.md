@@ -248,6 +248,19 @@ Apple Mail, Reminders, Notes, Calendar, Companion, Memory, Follow-Up Scheduler, 
 
 See `.env.example` for the full 60+ field list with descriptions. **When adding a new config field:** update both `config.py` and `.env.example`, add docs to `README.md`, and ensure a sensible default.
 
+### Memory v2 (Canonical Memory)
+
+New in v0.3.1 — SQLite-backed canonical memory with shadow-mode rollout:
+
+- `apple_flow_enable_memory_v2` — enable canonical memory retrieval (default: false)
+- `apple_flow_memory_v2_shadow_mode` — compute canonical retrieval but keep legacy injection; logs diff metrics (default: false)
+- `apple_flow_memory_v2_migrate_on_start` — backfill canonical memory from legacy files on startup (default: true)
+- `apple_flow_memory_v2_db_path` — canonical memory DB path; empty uses `<agent-office>/.apple-flow-memory.sqlite3`
+- `apple_flow_memory_v2_scope` — retrieval scope selector (default: global)
+- `apple_flow_memory_v2_maintenance_interval_seconds` — maintenance interval (default: 3600)
+- `apple_flow_memory_max_storage_mb` — best-effort storage cap (default: 256)
+- `apple_flow_memory_v2_include_legacy_fallback` — fallback to legacy if canonical empty (default: true)
+
 ## Admin API
 
 The admin API runs on port 8787 by default (`python -m apple_flow admin`).

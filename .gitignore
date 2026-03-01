@@ -54,6 +54,7 @@ agent-office/*
 !agent-office/SCAFFOLD.md
 !agent-office/setup.sh
 !agent-office/SOUL.md
+!agent-office/README.md
 !agent-office/20_projects/
 agent-office/20_projects/*
 !agent-office/20_projects/workspace-dashboard/

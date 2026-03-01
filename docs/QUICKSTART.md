@@ -168,6 +168,12 @@ apple_flow_connector=gemini-cli  # alternative -- requires: gemini auth login
 apple_flow_connector=cline       # alternative -- uses its own config
 ```
 
+**Kilo CLI** — Kilo AI coding assistant:
+```bash
+apple_flow_connector=kilo-cli
+```
+No separate auth needed — Kilo uses its own configuration.
+
 **Phone Number Format:**
 - Correct: `+15551234567` (with country code)
 - Wrong: `5551234567` (missing +1)
@@ -448,6 +454,30 @@ apple_flow_companion_enable_daily_digest=true
 ```
 
 The companion watches for stale approvals, upcoming calendar events, overdue reminders, and synthesizes observations via AI. It respects quiet hours (22:00-07:00 by default) and rate limits.
+
+### Memory v2 (Canonical Memory)
+
+Enable SQLite-backed canonical memory for more reliable context retrieval:
+
+```bash
+apple_flow_enable_memory_v2=true
+apple_flow_memory_v2_migrate_on_start=true
+apple_flow_memory_v2_shadow_mode=false
+```
+
+### Agent Teams (Codex CLI only)
+
+Activate multi-agent teams for specialized workflows:
+
+```bash
+# List available teams
+list available agent teams
+
+# Load a team
+load up the codebase-exploration-team
+```
+
+Teams are defined in `agents/catalog.toml` and `agents/teams/*/TEAM.md`.
 
 ### Advanced Configuration
 

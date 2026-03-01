@@ -217,6 +217,9 @@ Copy the following files verbatim from the source workspace. Do not auto-generat
 
 - `CLAUDE.md` — AI operating instructions, automation schedule, working style
 - `AGENTS.md` — agent mission, non-negotiables, file responsibilities, automation schedules
+- `GEMINI.md` — Gemini-specific project overview and architecture
+- `SECURITY.md` — security policy, threat model, and vulnerability reporting
+- `CONTRIBUTING.md` — contribution guidelines and coding standards
 - `README.md` — human-readable workspace overview and quick start
 
 ---
@@ -443,6 +446,9 @@ Follow these steps in order to rebuild the workspace from zero:
 6. **Copy governing documents** from the source workspace verbatim:
    - `CLAUDE.md`
    - `AGENTS.md`
+   - `GEMINI.md`
+   - `SECURITY.md`
+   - `CONTRIBUTING.md`
    - `README.md`
 
 7. **Verify** the workspace matches this manifest:
@@ -450,5 +456,5 @@ Follow these steps in order to rebuild the workspace from zero:
    - Each numbered folder has an `intro.md`.
    - `00_inbox/inbox.md`, `90_logs/automation-log.md`, and `MEMORY.md` exist with correct headers.
    - All 6 template files exist in `templates/`.
-   - `CLAUDE.md`, `AGENTS.md`, `README.md`, and `SCAFFOLD.md` exist at root.
+   - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `SECURITY.md`, `CONTRIBUTING.md`, `README.md`, and `SCAFFOLD.md` exist at root.
    - No live user content was overwritten.
