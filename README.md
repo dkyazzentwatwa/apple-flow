@@ -45,6 +45,15 @@ Apple Flow is a local-first macOS daemon that bridges Apple apps to AI CLIs (Cod
 |---|---|
 | ![Apple Flow app setup configuration](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Apple Flow onboarding error screen](docs/screenshots/apple-flow-onboarding-error..png) |
 
+## Highlights (Quick Read)
+
+- Local-first Apple-native AI automation with strong safety defaults (allowlist + approval gates + workspace boundaries).
+- Multi-gateway operations across iMessage, Mail, Reminders, Notes, and Calendar with deterministic tool flows.
+- New Apple Pages support for high-quality document generation from Markdown, including themes, TOC, citations, exports, and section updates.
+- New Apple Numbers support for workbook creation, sheet management, row insertion semantics, and styling automation.
+- Global skill packs for Codex/Claude-style workflows, including dedicated `apple-flow-pages`, `apple-flow-numbers`, `apple-flow-mail`, and `apple-flow-gateways` skills.
+- Production-friendly operations with service controls, health/status tooling, and comprehensive test coverage.
+
 ## Start Here
 
 Choose one setup path:
