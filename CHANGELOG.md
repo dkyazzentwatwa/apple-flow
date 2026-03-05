@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Healer launchd token blind spot**: Fixed a runtime configuration gap where healer remained disabled under launchd despite `GITHUB_TOKEN` being present in `.env`.
 
+## [0.4.1] - 2026-03-03
+
 ### Added
 - **Multimodal image fallback for iMessage attachments**: Attachment prompt blocks now include image source paths so multimodal-capable CLI providers can analyze images directly even when local OCR is unavailable.
 
