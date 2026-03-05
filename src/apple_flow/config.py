@@ -163,6 +163,23 @@ class RelaySettings(BaseSettings):
     calendar_poll_interval_seconds: float = 30.0
     calendar_lookahead_minutes: int = 5
 
+    # Phone call + TTS settings (local-assisted callback flow)
+    phone_owner_number: str = ""
+    phone_preferred_app: str = "phone"  # phone | facetime
+    phone_tts_voice: str = ""
+    phone_tts_rate: float = 180.0
+    phone_tts_engine: str = "auto"  # auto | say | piper
+    phone_piper_command: str = "piper"
+    phone_piper_model_path: str = ""
+    phone_in_call_tts_delay_seconds: float = 4.0
+    phone_enable_in_call_tts: bool = True
+    phone_deterministic_in_call_audio: bool = False
+    phone_virtual_audio_input_device: str = "BlackHole 2ch"
+    phone_virtual_audio_output_device: str = "BlackHole 2ch"
+    phone_audio_switch_command: str = "SwitchAudioSource"
+    phone_audio_play_command: str = "afplay"
+    phone_audio_route_settle_seconds: float = 0.8
+
     # Progress streaming for long tasks
     enable_progress_streaming: bool = True
     progress_update_interval_seconds: float = 30.0
@@ -204,6 +221,13 @@ class RelaySettings(BaseSettings):
     healer_scan_severity_threshold: str = "medium"  # low | medium | high | critical
     healer_scan_default_labels: list[str] = Field(default_factory=lambda: ["healer:ready", "kind:scan"])
     healer_scan_notes_log: bool = False
+    enable_healer_scheduled_scans: bool = False
+    healer_daily_scan_time: str = "06:00"
+    healer_weekly_deep_scan_day: str = "sunday"
+    healer_weekly_deep_scan_time: str = "04:00"
+    healer_scheduled_scan_owner: str = ""
+    healer_scan_artifacts_dir: str = "logs/scans"
+    healer_schedule_poll_seconds: float = 60.0
 
     # File attachment settings
     enable_attachments: bool = False
@@ -312,9 +336,29 @@ class RelaySettings(BaseSettings):
         "healer_learning_enabled",
         "healer_scan_enable_issue_creation",
         "healer_scan_notes_log",
+        "enable_healer_scheduled_scans",
+        "healer_daily_scan_time",
+        "healer_weekly_deep_scan_day",
+        "healer_weekly_deep_scan_time",
+        "healer_scheduled_scan_owner",
+        "healer_scan_artifacts_dir",
+        "healer_schedule_poll_seconds",
         "enable_csv_audit_log",
         "csv_audit_include_headers_if_missing",
         "enable_markdown_automation_log",
+        "phone_preferred_app",
+        "phone_tts_rate",
+        "phone_tts_engine",
+        "phone_piper_command",
+        "phone_piper_model_path",
+        "phone_in_call_tts_delay_seconds",
+        "phone_enable_in_call_tts",
+        "phone_deterministic_in_call_audio",
+        "phone_virtual_audio_input_device",
+        "phone_virtual_audio_output_device",
+        "phone_audio_switch_command",
+        "phone_audio_play_command",
+        "phone_audio_route_settle_seconds",
         mode="before",
     )
     @classmethod
@@ -378,6 +422,51 @@ class RelaySettings(BaseSettings):
         raise ValueError(
             f"Invalid healer_scan_severity_threshold {value!r}. Allowed: {', '.join(sorted(allowed))}"
         )
+
+    @field_validator("healer_daily_scan_time", "healer_weekly_deep_scan_time", mode="after")
+    @classmethod
+    def _validate_healer_schedule_time(cls, value: str) -> str:
+        normalized = (value or "").strip()
+        parts = normalized.split(":")
+        if len(parts) != 2:
+            raise ValueError(f"Invalid time {value!r}. Use HH:MM (24-hour), for example '06:00'.")
+        try:
+            hour = int(parts[0])
+            minute = int(parts[1])
+        except ValueError as exc:
+            raise ValueError(f"Invalid time {value!r}. Use HH:MM (24-hour), for example '06:00'.") from exc
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            raise ValueError(f"Invalid time {value!r}. Use HH:MM (24-hour), for example '06:00'.")
+        return f"{hour:02d}:{minute:02d}"
+
+    @field_validator("healer_weekly_deep_scan_day", mode="after")
+    @classmethod
+    def _validate_healer_weekly_day(cls, value: str) -> str:
+        allowed = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+        normalized = (value or "").strip().lower()
+        if normalized in allowed:
+            return normalized
+        raise ValueError(
+            f"Invalid healer_weekly_deep_scan_day {value!r}. Allowed: {', '.join(sorted(allowed))}"
+        )
+
+    @field_validator("phone_preferred_app", mode="after")
+    @classmethod
+    def _validate_phone_preferred_app(cls, value: str) -> str:
+        allowed = {"phone", "facetime"}
+        normalized = (value or "").strip().lower()
+        if normalized in allowed:
+            return normalized
+        raise ValueError(f"Invalid phone_preferred_app {value!r}. Allowed: {', '.join(sorted(allowed))}")
+
+    @field_validator("phone_tts_engine", mode="after")
+    @classmethod
+    def _validate_phone_tts_engine(cls, value: str) -> str:
+        allowed = {"auto", "say", "piper"}
+        normalized = (value or "").strip().lower()
+        if normalized in allowed:
+            return normalized
+        raise ValueError(f"Invalid phone_tts_engine {value!r}. Allowed: {', '.join(sorted(allowed))}")
 
     @field_validator("db_path", "messages_db_path", mode="after")
     @classmethod

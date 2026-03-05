@@ -792,6 +792,153 @@ async def test_run_forever_shutdown_does_not_raise_cancellederror():
     assert not task.cancelled()
 
 
+def test_run_due_healer_scheduled_scans_runs_weekly_then_daily_once():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    state: dict[str, str] = {}
+    runs: list[str] = []
+    daemon.settings = SimpleNamespace(
+        timezone="",
+        healer_weekly_deep_scan_day="sunday",
+        healer_weekly_deep_scan_time="04:00",
+        healer_daily_scan_time="06:00",
+    )
+    daemon.store = SimpleNamespace(
+        get_state=lambda key: state.get(key),
+        set_state=lambda key, value: state.__setitem__(key, value),
+    )
+
+    def _fake_run(kind: str, now: datetime):
+        runs.append(kind)
+        if kind == "weekly":
+            state[daemon_module._HEALER_SCHEDULE_LAST_WEEKLY_KEY] = now.strftime("%G-W%V")
+        else:
+            state[daemon_module._HEALER_SCHEDULE_LAST_DAILY_DATE_KEY] = now.date().isoformat()
+
+    daemon._run_scheduled_healer_scan = _fake_run
+    now = datetime(2026, 3, 8, 7, 0, tzinfo=UTC)  # Sunday
+
+    daemon._run_due_healer_scheduled_scans(now_local=now)
+    daemon._run_due_healer_scheduled_scans(now_local=now)
+
+    assert runs == ["weekly", "daily"]
+
+
+def test_run_scheduled_daily_healer_scan_writes_artifacts_and_notifies(tmp_path):
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    sent: list[tuple[str, str]] = []
+    note_logs: list[tuple[str, str, str, str]] = []
+    state: dict[str, str] = {}
+    artifact_dir = tmp_path / "logs" / "scans"
+    daemon.settings = SimpleNamespace(
+        healer_scan_artifacts_dir=str(artifact_dir),
+        healer_scheduled_scan_owner="+15551234567",
+        allowed_senders=[],
+    )
+    daemon.store = SimpleNamespace(
+        set_state=lambda key, value: state.__setitem__(key, value),
+        get_state=lambda key: state.get(key),
+    )
+    daemon.egress = SimpleNamespace(send=lambda recipient, text: sent.append((recipient, text)))
+    daemon.orchestrator = SimpleNamespace(
+        _healer_ops_queue=lambda: "No healer action needed today",
+        _run_healer_scan=lambda **kwargs: "unused",
+        _log_to_notes=lambda kind, sender, request, response: note_logs.append((kind, sender, request, response)),
+    )
+
+    now = datetime(2026, 3, 5, 6, 0, tzinfo=UTC)
+    daemon._run_scheduled_healer_scan("daily", now)
+
+    assert state[daemon_module._HEALER_SCHEDULE_LAST_DAILY_DATE_KEY] == "2026-03-05"
+    assert sent and sent[0][0] == "+15551234567"
+    assert "scheduled daily scan completed" in sent[0][1].lower()
+    assert note_logs and note_logs[0][2] == "scheduled daily healer ops scan"
+
+    txt_files = sorted(artifact_dir.glob("*_daily_ops.txt"))
+    json_files = sorted(artifact_dir.glob("*_daily_ops.json"))
+    assert len(txt_files) == 1
+    assert len(json_files) == 1
+    payload = json.loads(json_files[0].read_text(encoding="utf-8"))
+    assert payload["schedule_kind"] == "daily_ops"
+    assert payload["response"] == "No healer action needed today"
+
+
+def test_run_scheduled_weekly_healer_scan_includes_run_id_metadata(tmp_path):
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    sent: list[tuple[str, str]] = []
+    state: dict[str, str] = {}
+    artifact_dir = tmp_path / "logs" / "scans"
+    daemon.settings = SimpleNamespace(
+        healer_scan_artifacts_dir=str(artifact_dir),
+        healer_scheduled_scan_owner="+15550000000",
+        allowed_senders=[],
+    )
+    daemon.store = SimpleNamespace(
+        set_state=lambda key, value: state.__setitem__(key, value),
+        get_state=lambda key: state.get(key),
+    )
+    daemon.egress = SimpleNamespace(send=lambda recipient, text: sent.append((recipient, text)))
+    daemon.orchestrator = SimpleNamespace(
+        _healer_ops_queue=lambda: "unused",
+        _run_healer_scan=lambda **kwargs: (
+            "🩺 Flow Healer Scan\n"
+            "Mode: live\n"
+            "Run ID: scan_20260305040000\n"
+            "Findings: 0 total, 0 at/above threshold\n"
+            "Threshold: medium\n"
+            "Issues: 0 created, 0 deduped, 0 skipped (budget)"
+        ),
+        _log_to_notes=lambda kind, sender, request, response: None,
+    )
+
+    now = datetime(2026, 3, 8, 4, 0, tzinfo=UTC)
+    daemon._run_scheduled_healer_scan("weekly", now)
+
+    assert state[daemon_module._HEALER_SCHEDULE_LAST_WEEKLY_KEY] == now.strftime("%G-W%V")
+    assert sent and "scheduled weekly deep scan completed" in sent[0][1].lower()
+
+    json_files = sorted(artifact_dir.glob("*_weekly_deep.json"))
+    assert len(json_files) == 1
+    payload = json.loads(json_files[0].read_text(encoding="utf-8"))
+    assert payload["metadata"]["run_id"] == "scan_20260305040000"
+
+
+def test_run_scheduled_scan_continues_when_imessage_send_fails(tmp_path):
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    note_logs: list[tuple[str, str, str, str]] = []
+    events: list[dict[str, str | None]] = []
+    state: dict[str, str] = {}
+    artifact_dir = tmp_path / "logs" / "scans"
+    daemon.settings = SimpleNamespace(
+        healer_scan_artifacts_dir=str(artifact_dir),
+        healer_scheduled_scan_owner="+15550000000",
+        allowed_senders=[],
+    )
+    daemon.store = SimpleNamespace(
+        set_state=lambda key, value: state.__setitem__(key, value),
+        get_state=lambda key: state.get(key),
+        create_event=lambda event_type, payload, related_run_id=None: events.append(
+            {"event_type": event_type, "payload": payload, "related_run_id": related_run_id}
+        ),
+    )
+    daemon.egress = SimpleNamespace(send=lambda recipient, text: (_ for _ in ()).throw(RuntimeError("imsg down")))
+    daemon.orchestrator = SimpleNamespace(
+        _healer_ops_queue=lambda: "No healer action needed today",
+        _run_healer_scan=lambda **kwargs: "unused",
+        _log_to_notes=lambda kind, sender, request, response: note_logs.append((kind, sender, request, response)),
+    )
+
+    now = datetime(2026, 3, 5, 6, 0, tzinfo=UTC)
+    daemon._run_scheduled_healer_scan("daily", now)
+
+    assert note_logs
+    assert events
+    assert events[0]["event_type"] == "scheduled_scan_delivery_failed"
+    txt_files = sorted(artifact_dir.glob("*_daily_ops.txt"))
+    json_files = sorted(artifact_dir.glob("*_daily_ops.json"))
+    assert len(txt_files) == 1
+    assert len(json_files) == 1
+
+
 @pytest.mark.asyncio
 async def test_top_level_run_handles_cancellederror_gracefully(monkeypatch):
     shutdown_called = {"value": False}

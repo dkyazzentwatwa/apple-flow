@@ -7,7 +7,48 @@ def test_schema_covers_all_relay_settings_fields():
     schema_keys = {field["key"] for field in schema["fields"]}
     expected_keys = {f"apple_flow_{name}" for name in RelaySettings.model_fields}
     expected_keys -= _SKIP_KEYS
-    assert expected_keys.issubset(schema_keys)
+    assert schema_keys == expected_keys
+
+
+def test_schema_classifies_recent_config_families_into_expected_sections():
+    schema = build_config_schema()
+    by_key = {field["key"]: field for field in schema["fields"]}
+
+    expected_sections = {
+        "apple_flow_enable_memory_v2": "memory",
+        "apple_flow_memory_v2_shadow_mode": "memory",
+        "apple_flow_enable_autonomous_healer": "healer",
+        "apple_flow_healer_repo_path": "healer",
+        "apple_flow_healer_weekly_deep_scan_time": "healer",
+        "apple_flow_enable_companion": "companion",
+        "apple_flow_companion_weekly_review_day": "companion",
+        "apple_flow_enable_ambient_scanning": "scheduler",
+        "apple_flow_enable_csv_audit_log": "office_sync",
+        "apple_flow_enable_markdown_automation_log": "office_sync",
+        "apple_flow_phone_preferred_app": "phone",
+    }
+
+    for key, section_id in expected_sections.items():
+        assert by_key[key]["section_id"] == section_id
+
+
+def test_schema_exposes_validation_hints_for_dashboard_editor():
+    schema = build_config_schema()
+    by_key = {field["key"]: field for field in schema["fields"]}
+
+    assert by_key["apple_flow_healer_mode"]["validation_hint"] == (
+        "Allowed values: guarded_pr, auto_merge_low_risk, full_auto"
+    )
+    assert by_key["apple_flow_healer_weekly_deep_scan_day"]["validation_hint"] == (
+        "Allowed values: monday, tuesday, wednesday, thursday, friday, saturday, sunday"
+    )
+    assert by_key["apple_flow_companion_weekly_review_day"]["validation_hint"] == (
+        "Allowed values: monday, tuesday, wednesday, thursday, friday, saturday, sunday"
+    )
+    assert by_key["apple_flow_allowed_senders"]["validation_hint"] == "Comma-separated values."
+    assert by_key["apple_flow_poll_interval_seconds"]["validation_hint"] == "Numeric value; decimals allowed."
+    assert by_key["apple_flow_admin_port"]["validation_hint"] == "Whole number."
+    assert by_key["apple_flow_messages_db_path"]["validation_hint"] == "Absolute path required."
 
 
 def test_schema_has_sections_and_version():

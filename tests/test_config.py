@@ -190,6 +190,12 @@ def test_healer_defaults(monkeypatch, tmp_path):
     assert settings.healer_learning_enabled is False
     assert settings.healer_scan_default_labels == ["healer:ready", "kind:scan"]
     assert settings.healer_scan_severity_threshold == "medium"
+    assert settings.enable_healer_scheduled_scans is False
+    assert settings.healer_daily_scan_time == "06:00"
+    assert settings.healer_weekly_deep_scan_day == "sunday"
+    assert settings.healer_weekly_deep_scan_time == "04:00"
+    assert settings.healer_scan_artifacts_dir == "logs/scans"
+    assert settings.healer_schedule_poll_seconds == 60.0
 
 
 def test_healer_csv_list_parsing():
@@ -216,3 +222,37 @@ def test_healer_sandbox_mode_validation():
 def test_healer_scan_severity_threshold_validation():
     with pytest.raises(ValueError, match="Invalid healer_scan_severity_threshold"):
         RelaySettings(healer_scan_severity_threshold="urgent")
+
+
+def test_healer_weekly_deep_scan_day_validation():
+    with pytest.raises(ValueError, match="Invalid healer_weekly_deep_scan_day"):
+        RelaySettings(healer_weekly_deep_scan_day="funday")
+
+
+@pytest.mark.parametrize("field_name", ["healer_daily_scan_time", "healer_weekly_deep_scan_time"])
+def test_healer_schedule_time_validation(field_name):
+    with pytest.raises(ValueError, match="Invalid time"):
+        RelaySettings(**{field_name: "25:99"})
+
+
+def test_phone_defaults(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.phone_owner_number == ""
+    assert settings.phone_preferred_app == "phone"
+    assert settings.phone_tts_rate == 180.0
+    assert settings.phone_tts_engine == "auto"
+    assert settings.phone_enable_in_call_tts is True
+    assert settings.phone_deterministic_in_call_audio is False
+    assert settings.phone_virtual_audio_input_device == "BlackHole 2ch"
+    assert settings.phone_virtual_audio_output_device == "BlackHole 2ch"
+
+
+def test_phone_preferred_app_validation():
+    with pytest.raises(ValueError, match="Invalid phone_preferred_app"):
+        RelaySettings(phone_preferred_app="zoom")
+
+
+def test_phone_tts_engine_validation():
+    with pytest.raises(ValueError, match="Invalid phone_tts_engine"):
+        RelaySettings(phone_tts_engine="elevenlabs")

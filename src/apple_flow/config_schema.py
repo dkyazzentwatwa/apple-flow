@@ -17,6 +17,7 @@ _SECTION_ORDER: list[tuple[str, str, bool]] = [
     ("reminders", "Reminders", False),
     ("notes", "Notes", False),
     ("calendar", "Calendar", False),
+    ("phone", "Phone", False),
     ("attachments", "Attachments", False),
     ("execution", "Progress & Execution", False),
     ("healer", "Autonomous Healer", False),
@@ -58,6 +59,17 @@ _ENUM_OPTIONS: dict[str, list[str]] = {
     "apple_flow_healer_mode": ["guarded_pr", "auto_merge_low_risk", "full_auto"],
     "apple_flow_healer_sandbox_mode": ["docker"],
     "apple_flow_healer_scan_severity_threshold": ["low", "medium", "high", "critical"],
+    "apple_flow_healer_weekly_deep_scan_day": [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    ],
+    "apple_flow_phone_preferred_app": ["phone", "facetime"],
+    "apple_flow_phone_tts_engine": ["auto", "say", "piper"],
 }
 
 _SKIP_KEYS = {
@@ -138,6 +150,8 @@ def _section_for_key(key: str) -> str:
         return "notes"
     if key.startswith("apple_flow_calendar_") or key == "apple_flow_enable_calendar_polling":
         return "calendar"
+    if key.startswith("apple_flow_phone_"):
+        return "phone"
     if key.startswith("apple_flow_enable_attachments") or key.startswith("apple_flow_max_attachment") or key.startswith(
         "apple_flow_attachment_"
     ):
@@ -184,6 +198,31 @@ def _input_type(annotation: Any) -> str:
     return "text"
 
 
+def _validation_hint(key: str, annotation: Any, input_type: str, enum_options: list[str]) -> str:
+    if enum_options:
+        return f"Allowed values: {', '.join(enum_options)}"
+
+    if input_type == "bool":
+        return "Use true or false."
+
+    if annotation is int:
+        return "Whole number."
+
+    if annotation is float:
+        return "Numeric value; decimals allowed."
+
+    if input_type == "csv":
+        return "Comma-separated values."
+
+    if key in {"apple_flow_db_path", "apple_flow_messages_db_path"}:
+        return "Absolute path required."
+
+    if input_type == "path":
+        return "Path value."
+
+    return ""
+
+
 def stringify_value(value: Any) -> str:
     if value is None:
         return ""
@@ -214,6 +253,12 @@ def build_config_schema() -> dict[str, Any]:
         input_type = _input_type(field.annotation)
         if sensitive and input_type == "text":
             input_type = "token"
+        validation_hint = _validation_hint(
+            key=key,
+            annotation=field.annotation,
+            input_type=input_type,
+            enum_options=enum_options,
+        )
         default_raw = field.default_factory() if field.default_factory is not None else field.default
         fields.append(
             {
@@ -226,7 +271,7 @@ def build_config_schema() -> dict[str, Any]:
                 "sensitive": sensitive,
                 "input_type": input_type,
                 "default_value": stringify_value(default_raw),
-                "validation_hint": "",
+                "validation_hint": validation_hint,
                 "enum_options": enum_options,
                 "restart_recommended": True,
             }

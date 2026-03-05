@@ -74,6 +74,7 @@ Apple Flow includes an optional autonomous healer loop for GitHub-issue driven r
 - Can learn internal guardrails from prior attempts (`apple_flow_healer_learning_enabled`)
 - Enforces circuit breaker, retry budget, lock contention control, and reconciliation
 - Supports `system: healer scan` to run local checks and open deduped `healer:ready` issues
+- Optional scheduler-driven scans: daily ops queue + weekly deep scan with iMessage/Notes summary and per-run `logs/scans` artifacts (`apple_flow_enable_healer_scheduled_scans`)
 
 See `.env.example` for all `apple_flow_healer_*` settings.
 
@@ -283,6 +284,31 @@ apple_flow_enable_notes_polling=true
 apple_flow_enable_calendar_polling=true
 ```
 
+Phone callback + TTS example:
+
+```env
+apple_flow_phone_owner_number=+15551234567
+apple_flow_phone_preferred_app=phone
+apple_flow_phone_tts_voice=
+apple_flow_phone_tts_rate=180
+apple_flow_phone_tts_engine=auto
+apple_flow_phone_piper_model_path=/Users/you/models/en_US-amy-medium.onnx
+apple_flow_phone_in_call_tts_delay_seconds=4
+apple_flow_phone_enable_in_call_tts=true
+apple_flow_phone_deterministic_in_call_audio=true
+apple_flow_phone_virtual_audio_input_device=BlackHole 2ch
+apple_flow_phone_virtual_audio_output_device=BlackHole 2ch
+```
+
+Then trigger with:
+
+```text
+task: call me
+task: call me and say standup starts in 10 minutes
+```
+
+This flow stays behind approvals. With deterministic mode enabled, Apple Flow hard-fails when virtual routing is unavailable instead of falling back to speaker/mic pickup.
+
 Companion + memory examples:
 
 ```env
@@ -352,7 +378,7 @@ Details: [docs/AGENT_TEAMS.md](docs/AGENT_TEAMS.md)
 
 A local Swift onboarding/dashboard app is bundled:
 
-- app bundle: `dashboard-app/AppleFlow.app`
+- app bundle: `dashboard-app/AppleFlowApp.app`
 - distributable zip: `dashboard-app/AppleFlowApp-macOS.zip`
 
 Or build/export from source docs: [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md)

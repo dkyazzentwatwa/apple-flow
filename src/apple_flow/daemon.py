@@ -10,6 +10,8 @@ import sqlite3
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .ambient import AmbientScanner
 from .attachments import AttachmentProcessor
@@ -60,6 +62,9 @@ _FASTLANE_COMMANDS = {
     CommandKind.CLEAR_CONTEXT,
     CommandKind.SYSTEM,
 }
+
+_HEALER_SCHEDULE_LAST_DAILY_DATE_KEY = "healer_schedule_last_daily_date"
+_HEALER_SCHEDULE_LAST_WEEKLY_KEY = "healer_schedule_last_weekly_week"
 
 def migrate_legacy_db_if_needed(
     settings: RelaySettings,
@@ -417,6 +422,21 @@ class RelayDaemon:
             run_executor=None,
             office_syncer=self.office_syncer,
             log_file_path=settings.log_file_path,
+            phone_owner_number=settings.phone_owner_number or (settings.allowed_senders[0] if settings.allowed_senders else ""),
+            phone_preferred_app=settings.phone_preferred_app,
+            phone_tts_voice=settings.phone_tts_voice,
+            phone_tts_rate=settings.phone_tts_rate,
+            phone_tts_engine=settings.phone_tts_engine,
+            phone_piper_command=settings.phone_piper_command,
+            phone_piper_model_path=settings.phone_piper_model_path,
+            phone_in_call_tts_delay_seconds=settings.phone_in_call_tts_delay_seconds,
+            phone_enable_in_call_tts=settings.phone_enable_in_call_tts,
+            phone_deterministic_in_call_audio=settings.phone_deterministic_in_call_audio,
+            phone_virtual_audio_input_device=settings.phone_virtual_audio_input_device,
+            phone_virtual_audio_output_device=settings.phone_virtual_audio_output_device,
+            phone_audio_switch_command=settings.phone_audio_switch_command,
+            phone_audio_play_command=settings.phone_audio_play_command,
+            phone_audio_route_settle_seconds=settings.phone_audio_route_settle_seconds,
             healer_repo_path=settings.healer_repo_path,
             healer_scan_enable_issue_creation=settings.healer_scan_enable_issue_creation,
             healer_scan_max_issues_per_run=settings.healer_scan_max_issues_per_run,
@@ -685,6 +705,8 @@ class RelayDaemon:
             tasks.append(asyncio.create_task(self._ambient_loop()))
         if getattr(self, "healer", None) is not None:
             tasks.append(asyncio.create_task(self._healer_loop()))
+        if getattr(getattr(self, "settings", None), "enable_healer_scheduled_scans", False):
+            tasks.append(asyncio.create_task(self._healer_scheduled_scan_loop()))
         if getattr(self, "memory_service", None) is not None:
             tasks.append(asyncio.create_task(self._memory_maintenance_loop()))
         try:
@@ -735,6 +757,241 @@ class RelayDaemon:
             await self.healer.run_forever(lambda: self._shutdown_requested)
         except Exception as exc:
             logger.exception("Autonomous healer loop error: %s", exc)
+
+    async def _healer_scheduled_scan_loop(self) -> None:
+        """Run daily ops + weekly deep healer scans on a schedule."""
+        logger.info(
+            "Healer scheduled scan loop started (daily=%s, weekly=%s@%s, interval=%.0fs)",
+            getattr(self.settings, "healer_daily_scan_time", "06:00"),
+            getattr(self.settings, "healer_weekly_deep_scan_day", "sunday"),
+            getattr(self.settings, "healer_weekly_deep_scan_time", "04:00"),
+            float(getattr(self.settings, "healer_schedule_poll_seconds", 60.0)),
+        )
+        while not self._shutdown_requested:
+            try:
+                await asyncio.to_thread(self._run_due_healer_scheduled_scans)
+            except Exception as exc:
+                logger.exception("Healer scheduled scan loop error: %s", exc)
+            poll_seconds = max(15.0, float(getattr(self.settings, "healer_schedule_poll_seconds", 60.0)))
+            await asyncio.sleep(poll_seconds)
+
+    def _run_due_healer_scheduled_scans(self, *, now_local: datetime | None = None) -> None:
+        now = now_local or self._scheduled_now()
+        weekly_day = str(getattr(self.settings, "healer_weekly_deep_scan_day", "sunday")).strip().lower()
+        weekly_hour, weekly_minute = self._parse_hhmm(getattr(self.settings, "healer_weekly_deep_scan_time", "04:00"))
+        daily_hour, daily_minute = self._parse_hhmm(getattr(self.settings, "healer_daily_scan_time", "06:00"))
+
+        # Run weekly first when both are due to preserve chronological order (e.g., Sunday 04:00 then 06:00).
+        if self._weekly_scan_due(
+            now,
+            scheduled_day=weekly_day,
+            scheduled_hour=weekly_hour,
+            scheduled_minute=weekly_minute,
+        ):
+            self._run_scheduled_healer_scan("weekly", now)
+        if self._daily_scan_due(
+            now,
+            scheduled_hour=daily_hour,
+            scheduled_minute=daily_minute,
+        ):
+            self._run_scheduled_healer_scan("daily", now)
+
+    def _scheduled_now(self) -> datetime:
+        timezone_name = (self.settings.timezone or "").strip()
+        if not timezone_name:
+            return datetime.now().astimezone()
+        try:
+            return datetime.now(ZoneInfo(timezone_name))
+        except ZoneInfoNotFoundError:
+            logger.warning(
+                "Invalid timezone %r for healer schedule; falling back to local timezone",
+                timezone_name,
+            )
+            return datetime.now().astimezone()
+
+    @staticmethod
+    def _parse_hhmm(value: str) -> tuple[int, int]:
+        text = str(value or "").strip()
+        parts = text.split(":")
+        if len(parts) != 2:
+            raise ValueError(f"Invalid HH:MM value: {value!r}")
+        return int(parts[0]), int(parts[1])
+
+    def _daily_scan_due(self, now: datetime, *, scheduled_hour: int, scheduled_minute: int) -> bool:
+        if (now.hour, now.minute) < (scheduled_hour, scheduled_minute):
+            return False
+        last_run = self.store.get_state(_HEALER_SCHEDULE_LAST_DAILY_DATE_KEY)
+        return last_run != now.date().isoformat()
+
+    def _weekly_scan_due(
+        self,
+        now: datetime,
+        *,
+        scheduled_day: str,
+        scheduled_hour: int,
+        scheduled_minute: int,
+    ) -> bool:
+        if now.strftime("%A").lower() != scheduled_day:
+            return False
+        if (now.hour, now.minute) < (scheduled_hour, scheduled_minute):
+            return False
+        current_week = now.strftime("%G-W%V")
+        last_run = self.store.get_state(_HEALER_SCHEDULE_LAST_WEEKLY_KEY)
+        return last_run != current_week
+
+    def _run_scheduled_healer_scan(self, schedule_kind: str, now_local: datetime) -> None:
+        if schedule_kind == "weekly":
+            request = "scheduled weekly deep healer scan"
+            try:
+                response = self.orchestrator._run_healer_scan(dry_run=False, lightweight=False)
+            except Exception as exc:
+                logger.exception("Scheduled weekly healer scan failed: %s", exc)
+                response = f"Flow Healer weekly deep scan failed: {exc}"
+            self.store.set_state(_HEALER_SCHEDULE_LAST_WEEKLY_KEY, now_local.strftime("%G-W%V"))
+            run_label = "weekly_deep"
+        else:
+            request = "scheduled daily healer ops scan"
+            try:
+                response = self.orchestrator._healer_ops_queue()
+            except Exception as exc:
+                logger.exception("Scheduled daily healer scan failed: %s", exc)
+                response = f"Flow Healer daily scan failed: {exc}"
+            self.store.set_state(_HEALER_SCHEDULE_LAST_DAILY_DATE_KEY, now_local.date().isoformat())
+            run_label = "daily_ops"
+
+        metadata = self._extract_healer_scan_metadata(response)
+        metadata["request"] = request
+        metadata["owner"] = self._scheduled_scan_owner()
+
+        artifact_paths = self._write_healer_scan_artifacts(
+            schedule_kind=run_label,
+            now_local=now_local,
+            response=response,
+            metadata=metadata,
+        )
+        message = self._build_scheduled_healer_message(
+            schedule_kind=schedule_kind,
+            now_local=now_local,
+            response=response,
+            artifact_paths=artifact_paths,
+        )
+        owner = self._scheduled_scan_owner()
+        send_error: Exception | None = None
+        if owner:
+            try:
+                self.egress.send(owner, message)
+            except Exception as exc:
+                send_error = exc
+                logger.warning(
+                    "Scheduled healer %s scan iMessage delivery failed for %s: %s",
+                    schedule_kind,
+                    owner,
+                    exc,
+                )
+        else:
+            logger.warning(
+                "Healer scheduled %s scan completed but no owner configured (set apple_flow_healer_scheduled_scan_owner or allowed_senders)",
+                schedule_kind,
+            )
+        try:
+            self.orchestrator._log_to_notes(
+                "system",
+                owner or "system:scheduler",
+                request,
+                message,
+            )
+        except Exception as exc:
+            logger.warning("Scheduled healer %s scan notes logging failed: %s", schedule_kind, exc)
+        if send_error is not None and hasattr(self.store, "create_event"):
+            self.store.create_event(
+                event_type="scheduled_scan_delivery_failed",
+                payload=json.dumps(
+                    {
+                        "schedule_kind": schedule_kind,
+                        "owner": owner,
+                        "error": str(send_error),
+                    }
+                ),
+                related_run_id=str(metadata.get("run_id", "")) or None,
+            )
+        logger.info("Scheduled healer %s scan completed", schedule_kind)
+
+    def _scheduled_scan_owner(self) -> str:
+        configured = str(getattr(self.settings, "healer_scheduled_scan_owner", "") or "").strip()
+        if configured:
+            return configured
+        allowed = getattr(self.settings, "allowed_senders", []) or []
+        if not allowed:
+            return ""
+        return str(allowed[0]).strip()
+
+    @staticmethod
+    def _extract_healer_scan_metadata(response: str) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+        for raw_line in response.splitlines():
+            line = raw_line.strip()
+            if line.startswith("Run ID:"):
+                metadata["run_id"] = line.split(":", 1)[1].strip()
+            elif line.startswith("Mode:"):
+                metadata["mode"] = line.split(":", 1)[1].strip()
+            elif line.startswith("Threshold:"):
+                metadata["threshold"] = line.split(":", 1)[1].strip()
+        return metadata
+
+    def _write_healer_scan_artifacts(
+        self,
+        *,
+        schedule_kind: str,
+        now_local: datetime,
+        response: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> tuple[Path, Path] | None:
+        base_dir = Path(getattr(self.settings, "healer_scan_artifacts_dir", "logs/scans") or "logs/scans")
+        if not base_dir.is_absolute():
+            base_dir = (Path(__file__).resolve().parents[2] / base_dir).resolve()
+        try:
+            base_dir.mkdir(parents=True, exist_ok=True)
+            stem = f"{now_local.strftime('%Y%m%d-%H%M%S')}_{schedule_kind}"
+            txt_path = base_dir / f"{stem}.txt"
+            json_path = base_dir / f"{stem}.json"
+            txt_path.write_text(f"{response.rstrip()}\n", encoding="utf-8")
+            payload = {
+                "schedule_kind": schedule_kind,
+                "timestamp_local": now_local.isoformat(),
+                "timezone": str(now_local.tzinfo or ""),
+                "response": response,
+                "metadata": metadata or {},
+            }
+            json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            return txt_path, json_path
+        except Exception as exc:
+            logger.warning("Failed to write scheduled healer scan artifacts: %s", exc)
+            return None
+
+    @staticmethod
+    def _build_scheduled_healer_message(
+        *,
+        schedule_kind: str,
+        now_local: datetime,
+        response: str,
+        artifact_paths: tuple[Path, Path] | None,
+    ) -> str:
+        kind_label = "weekly deep" if schedule_kind == "weekly" else "daily"
+        lowered = response.lower()
+        success_prefix = "✅"
+        if "unavailable:" in lowered or "error" in lowered:
+            success_prefix = "⚠️"
+        lines = [
+            f"{success_prefix} Flow Healer scheduled {kind_label} scan completed",
+            f"Time: {now_local.strftime('%Y-%m-%d %H:%M %Z')}",
+            "",
+            response,
+        ]
+        if artifact_paths is not None:
+            txt_path, json_path = artifact_paths
+            lines.append("")
+            lines.append(f"Artifacts: {txt_path.name}, {json_path.name}")
+        return "\n".join(lines)
 
     async def _memory_maintenance_loop(self) -> None:
         """Memory maintenance loop for v2 canonical store."""
