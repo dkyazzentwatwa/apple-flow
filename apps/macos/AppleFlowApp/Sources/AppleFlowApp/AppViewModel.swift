@@ -660,7 +660,7 @@ final class AppViewModel: ObservableObject {
 
         switch descriptor.inputType {
         case .number:
-            if !trimmed.isEmpty && Int(trimmed) == nil {
+            if !trimmed.isEmpty && Double(trimmed) == nil {
                 return .error("Must be a number")
             }
         case .bool:

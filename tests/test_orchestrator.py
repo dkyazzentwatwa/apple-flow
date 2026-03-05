@@ -1,6 +1,7 @@
 """Tests for the RelayOrchestrator."""
 
 from typing import Any
+from unittest.mock import patch
 
 from conftest import FakeConnector, FakeEgress, FakeStore
 
@@ -45,6 +46,124 @@ def test_task_command_creates_approval_request():
     assert result.kind is CommandKind.TASK
     assert result.approval_request_id is not None
     assert any("approve" in text.lower() for _, text in egress.messages)
+
+
+def test_task_call_me_creates_deterministic_approval_without_planner_turn():
+    connector = FakeConnector()
+    egress = FakeEgress()
+    store = FakeStore()
+
+    orchestrator = RelayOrchestrator(
+        connector=connector,
+        egress=egress,
+        store=store,
+        allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
+        default_workspace="/Users/cypher/Public/code/codex-flow",
+        phone_owner_number="+15551234567",
+        phone_deterministic_in_call_audio=True,
+        phone_virtual_audio_input_device="BlackHole 2ch",
+        phone_virtual_audio_output_device="BlackHole 2ch",
+        phone_tts_engine="say",
+    )
+
+    msg = InboundMessage(
+        id="m_call_approval_1",
+        sender="+15551234567",
+        text="task: call me and say hello from test",
+        received_at="2026-02-16T12:00:00Z",
+        is_from_me=False,
+    )
+
+    result = orchestrator.handle_message(msg)
+    assert result.kind is CommandKind.TASK
+    assert result.approval_request_id is not None
+    assert connector.turns == []
+    assert any("Phone call plan" in text for _, text in egress.messages)
+
+
+def test_task_call_me_runs_phone_action_on_approval():
+    connector = FakeConnector()
+    egress = FakeEgress()
+    store = FakeStore()
+
+    orchestrator = RelayOrchestrator(
+        connector=connector,
+        egress=egress,
+        store=store,
+        allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
+        default_workspace="/Users/cypher/Public/code/codex-flow",
+        phone_owner_number="+15551234567",
+        phone_deterministic_in_call_audio=True,
+        phone_virtual_audio_input_device="BlackHole 2ch",
+        phone_virtual_audio_output_device="BlackHole 2ch",
+        phone_tts_engine="say",
+    )
+
+    task_msg = InboundMessage(
+        id="m_call_exec_1",
+        sender="+15551234567",
+        text="task: call me and say hello from test",
+        received_at="2026-02-16T12:00:00Z",
+        is_from_me=False,
+    )
+    task_result = orchestrator.handle_message(task_msg)
+    assert task_result.approval_request_id is not None
+
+    with patch(
+        "apple_flow.apple_tools.phone_call_me",
+        return_value={
+            "ok": True,
+            "number": "+15551234567",
+            "call": {"uri": "tel:+15551234567", "app": "phone", "fallback_used": False},
+        },
+    ) as call_me_mock:
+        approve_msg = InboundMessage(
+            id="m_call_exec_2",
+            sender="+15551234567",
+            text=f"approve {task_result.approval_request_id}",
+            received_at="2026-02-16T12:01:00Z",
+            is_from_me=False,
+        )
+        approval_result = orchestrator.handle_message(approve_msg)
+
+    assert approval_result.kind is CommandKind.APPROVE
+    assert store.get_run(task_result.run_id)["state"] == "completed"
+    assert connector.turns == []
+    assert any("Phone callback launched" in text for _, text in egress.messages)
+    call_me_mock.assert_called_once()
+    assert call_me_mock.call_args.kwargs["owner_number"] == "+15551234567"
+    assert call_me_mock.call_args.kwargs["deterministic_audio"] is True
+    assert call_me_mock.call_args.kwargs["virtual_audio_input_device"] == "BlackHole 2ch"
+    assert call_me_mock.call_args.kwargs["virtual_audio_output_device"] == "BlackHole 2ch"
+    assert call_me_mock.call_args.kwargs["tts_engine"] == "say"
+
+
+def test_task_call_me_requires_owner_number_config():
+    connector = FakeConnector()
+    egress = FakeEgress()
+    store = FakeStore()
+
+    orchestrator = RelayOrchestrator(
+        connector=connector,
+        egress=egress,
+        store=store,
+        allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
+        default_workspace="/Users/cypher/Public/code/codex-flow",
+        phone_owner_number="",
+    )
+
+    msg = InboundMessage(
+        id="m_call_config_1",
+        sender="+15551234567",
+        text="task: call me",
+        received_at="2026-02-16T12:00:00Z",
+        is_from_me=False,
+    )
+    result = orchestrator.handle_message(msg)
+
+    assert result.kind is CommandKind.TASK
+    assert result.approval_request_id is None
+    assert any("phone_owner_number" in text for _, text in egress.messages)
 
 
 def test_chat_requires_prefix_when_enabled():
@@ -198,7 +317,7 @@ def test_help_command_returns_command_guide():
     assert "🤖 Apple Flow help" in result.response
     assert "status <run_id|request_id>" in result.response
     assert "approve <id> <extra instructions>" in result.response
-    assert "system: stop | restart | kill provider | cancel run <run_id>" in result.response
+    assert "system: stop | restart" in result.response
     assert "🔧 System controls:" in result.response
     assert egress.messages
 

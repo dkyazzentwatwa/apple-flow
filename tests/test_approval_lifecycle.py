@@ -273,6 +273,32 @@ def test_timeout_creates_checkpoint_and_resume_continues_same_run():
     assert "done after resume" in (resume_result.response or "")
 
 
+def test_placeholder_output_creates_checkpoint_instead_of_false_success():
+    connector = SequenceConnector(executor_outputs=["No response generated."])
+    store = FakeStore()
+    egress = FakeEgress()
+    orch = _make_orchestrator(connector=connector, egress=egress, store=store)
+    run_id, request_id = _create_task_and_request_id(orch)
+
+    approve_msg = InboundMessage(
+        id="approve_placeholder",
+        sender="+15551234567",
+        text=f"approve {request_id}",
+        received_at="2026-02-17T12:01:00Z",
+        is_from_me=False,
+    )
+    result = orch.handle_message(approve_msg)
+
+    assert result.run_id == run_id
+    assert result.approval_request_id is not None
+    assert "checkpoint" in (result.response or "").lower()
+    assert store.get_run(run_id)["state"] == "awaiting_approval"
+    assert any(
+        event["run_id"] == run_id and event["event_type"] == "checkpoint_created"
+        for event in store.events
+    )
+
+
 def test_execution_prompt_includes_user_requested_mail_labels():
     connector = SequenceConnector(executor_outputs=["done"])
     store = FakeStore()

@@ -1354,6 +1354,53 @@ class SQLiteStore:
             )
             conn.commit()
 
+    def list_scan_runs(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        conn = self._connect()
+        with self._lock:
+            rows = conn.execute(
+                """
+                SELECT * FROM scan_runs
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            data = self._row_to_dict(row)
+            if data is None:
+                continue
+            try:
+                data["summary"] = json.loads(data.pop("summary_json", "{}"))
+            except json.JSONDecodeError:
+                data["summary"] = {}
+            data["dry_run"] = bool(int(data.get("dry_run", 0) or 0))
+            out.append(data)
+        return out
+
+    def list_scan_findings(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        conn = self._connect()
+        with self._lock:
+            rows = conn.execute(
+                """
+                SELECT * FROM scan_findings
+                ORDER BY last_seen_at DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            data = self._row_to_dict(row)
+            if data is None:
+                continue
+            try:
+                data["payload"] = json.loads(data.pop("payload_json", "{}"))
+            except json.JSONDecodeError:
+                data["payload"] = {}
+            out.append(data)
+        return out
+
     def set_state(self, key: str, value: str) -> None:
         conn = self._connect()
         with self._lock:

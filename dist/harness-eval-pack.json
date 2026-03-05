@@ -1,0 +1,92 @@
+{
+  "generated_at": "2026-03-05T09:52:59.928453+00:00",
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "duration_seconds": 1.946,
+    "pass_rate": 100.0
+  },
+  "results": [
+    {
+      "eval_id": "approval_bypass",
+      "risk": "Mutating requests execute without explicit approval",
+      "kpis": [
+        "S1"
+      ],
+      "selectors": [
+        "tests/test_orchestrator.py::test_task_command_creates_approval_request",
+        "tests/test_orchestrator.py::test_natural_language_mutating_auto_promotes",
+        "tests/test_orchestrator.py::test_mail_channel_mutating_chat_does_not_auto_promote"
+      ],
+      "passed": true,
+      "returncode": 0,
+      "duration_seconds": 0.496,
+      "output_tail": "...                                                                      [100%]\n3 passed in 0.03s"
+    },
+    {
+      "eval_id": "cross_sender_approval",
+      "risk": "Approvals accepted from a non-requester sender",
+      "kpis": [
+        "S2"
+      ],
+      "selectors": [
+        "tests/test_approval_security.py::test_approval_sender_verification_blocks_different_sender",
+        "tests/test_approval_security.py::test_deny_sender_verification_blocks_different_sender",
+        "tests/test_approval_security.py::test_cross_gateway_mismatched_sender_still_rejected"
+      ],
+      "passed": true,
+      "returncode": 0,
+      "duration_seconds": 0.326,
+      "output_tail": "...                                                                      [100%]\n3 passed in 0.02s"
+    },
+    {
+      "eval_id": "retry_recovery",
+      "risk": "Retries/checkpoints do not recover or fail predictably",
+      "kpis": [
+        "R2"
+      ],
+      "selectors": [
+        "tests/test_approval_lifecycle.py::test_timeout_creates_checkpoint_and_resume_continues_same_run",
+        "tests/test_approval_lifecycle.py::test_repeated_timeout_honors_max_resume_attempts_and_fails",
+        "tests/test_store.py::test_requeue_expired_run_jobs"
+      ],
+      "passed": true,
+      "returncode": 0,
+      "duration_seconds": 0.459,
+      "output_tail": "...                                                                      [100%]\n3 passed in 0.06s"
+    },
+    {
+      "eval_id": "duplicate_suppression",
+      "risk": "Duplicate outbound messages leak to recipients",
+      "kpis": [
+        "R3"
+      ],
+      "selectors": [
+        "tests/test_egress_chunking.py::test_duplicate_suppression",
+        "tests/test_egress_chunking.py::test_gc_recent_clears_old_fingerprints"
+      ],
+      "passed": true,
+      "returncode": 0,
+      "duration_seconds": 0.34,
+      "output_tail": "..                                                                       [100%]\n2 passed in 0.03s"
+    },
+    {
+      "eval_id": "companion_noise_controls",
+      "risk": "Companion proactive messaging exceeds noise guardrails",
+      "kpis": [
+        "Q2",
+        "Q3"
+      ],
+      "selectors": [
+        "tests/test_companion.py::TestRateLimiting::test_rate_limited_after_max",
+        "tests/test_companion.py::TestRateLimiting::test_rate_limit_resets_new_hour",
+        "tests/test_companion.py::TestQuietHours::test_overnight_inside_late"
+      ],
+      "passed": true,
+      "returncode": 0,
+      "duration_seconds": 0.325,
+      "output_tail": "...                                                                      [100%]\n3 passed in 0.02s"
+    }
+  ]
+}

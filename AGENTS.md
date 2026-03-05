@@ -248,6 +248,23 @@ Connector-specific settings (CLI binary path, model, context window, etc.) are d
 
 Apple Mail, Reminders, Notes, Calendar, Companion, Memory, Follow-Up Scheduler, and Ambient Scanner each have their own config sections. All are disabled by default (opt-in via `.env`).
 
+Phone callback + TTS controls (used by deterministic `task: call me`) are configured via:
+- `apple_flow_phone_owner_number`
+- `apple_flow_phone_preferred_app`
+- `apple_flow_phone_tts_voice`
+- `apple_flow_phone_tts_rate`
+- `apple_flow_phone_tts_engine` (`auto|say|piper`)
+- `apple_flow_phone_piper_command`
+- `apple_flow_phone_piper_model_path`
+- `apple_flow_phone_in_call_tts_delay_seconds`
+- `apple_flow_phone_enable_in_call_tts`
+- `apple_flow_phone_deterministic_in_call_audio`
+- `apple_flow_phone_virtual_audio_input_device`
+- `apple_flow_phone_virtual_audio_output_device`
+- `apple_flow_phone_audio_switch_command`
+- `apple_flow_phone_audio_play_command`
+- `apple_flow_phone_audio_route_settle_seconds`
+
 CSV audit logging controls are configured via:
 - `apple_flow_enable_csv_audit_log` — mirror `events` table writes to append-only CSV (default: true)
 - `apple_flow_csv_audit_log_path` — CSV destination path (default: `agent-office/90_logs/events.csv`)

@@ -41,6 +41,10 @@ from apple_flow.apple_tools import (
     pages_from_markdown,
     pages_template,
     pages_update_sections,
+    phone_call,
+    phone_call_me,
+    phone_tts_in_call,
+    phone_tts_say,
     reminders_complete,
     reminders_create,
     reminders_list,
@@ -279,11 +283,119 @@ class TestToolsContext:
         assert len(TOOLS_CONTEXT) > 100
 
     def test_mentions_all_categories(self):
-        for category in ("NOTES", "PAGES", "NUMBERS", "MAIL", "REMINDERS", "CALENDAR", "MESSAGES"):
+        for category in ("NOTES", "PAGES", "NUMBERS", "MAIL", "REMINDERS", "CALENDAR", "MESSAGES", "PHONE"):
             assert category in TOOLS_CONTEXT, f"TOOLS_CONTEXT missing category: {category}"
 
     def test_mentions_apple_flow_tools(self):
         assert "apple-flow tools" in TOOLS_CONTEXT
+
+
+# ---------------------------------------------------------------------------
+# Phone / TTS
+# ---------------------------------------------------------------------------
+
+class TestPhoneCall:
+    def test_phone_call_success(self):
+        with patch("subprocess.run", return_value=_ok_result("")):
+            result = phone_call("+15551234567")
+        assert result["ok"] is True
+        assert result["uri"].startswith("tel:")
+
+    def test_phone_call_fallbacks_to_facetime_audio(self):
+        with patch("subprocess.run", side_effect=[_err_result("no tel"), _ok_result("")]):
+            result = phone_call("+15551234567", app="phone")
+        assert result["ok"] is True
+        assert result["uri"].startswith("facetime-audio://")
+        assert result["fallback_used"] is True
+
+    def test_phone_call_rejects_invalid_number(self):
+        result = phone_call("bad-number")
+        assert result["ok"] is False
+
+
+class TestPhoneTts:
+    def test_phone_tts_say_success(self):
+        with patch("subprocess.run", return_value=_ok_result("")):
+            result = phone_tts_say("hello there", voice="Samantha", rate=170)
+        assert result["ok"] is True
+
+    def test_phone_tts_say_requires_text(self):
+        result = phone_tts_say("")
+        assert result["ok"] is False
+
+    def test_phone_tts_in_call_waits_then_speaks(self):
+        with patch("apple_flow.apple_tools.time.sleep") as sleep_mock:
+            with patch("subprocess.run", return_value=_ok_result("")):
+                result = phone_tts_in_call("hello", delay_seconds=2.0)
+        assert result["ok"] is True
+        sleep_mock.assert_called_once_with(2.0)
+
+    def test_phone_tts_in_call_deterministic_routes_audio(self):
+        with patch(
+            "apple_flow.apple_tools._synthesize_tts_to_audio_file",
+            return_value={"ok": True, "engine": "say", "path": "/tmp/fake.aiff"},
+        ):
+            with patch(
+                "apple_flow.apple_tools._route_audio_file_to_call_input",
+                return_value={"ok": True, "virtual_input_device": "BlackHole 2ch", "virtual_output_device": "BlackHole 2ch"},
+            ) as route_mock:
+                result = phone_tts_in_call(
+                    "hello from deterministic path",
+                    deterministic_audio=True,
+                    virtual_audio_input_device="BlackHole 2ch",
+                    virtual_audio_output_device="BlackHole 2ch",
+                )
+        assert result["ok"] is True
+        assert result["deterministic_audio"] is True
+        assert result["tts_engine"] == "say"
+        route_mock.assert_called_once()
+
+    def test_phone_tts_in_call_deterministic_hard_fails_on_route_error(self):
+        with patch(
+            "apple_flow.apple_tools._synthesize_tts_to_audio_file",
+            return_value={"ok": True, "engine": "piper", "path": "/tmp/fake.wav"},
+        ):
+            with patch(
+                "apple_flow.apple_tools._route_audio_file_to_call_input",
+                return_value={"ok": False, "error": "virtual input device not found"},
+            ):
+                result = phone_tts_in_call(
+                    "hello from deterministic path",
+                    deterministic_audio=True,
+                    virtual_audio_input_device="BlackHole 2ch",
+                    virtual_audio_output_device="BlackHole 2ch",
+                )
+        assert result["ok"] is False
+        assert "virtual input device" in result["error"]
+
+
+class TestPhoneCallMe:
+    def test_phone_call_me_runs_all_steps(self):
+        with patch("apple_flow.apple_tools.phone_tts_say", return_value={"ok": True}) as pre_mock:
+            with patch("apple_flow.apple_tools.phone_call", return_value={"ok": True, "uri": "tel:+1555", "app": "phone"}):
+                with patch("apple_flow.apple_tools.phone_tts_in_call", return_value={"ok": True}) as in_call_mock:
+                    result = phone_call_me(
+                        owner_number="+15551234567",
+                        preflight_text="Starting call now.",
+                        in_call_text="Hi from Apple Flow",
+                    )
+        assert result["ok"] is True
+        pre_mock.assert_called_once()
+        in_call_mock.assert_called_once()
+
+    def test_phone_call_me_fails_when_deterministic_in_call_audio_fails(self):
+        with patch("apple_flow.apple_tools.phone_call", return_value={"ok": True, "uri": "tel:+1555", "app": "phone"}):
+            with patch(
+                "apple_flow.apple_tools.phone_tts_in_call",
+                return_value={"ok": False, "error": "virtual input device not found"},
+            ):
+                result = phone_call_me(
+                    owner_number="+15551234567",
+                    in_call_text="Hello from Apple Flow",
+                    deterministic_audio=True,
+                )
+        assert result["ok"] is False
+        assert "virtual input device not found" in result["error"]
 
 
 # ---------------------------------------------------------------------------

@@ -45,6 +45,7 @@ class FlowHealerScanner:
         max_issues_per_run: int,
         default_labels: list[str],
         enable_issue_creation: bool,
+        lightweight: bool = False,
     ) -> None:
         self.repo_path = Path(repo_path).expanduser().resolve()
         self.store = store
@@ -53,6 +54,7 @@ class FlowHealerScanner:
         self.max_issues_per_run = max(1, int(max_issues_per_run))
         self.default_labels = [label.strip() for label in default_labels if label.strip()]
         self.enable_issue_creation = bool(enable_issue_creation)
+        self.lightweight = bool(lightweight)
 
     def run_scan(self, *, dry_run: bool) -> dict[str, Any]:
         run_id = f"scan_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
@@ -62,7 +64,8 @@ class FlowHealerScanner:
         findings: list[ScanFinding] = []
         check_failures: list[str] = []
         findings.extend(self._run_harness_eval(check_failures))
-        findings.extend(self._run_pytest_suite(check_failures))
+        if not self.lightweight:
+            findings.extend(self._run_pytest_suite(check_failures))
 
         included: list[ScanFinding] = [
             finding for finding in findings if self._passes_threshold(finding.severity)
@@ -152,6 +155,7 @@ class FlowHealerScanner:
         summary = {
             "run_id": run_id,
             "dry_run": dry_run,
+            "lightweight": self.lightweight,
             "findings_total": len(findings),
             "findings_over_threshold": len(included),
             "created_issues": created,

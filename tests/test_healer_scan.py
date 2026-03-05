@@ -116,3 +116,43 @@ def test_run_scan_dedupes_existing_open_issue(monkeypatch, fake_store):
     finding = fake_store.get_scan_finding("fp_existing")
     assert finding is not None
     assert finding["issue_number"] == 44
+
+
+def test_run_scan_lightweight_skips_full_pytest(monkeypatch, fake_store):
+    tracker = _FakeTracker()
+    scanner = FlowHealerScanner(
+        repo_path=Path("/tmp"),
+        store=fake_store,
+        tracker=tracker,
+        severity_threshold="medium",
+        max_issues_per_run=5,
+        default_labels=["healer:ready"],
+        enable_issue_creation=False,
+        lightweight=True,
+    )
+
+    def fake_harness(_check_failures):
+        return [
+            ScanFinding(
+                fingerprint="fp_light",
+                scan_type="harness",
+                severity="high",
+                title="Harness eval failing: retry_recovery",
+                body="body",
+                payload={},
+            )
+        ]
+
+    pytest_called = {"value": False}
+
+    def fake_pytest(_check_failures):
+        pytest_called["value"] = True
+        return []
+
+    monkeypatch.setattr(scanner, "_run_harness_eval", fake_harness)
+    monkeypatch.setattr(scanner, "_run_pytest_suite", fake_pytest)
+    summary = scanner.run_scan(dry_run=True)
+
+    assert summary["lightweight"] is True
+    assert summary["findings_total"] == 1
+    assert pytest_called["value"] is False

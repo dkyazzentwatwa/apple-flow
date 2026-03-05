@@ -43,6 +43,10 @@ from .apple_tools import (
     pages_from_markdown,
     pages_template,
     pages_update_sections,
+    phone_call,
+    phone_call_me,
+    phone_tts_in_call,
+    phone_tts_say,
     reminders_complete,
     reminders_create,
     reminders_list,
@@ -536,6 +540,77 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
         cal = args.cal or args.calendar_name or ""
         _output(calendar_create(positional[0], positional[1], end_date=args.end or "", calendar=cal))
 
+    # ── Phone / TTS ────────────────────────────────────────────────────────
+    elif command == "phone_call":
+        if not positional:
+            print("Usage: apple-flow tools phone_call <number> [--call-app phone|facetime]", file=sys.stderr)
+            raise SystemExit(1)
+        _output(phone_call(positional[0], app=args.call_app or "phone"))
+
+    elif command == "phone_tts_say":
+        if not positional:
+            print("Usage: apple-flow tools phone_tts_say <text> [--voice X] [--speech-rate N]", file=sys.stderr)
+            raise SystemExit(1)
+        _output(phone_tts_say(positional[0], voice=args.voice or "", rate=args.speech_rate or 180.0))
+
+    elif command == "phone_tts_in_call":
+        if not positional:
+            print(
+                "Usage: apple-flow tools phone_tts_in_call <text> [--call-delay N] [--voice X] [--speech-rate N] "
+                "[--deterministic-audio true|false] [--virtual-input-device X] [--virtual-output-device X]",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        _output(
+            phone_tts_in_call(
+                positional[0],
+                delay_seconds=args.call_delay or 4.0,
+                voice=args.voice or "",
+                rate=args.speech_rate or 180.0,
+                deterministic_audio=_boolish(args.deterministic_audio, default=False),
+                virtual_audio_input_device=args.virtual_input_device or "BlackHole 2ch",
+                virtual_audio_output_device=args.virtual_output_device or "BlackHole 2ch",
+                tts_engine=args.tts_engine or "auto",
+                piper_command=args.piper_command or "piper",
+                piper_model_path=args.piper_model or "",
+                audio_switch_command=args.audio_switch_command or "SwitchAudioSource",
+                audio_play_command=args.audio_play_command or "afplay",
+                audio_route_settle_seconds=args.audio_route_settle if args.audio_route_settle is not None else 0.8,
+            )
+        )
+
+    elif command == "phone_call_me":
+        if not positional:
+            print(
+                "Usage: apple-flow tools phone_call_me <number> [--preflight X] [--in-call X] "
+                "[--call-app phone|facetime] [--voice X] [--speech-rate N] [--tts-engine auto|say|piper] "
+                "[--call-delay N] [--enable-in-call true|false] [--deterministic-audio true|false] "
+                "[--virtual-input-device X] [--virtual-output-device X] [--piper-model /abs/path.onnx]",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        _output(
+            phone_call_me(
+                owner_number=positional[0],
+                preflight_text=args.preflight or "",
+                in_call_text=args.in_call or "",
+                preferred_app=args.call_app or "phone",
+                voice=args.voice or "",
+                rate=args.speech_rate or 180.0,
+                tts_engine=args.tts_engine or "auto",
+                piper_command=args.piper_command or "piper",
+                piper_model_path=args.piper_model or "",
+                in_call_delay_seconds=args.call_delay or 4.0,
+                enable_in_call_tts=_boolish(args.enable_in_call, default=True),
+                deterministic_audio=_boolish(args.deterministic_audio, default=False),
+                virtual_audio_input_device=args.virtual_input_device or "BlackHole 2ch",
+                virtual_audio_output_device=args.virtual_output_device or "BlackHole 2ch",
+                audio_switch_command=args.audio_switch_command or "SwitchAudioSource",
+                audio_play_command=args.audio_play_command or "afplay",
+                audio_route_settle_seconds=args.audio_route_settle if args.audio_route_settle is not None else 0.8,
+            )
+        )
+
     # ── Messages ───────────────────────────────────────────────────────────
     elif command == "messages_list_recent_chats":
         _output(messages_list_recent_chats(limit=limit, as_text=as_text))
@@ -646,6 +721,22 @@ def main() -> None:
     parser.add_argument("--filter", dest="filter", metavar="FILTER", help="incomplete|complete|all")
     parser.add_argument("--due", dest="due", metavar="DATE", help="Due date (YYYY-MM-DD)")
     parser.add_argument("--end", dest="end", metavar="DATETIME", help="End datetime for calendar events")
+    parser.add_argument("--call-app", dest="call_app", metavar="APP", help="Phone call app: phone|facetime")
+    parser.add_argument("--voice", dest="voice", metavar="VOICE", help="Voice name for TTS")
+    parser.add_argument("--speech-rate", dest="speech_rate", type=float, metavar="N", help="Speech rate for TTS")
+    parser.add_argument("--tts-engine", dest="tts_engine", metavar="ENGINE", help="TTS engine: auto|say|piper")
+    parser.add_argument("--call-delay", dest="call_delay", type=float, metavar="SECONDS", help="Delay before in-call TTS")
+    parser.add_argument("--preflight", dest="preflight", metavar="TEXT", help="Pre-call TTS message")
+    parser.add_argument("--in-call", dest="in_call", metavar="TEXT", help="In-call TTS message")
+    parser.add_argument("--enable-in-call", dest="enable_in_call", metavar="BOOL", help="Enable in-call TTS (true|false)")
+    parser.add_argument("--deterministic-audio", dest="deterministic_audio", metavar="BOOL", help="Require virtual-audio routed in-call playback (true|false)")
+    parser.add_argument("--virtual-input-device", dest="virtual_input_device", metavar="NAME", help="Virtual audio input device name for deterministic call playback")
+    parser.add_argument("--virtual-output-device", dest="virtual_output_device", metavar="NAME", help="Virtual audio output device name for deterministic call playback")
+    parser.add_argument("--piper-command", dest="piper_command", metavar="PATH", help="Piper binary path (or command)")
+    parser.add_argument("--piper-model", dest="piper_model", metavar="PATH", help="Piper model path (.onnx)")
+    parser.add_argument("--audio-switch-command", dest="audio_switch_command", metavar="PATH", help="SwitchAudioSource binary path (or command)")
+    parser.add_argument("--audio-play-command", dest="audio_play_command", metavar="PATH", help="Audio playback command (default: afplay)")
+    parser.add_argument("--audio-route-settle", dest="audio_route_settle", type=float, metavar="SECONDS", help="Delay after switching virtual devices before playback")
     parser.add_argument("--text", dest="text", action="store_true", help="Output human-readable text")
     parser.add_argument("--pretty", dest="pretty", action="store_true", help="Pretty-print JSON output")
     parser.add_argument("--list-tools", dest="list_tools", action="store_true", help="Print available tools")

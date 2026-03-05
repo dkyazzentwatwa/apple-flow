@@ -55,6 +55,7 @@ final class AppViewModelTests: XCTestCase {
     func testClientValidationFlagsInvalidAdminPortAndBool() async {
         let command = MockCommandService()
         let viewModel = AppViewModel(commandService: command) { _ in MockAdminClient() }
+        await viewModel.refreshControlPanel()
         viewModel.configValues["apple_flow_admin_port"] = "not-a-number"
         viewModel.configValues["apple_flow_enable_memory"] = "maybe"
 
@@ -63,6 +64,47 @@ final class AppViewModelTests: XCTestCase {
 
         XCTAssertEqual(adminState, .error("Must be a number"))
         XCTAssertEqual(memoryState, .error("Use true or false"))
+    }
+
+    @MainActor
+    func testClientValidationAcceptsFloatingPointNumbersForNumericSettings() async {
+        let command = MockCommandService()
+        command.configSchemaResponse = ConfigSchemaResponse(
+            ok: command.configSchemaResponse.ok,
+            schemaVersion: command.configSchemaResponse.schemaVersion,
+            sections: command.configSchemaResponse.sections + [
+                ConfigSectionDescriptor(id: "scheduler", label: "Scheduler & Ambient", order: 2, defaultExpanded: false),
+            ],
+            fields: command.configSchemaResponse.fields + [
+            ConfigFieldDescriptor(
+                key: "apple_flow_ambient_scan_interval_seconds",
+                name: "ambient_scan_interval_seconds",
+                label: "Ambient Scan Interval Seconds",
+                sectionId: "scheduler",
+                description: "",
+                required: false,
+                sensitive: false,
+                inputType: .number,
+                defaultValue: "900.0",
+                validationHint: "Numeric value; decimals allowed.",
+                enumOptions: [],
+                restartRecommended: true
+            )
+            ],
+            errors: command.configSchemaResponse.errors
+        )
+        command.configReadResponse = ConfigReadResponse(ok: true, values: [
+            "apple_flow_admin_host": "127.0.0.1",
+            "apple_flow_admin_port": "8787",
+            "apple_flow_admin_api_token": "token",
+            "apple_flow_ambient_scan_interval_seconds": "900.0",
+        ], errors: nil)
+
+        let viewModel = AppViewModel(commandService: command) { _ in MockAdminClient() }
+        await viewModel.refreshControlPanel()
+        viewModel.configValues["apple_flow_ambient_scan_interval_seconds"] = "900.5"
+
+        XCTAssertEqual(viewModel.validationState(for: "apple_flow_ambient_scan_interval_seconds"), .valid)
     }
 
     @MainActor
@@ -431,6 +473,7 @@ private final class MockCommandService: CommandServiceProtocol {
         sections: [
             ConfigSectionDescriptor(id: "core", label: "Core", order: 0, defaultExpanded: true),
             ConfigSectionDescriptor(id: "admin", label: "Admin API", order: 1, defaultExpanded: false),
+            ConfigSectionDescriptor(id: "memory", label: "Memory", order: 2, defaultExpanded: false),
         ],
         fields: [
             ConfigFieldDescriptor(
@@ -472,6 +515,20 @@ private final class MockCommandService: CommandServiceProtocol {
                 inputType: .token,
                 defaultValue: "",
                 validationHint: "",
+                enumOptions: [],
+                restartRecommended: true
+            ),
+            ConfigFieldDescriptor(
+                key: "apple_flow_enable_memory",
+                name: "enable_memory",
+                label: "Enable Memory",
+                sectionId: "memory",
+                description: "",
+                required: false,
+                sensitive: false,
+                inputType: .bool,
+                defaultValue: "false",
+                validationHint: "Use true or false.",
                 enumOptions: [],
                 restartRecommended: true
             ),

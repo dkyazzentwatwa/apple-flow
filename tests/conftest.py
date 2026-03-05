@@ -434,11 +434,14 @@ class FakeStore:
     # --- Scan pipeline helpers ---
 
     def create_scan_run(self, *, run_id: str, dry_run: bool) -> None:
+        now = datetime.now(UTC).isoformat()
         self.scan_runs[run_id] = {
             "run_id": run_id,
             "status": "running",
             "dry_run": bool(dry_run),
             "summary": {},
+            "created_at": now,
+            "updated_at": now,
         }
 
     def finish_scan_run(self, *, run_id: str, status: str, summary: dict[str, Any]) -> bool:
@@ -447,6 +450,7 @@ class FakeStore:
             return False
         run["status"] = status
         run["summary"] = dict(summary or {})
+        run["updated_at"] = datetime.now(UTC).isoformat()
         return True
 
     def get_scan_finding(self, fingerprint: str) -> dict[str, Any] | None:
@@ -467,6 +471,7 @@ class FakeStore:
         issue_number: int | None = None,
     ) -> None:
         existing = self.scan_findings.get(fingerprint, {})
+        now = datetime.now(UTC).isoformat()
         self.scan_findings[fingerprint] = {
             "fingerprint": fingerprint,
             "scan_type": scan_type,
@@ -475,7 +480,25 @@ class FakeStore:
             "status": status,
             "payload": dict(payload or {}),
             "issue_number": issue_number if issue_number is not None else existing.get("issue_number"),
+            "first_seen_at": existing.get("first_seen_at", now),
+            "last_seen_at": now,
         }
+
+    def list_scan_runs(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        rows = sorted(
+            self.scan_runs.values(),
+            key=lambda row: str(row.get("created_at", "")),
+            reverse=True,
+        )
+        return [dict(row) for row in rows[:limit]]
+
+    def list_scan_findings(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        rows = sorted(
+            self.scan_findings.values(),
+            key=lambda row: str(row.get("last_seen_at", "")),
+            reverse=True,
+        )
+        return [dict(row) for row in rows[:limit]]
 
     def recent_messages(self, sender: str, limit: int = 10) -> list[dict[str, Any]]:
         sender_msgs = [

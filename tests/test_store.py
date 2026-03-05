@@ -381,3 +381,8 @@ def test_scan_run_and_finding_roundtrip(tmp_path):
     assert finding["status"] == "open"
     assert finding["issue_number"] == 77
     assert finding["payload"]["selector"] == "tests/test_a.py::test_x"
+
+    runs = store.list_scan_runs(limit=5)
+    assert runs and runs[0]["run_id"] == "scan_1"
+    findings = store.list_scan_findings(limit=5)
+    assert findings and findings[0]["fingerprint"] == "abc123"

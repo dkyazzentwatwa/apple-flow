@@ -80,4 +80,5 @@ def test_task_completion_calls_create_log_note():
     orc.handle_message(_make_msg(f"approve {request_id}", id="a1"))
     assert mock_log.create_log_note.call_count == 2
     exec_body = mock_log.create_log_note.call_args[1]["body"]
+    assert "create hello world" in exec_body.lower()
     assert "Execution" in exec_body or "Response" in exec_body

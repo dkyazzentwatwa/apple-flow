@@ -36,6 +36,9 @@ if TYPE_CHECKING:
 _SEP = "━" * 30
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 _FILE_ALIAS_RE = re.compile(r"@f:([A-Za-z0-9][\w.-]*)")
+_RESTART_CONFIRM_TTL_SECONDS = 120.0
+_HEALER_ATTEMPT_LOOKBACK_DAYS = 7
+_HEALER_FINDINGS_FRESHNESS_HOURS = 24
 
 
 class RelayOrchestrator:
@@ -77,6 +80,21 @@ class RelayOrchestrator:
         office_syncer: OfficeSyncer | None = None,
         log_file_path: str | None = None,
         approval_sender_override: str = "",
+        phone_owner_number: str = "",
+        phone_preferred_app: str = "phone",
+        phone_tts_voice: str = "",
+        phone_tts_rate: float = 180.0,
+        phone_tts_engine: str = "auto",
+        phone_piper_command: str = "piper",
+        phone_piper_model_path: str = "",
+        phone_in_call_tts_delay_seconds: float = 4.0,
+        phone_enable_in_call_tts: bool = True,
+        phone_deterministic_in_call_audio: bool = False,
+        phone_virtual_audio_input_device: str = "BlackHole 2ch",
+        phone_virtual_audio_output_device: str = "BlackHole 2ch",
+        phone_audio_switch_command: str = "SwitchAudioSource",
+        phone_audio_play_command: str = "afplay",
+        phone_audio_route_settle_seconds: float = 0.8,
         healer_repo_path: str = "",
         healer_scan_enable_issue_creation: bool = True,
         healer_scan_max_issues_per_run: int = 5,
@@ -138,6 +156,21 @@ class RelayOrchestrator:
             log_notes_egress=log_notes_egress,
             notes_log_folder_name=notes_log_folder_name,
             approval_sender_override=approval_sender_override,
+            phone_owner_number=phone_owner_number,
+            phone_preferred_app=phone_preferred_app,
+            phone_tts_voice=phone_tts_voice,
+            phone_tts_rate=phone_tts_rate,
+            phone_tts_engine=phone_tts_engine,
+            phone_piper_command=phone_piper_command,
+            phone_piper_model_path=phone_piper_model_path,
+            phone_in_call_tts_delay_seconds=phone_in_call_tts_delay_seconds,
+            phone_enable_in_call_tts=phone_enable_in_call_tts,
+            phone_deterministic_in_call_audio=phone_deterministic_in_call_audio,
+            phone_virtual_audio_input_device=phone_virtual_audio_input_device,
+            phone_virtual_audio_output_device=phone_virtual_audio_output_device,
+            phone_audio_switch_command=phone_audio_switch_command,
+            phone_audio_play_command=phone_audio_play_command,
+            phone_audio_route_settle_seconds=phone_audio_route_settle_seconds,
         )
 
     def set_run_executor(self, run_executor: Any) -> None:
@@ -360,9 +393,9 @@ class RelayOrchestrator:
             "- 📋 logs — tail the daemon log",
             "",
             "🔧 System controls:",
-            "- 🔧 system: stop | restart | kill provider | cancel run <run_id>",
+            "- 🔧 system: stop | restart | restart confirm <token> | kill provider | cancel run <run_id>",
             "- 🔇 system: mute | unmute",
-            "- 🩺 system: healer | healer pause | healer resume | healer scan [dry-run]",
+            "- 🩺 system: healer | healer ops | healer pause | healer resume | healer scan [dry-run]",
             "- 🔄 system: sync office",
             "- 🧩 system: teams list | team load <slug> | team current | team unload",
             "",
@@ -1005,14 +1038,20 @@ class RelayOrchestrator:
             if self.shutdown_callback is not None:
                 self.shutdown_callback()
         elif sub == "restart":
-            response = "Apple Flow restarting... (text 'health' to confirm it's back)"
-            self._mark_restart_echo_suppress(sender, response)
+            response = self._request_restart_confirmation(sender)
             self._send(sender, response, context=message.context)
-            restarted = self._restart_launchd_service()
-            if not restarted and self.shutdown_callback is not None:
-                # Fallback for non-launchd runs: perform a graceful shutdown and let
-                # the external caller/supervisor bring the process back up.
-                self.shutdown_callback()
+        elif sub.startswith("restart confirm "):
+            token = subcommand.strip()[len("restart confirm "):].strip()
+            allowed, reason = self._consume_restart_confirmation(sender=sender, token=token)
+            if not allowed:
+                response = reason
+                self._send(sender, response, context=message.context)
+            else:
+                response = self._execute_restart(sender, context=message.context)
+        elif sub == "restart cancel":
+            self.store.set_state("system_restart_confirm_pending", "")
+            response = "Restart confirmation cleared."
+            self._send(sender, response, context=message.context)
         elif sub in {"kill provider", "killswitch", "kill ai"}:
             response = self._kill_provider_processes()
             self._send(sender, response, context=message.context)
@@ -1032,6 +1071,9 @@ class RelayOrchestrator:
             self._send(sender, response, context=message.context)
         elif sub in {"healer", "healer status", "healer dashboard"}:
             response = self._healer_dashboard()
+            self._send(sender, response, context=message.context)
+        elif sub in {"healer ops", "ops healer", "healer queue"}:
+            response = self._healer_ops_queue()
             self._send(sender, response, context=message.context)
         elif sub in {"healer pause", "pause healer"}:
             self.store.set_state("healer_paused", "true")
@@ -1064,12 +1106,310 @@ class RelayOrchestrator:
         else:
             response = (
                 "Unknown system command. Use: "
-                "system: stop | restart | kill provider | cancel run <run_id> | mute | unmute | "
-                "healer | healer pause | healer resume | healer scan [dry-run] | sync office | "
+                "system: stop | restart | restart confirm <token> | kill provider | cancel run <run_id> | mute | unmute | "
+                "healer | healer ops | healer pause | healer resume | healer scan [dry-run] | sync office | "
                 "teams list | team load <slug> | team current | team unload"
             )
             self._send(sender, response, context=message.context)
         return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+    def _request_restart_confirmation(self, sender: str) -> str:
+        token = uuid4().hex[:8]
+        payload = {
+            "sender": sender,
+            "token": token,
+            "expires_at": time.time() + _RESTART_CONFIRM_TTL_SECONDS,
+        }
+        self.store.set_state("system_restart_confirm_pending", json.dumps(payload))
+        return (
+            "Restart requires confirmation. "
+            f"Reply `system: restart confirm {token}` within {int(_RESTART_CONFIRM_TTL_SECONDS // 60)} minutes."
+        )
+
+    def _consume_restart_confirmation(self, *, sender: str, token: str) -> tuple[bool, str]:
+        provided = (token or "").strip()
+        if not provided:
+            return False, "Usage: `system: restart confirm <token>`"
+
+        raw = self.store.get_state("system_restart_confirm_pending") or ""
+        if not raw:
+            return False, "No restart confirmation is pending. Send `system: restart` first."
+
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            self.store.set_state("system_restart_confirm_pending", "")
+            return False, "Restart confirmation token is invalid. Send `system: restart` again."
+
+        expires_at = float(payload.get("expires_at") or 0.0)
+        expected_sender = str(payload.get("sender") or "")
+        expected_token = str(payload.get("token") or "")
+
+        if expires_at <= time.time():
+            self.store.set_state("system_restart_confirm_pending", "")
+            return False, "Restart confirmation expired. Send `system: restart` again."
+
+        if normalize_sender(expected_sender) != normalize_sender(sender):
+            return False, "Restart confirmation belongs to a different sender."
+
+        if provided.lower() != expected_token.lower():
+            return False, "Invalid restart confirmation token."
+
+        self.store.set_state("system_restart_confirm_pending", "")
+        return True, ""
+
+    def _execute_restart(self, sender: str, context: dict[str, Any] | None = None) -> str:
+        response = "Apple Flow restarting... (text 'health' to confirm it's back)"
+        self._mark_restart_echo_suppress(sender, response)
+        self._send(sender, response, context=context)
+        restarted = self._restart_launchd_service()
+        if not restarted and self.shutdown_callback is not None:
+            # Fallback for non-launchd runs: perform a graceful shutdown and let
+            # the external caller/supervisor bring the process back up.
+            self.shutdown_callback()
+        return response
+
+    @staticmethod
+    def _parse_timestamp_utc(value: Any) -> datetime | None:
+        if not value:
+            return None
+        raw = str(value).strip()
+        if not raw:
+            return None
+        normalized = raw.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+
+    def _healer_ops_queue(self) -> str:
+        if not hasattr(self.store, "list_healer_issues"):
+            return "Flow Healer ops unavailable: this store backend does not expose healer state."
+
+        now = datetime.now(UTC)
+        attempts_cutoff = now - timedelta(days=_HEALER_ATTEMPT_LOOKBACK_DAYS)
+        findings_cutoff = now - timedelta(hours=_HEALER_FINDINGS_FRESHNESS_HOURS)
+
+        tracked_states = [
+            "queued",
+            "claimed",
+            "running",
+            "verify_pending",
+            "pr_pending_approval",
+            "pr_open",
+            "blocked",
+            "failed",
+            "resolved",
+        ]
+        def issue_ref(issue: dict[str, Any]) -> str:
+            issue_id = str(issue.get("issue_id") or "").strip()
+            return f"#{issue_id}" if issue_id else "Unknown"
+
+        def issue_state(issue: dict[str, Any]) -> str:
+            return str(issue.get("state") or "").strip().lower()
+
+        def issue_labels(issue: dict[str, Any]) -> list[str]:
+            labels = issue.get("labels")
+            if isinstance(labels, list):
+                return [str(label).strip().lower() for label in labels if str(label).strip()]
+            return []
+
+        def finding_timestamp(finding: dict[str, Any]) -> datetime:
+            return self._parse_timestamp_utc(finding.get("last_seen_at")) or datetime.min.replace(tzinfo=UTC)
+
+        def latest_scan_timestamp(runs: list[dict[str, Any]]) -> datetime | None:
+            if not runs:
+                return None
+            latest = runs[0]
+            return self._parse_timestamp_utc(latest.get("updated_at") or latest.get("created_at"))
+
+        # Retrieve the ops inputs in the requested operator order:
+        # current status, recent attempts, open ready issues, PR status,
+        # stuck/lease state, then scan freshness.
+        issues = self.store.list_healer_issues(states=tracked_states, limit=500)
+        paused = self.store.get_state("healer_paused") == "true"
+        active_states = {"queued", "claimed", "running", "verify_pending", "blocked", "pr_pending_approval", "pr_open"}
+        active_issues = [issue for issue in issues if issue_state(issue) in active_states]
+
+        attempts: list[dict[str, Any]] = []
+        if hasattr(self.store, "list_recent_healer_attempts"):
+            attempts = self.store.list_recent_healer_attempts(limit=400)
+        recent_attempts: list[dict[str, Any]] = []
+        for attempt in attempts:
+            started_at = self._parse_timestamp_utc(attempt.get("started_at"))
+            if started_at is None:
+                continue
+            if started_at >= attempts_cutoff:
+                recent_attempts.append(attempt)
+
+        success_states = {"pr_open", "resolved", "pr_pending_approval"}
+        recent_failures = [
+            attempt for attempt in recent_attempts
+            if str(attempt.get("state") or "").strip().lower() not in success_states
+        ]
+        failure_by_class: dict[str, int] = {}
+        for attempt in recent_failures:
+            failure_class = str(attempt.get("failure_class") or "").strip().lower()
+            key = failure_class or str(attempt.get("state") or "unknown").strip().lower() or "unknown"
+            failure_by_class[key] = failure_by_class.get(key, 0) + 1
+
+        open_ready = [
+            issue for issue in issues
+            if "healer:ready" in issue_labels(issue) and issue_state(issue) != "resolved"
+        ]
+        pr_pending = [issue for issue in open_ready if issue_state(issue) == "pr_pending_approval"]
+        pr_open = [issue for issue in open_ready if issue_state(issue) == "pr_open"]
+        blocked_issues = [issue for issue in issues if issue_state(issue) == "blocked"]
+
+        active_locks: list[dict[str, Any]] = []
+        if hasattr(self.store, "list_healer_locks"):
+            active_locks = self.store.list_healer_locks()
+
+        lease_conflicts: list[dict[str, Any]] = []
+        for issue in issues:
+            if issue_state(issue) not in {"claimed", "running", "verify_pending"}:
+                continue
+            lease_expires_at = self._parse_timestamp_utc(issue.get("lease_expires_at"))
+            if lease_expires_at and lease_expires_at <= now:
+                lease_conflicts.append(issue)
+
+        lock_conflict_count = int(failure_by_class.get("lock_conflict", 0) + failure_by_class.get("lock_upgrade_conflict", 0))
+        healer_state_inconsistent = bool(lease_conflicts or (blocked_issues and not active_locks))
+
+        scan_runs: list[dict[str, Any]] = []
+        if hasattr(self.store, "list_scan_runs"):
+            scan_runs = self.store.list_scan_runs(limit=20)
+        latest_scan_at = latest_scan_timestamp(scan_runs)
+        latest_scan_is_fresh = latest_scan_at is not None and latest_scan_at >= findings_cutoff
+
+        scan_findings: list[dict[str, Any]] = []
+        if hasattr(self.store, "list_scan_findings"):
+            scan_findings = self.store.list_scan_findings(limit=400)
+        fresh_findings = [
+            finding for finding in scan_findings
+            if finding_timestamp(finding) >= findings_cutoff
+        ]
+
+        findings_missing = not scan_findings
+        findings_stale = bool(scan_findings) and not fresh_findings
+        scan_state_inconsistent = bool(fresh_findings and not latest_scan_is_fresh)
+        should_refresh_scan = findings_missing or findings_stale or healer_state_inconsistent or scan_state_inconsistent
+
+        scan_refreshed = False
+        if should_refresh_scan:
+            self._run_healer_scan(dry_run=True, lightweight=True)
+            scan_refreshed = True
+            if hasattr(self.store, "list_scan_runs"):
+                scan_runs = self.store.list_scan_runs(limit=20)
+                latest_scan_at = latest_scan_timestamp(scan_runs)
+                latest_scan_is_fresh = latest_scan_at is not None and latest_scan_at >= findings_cutoff
+            if hasattr(self.store, "list_scan_findings"):
+                scan_findings = self.store.list_scan_findings(limit=400)
+                fresh_findings = [
+                    finding for finding in scan_findings
+                    if finding_timestamp(finding) >= findings_cutoff
+                ]
+            findings_missing = not scan_findings
+            findings_stale = bool(scan_findings) and not fresh_findings
+            scan_state_inconsistent = bool(fresh_findings and not latest_scan_is_fresh)
+
+        if not active_issues and not fresh_findings:
+            return "No healer action needed today"
+
+        if paused or blocked_issues or lease_conflicts or lock_conflict_count or scan_state_inconsistent:
+            state_summary = "Stuck"
+        elif active_issues:
+            state_summary = "Active"
+        else:
+            state_summary = "Idle"
+
+        queue_actions: list[str] = []
+        if pr_pending:
+            queue_actions.append(f"P0 unblock PR approval on {issue_ref(pr_pending[0])}")
+        if failure_by_class.get("tests_failed", 0) >= 2:
+            queue_actions.append("P1 triage repeated `tests_failed` attempts")
+        if failure_by_class.get("verifier_failed", 0) >= 2:
+            queue_actions.append("P1 triage repeated `verifier_failed` attempts")
+        if lock_conflict_count:
+            queue_actions.append("P2 resolve lock contention / lease conflicts")
+        queue_line = "Queue Empty" if not queue_actions else " | ".join(queue_actions[:3])
+
+        risk_parts: list[str] = []
+        if lease_conflicts:
+            risk_parts.append("stale leases can starve queue progress")
+        if pr_pending:
+            risk_parts.append("pending PR approval can drift into merge conflicts")
+        if failure_by_class.get("tests_failed", 0):
+            risk_parts.append("repeat test failures increase rework churn")
+        if scan_state_inconsistent:
+            risk_parts.append("scan freshness is inconsistent with stored findings")
+        if not risk_parts:
+            risk_parts.append("low immediate risk")
+        risk_line = "; ".join(risk_parts[:2])
+
+        blocker_parts: list[str] = []
+        if pr_pending:
+            blocker_parts.append("pr_pending_approval=" + ",".join(issue_ref(issue) for issue in pr_pending[:3]))
+        if pr_open:
+            pr_refs = []
+            for issue in pr_open[:3]:
+                pr_number = issue.get("pr_number")
+                pr_refs.append(f"PR#{pr_number}" if pr_number else issue_ref(issue))
+            blocker_parts.append("pr_open=" + ",".join(pr_refs))
+        if active_locks:
+            lock_keys = [str(lock.get("lock_key") or "Unknown") for lock in active_locks[:2]]
+            blocker_parts.append("locks=" + ",".join(lock_keys))
+        if not blocker_parts:
+            blocker_parts.append("None")
+        blockers_line = " | ".join(blocker_parts[:3])
+
+        if scan_refreshed:
+            next_step = "Review latest lightweight dry-run scan output and execute the top P0 queue item."
+        elif pr_pending:
+            next_step = f"Review {issue_ref(pr_pending[0])} and apply `healer:pr-approved` if safe."
+        elif queue_actions:
+            next_step = "Execute the first item in Cheap Scan Queue."
+        else:
+            next_step = "Monitor healer queue and re-run `system: healer ops` after next polling cycle."
+
+        confidence = 90
+        if not latest_scan_is_fresh:
+            confidence -= 10
+        if findings_missing:
+            confidence -= 10
+        if findings_stale:
+            confidence -= 10
+        if healer_state_inconsistent or scan_state_inconsistent:
+            confidence -= 10
+        confidence = max(40, min(95, confidence))
+
+        status_extra = (
+            f"active={len(active_issues)}, ready={len(open_ready)}, attempts_7d={len(recent_attempts)}, "
+            f"fresh_findings_24h={len(fresh_findings)}, recent_scan_24h={'yes' if latest_scan_is_fresh else 'no'}"
+        )
+        if scan_refreshed:
+            status_extra += ", lightweight_dry_run=triggered"
+
+        lines = [
+            "## 🩺 Healer Status",
+            f"- Current state summary: {state_summary} ({status_extra})",
+            "",
+            "## ⚡ Cheap Scan Queue (P0/P1/P2)",
+            f"- {queue_line}",
+            "",
+            "## ⚠️ Risk if Delayed",
+            f"- {risk_line}",
+            "",
+            "## 🔒 Gating / Blockers",
+            f"- {blockers_line}",
+            "",
+            "## ➡️ Next Best Action",
+            f"- {next_step} Confidence Score: {confidence}%",
+        ]
+        return "\n".join(lines)
 
     def _healer_dashboard(self) -> str:
         if not hasattr(self.store, "list_healer_issues"):
@@ -1168,7 +1508,7 @@ class RelayOrchestrator:
         lines.append("Tip: use labels `healer:ready` + `healer:pr-approved` to advance guarded PR flow.")
         return "\n".join(lines)
 
-    def _run_healer_scan(self, *, dry_run: bool) -> str:
+    def _run_healer_scan(self, *, dry_run: bool, lightweight: bool = False) -> str:
         if not self.healer_repo_path:
             return "Flow Healer scan unavailable: `apple_flow_healer_repo_path` is not configured."
         repo_path = Path(self.healer_repo_path).expanduser().resolve()
@@ -1184,6 +1524,7 @@ class RelayOrchestrator:
             max_issues_per_run=self.healer_scan_max_issues_per_run,
             default_labels=self.healer_scan_default_labels,
             enable_issue_creation=self.healer_scan_enable_issue_creation,
+            lightweight=lightweight,
         )
         summary = scanner.run_scan(dry_run=dry_run)
         created = summary.get("created_issues") or []
@@ -1197,7 +1538,7 @@ class RelayOrchestrator:
                 created_lines.append(f"- #{number}")
         lines = [
             "🩺 Flow Healer Scan",
-            f"Mode: {'dry-run' if dry_run else 'live'}",
+            f"Mode: {'dry-run' if dry_run else 'live'}{' (lightweight)' if lightweight else ''}",
             f"Run ID: {summary.get('run_id', '?')}",
             f"Findings: {summary.get('findings_total', 0)} total, {summary.get('findings_over_threshold', 0)} at/above threshold",
             f"Threshold: {summary.get('severity_threshold', self.healer_scan_severity_threshold)}",

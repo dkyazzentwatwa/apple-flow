@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
+import json
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from apple_flow.commanding import CommandKind, parse_command
@@ -71,15 +72,47 @@ def test_system_stop_calls_shutdown_callback(fake_connector, fake_egress, fake_s
     assert "shutting down" in fake_egress.messages[0][1].lower()
 
 
-def test_system_restart_triggers_launchd_kickstart(fake_connector, fake_egress, fake_store):
+def test_system_restart_requests_confirmation_token(fake_connector, fake_egress, fake_store):
     called = []
     orchestrator = _make_orchestrator(
         fake_connector, fake_egress, fake_store,
         shutdown_callback=lambda: called.append(True),
     )
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value.returncode = 0
         result = orchestrator.handle_message(_make_message("system: restart"))
+        mock_run.assert_not_called()
+
+    assert result.kind is CommandKind.SYSTEM
+    assert called == []
+    assert len(fake_egress.messages) == 1
+    assert "requires confirmation" in fake_egress.messages[0][1].lower()
+    pending = fake_store.get_state("system_restart_confirm_pending")
+    assert pending is not None
+    assert "token" in pending
+
+
+def test_system_restart_confirm_triggers_launchd_kickstart(fake_connector, fake_egress, fake_store):
+    called = []
+    orchestrator = _make_orchestrator(
+        fake_connector, fake_egress, fake_store,
+        shutdown_callback=lambda: called.append(True),
+    )
+    orchestrator.handle_message(_make_message("system: restart"))
+    pending_raw = fake_store.get_state("system_restart_confirm_pending")
+    assert pending_raw
+    token = json.loads(pending_raw)["token"]
+
+    msg = InboundMessage(
+        id="msg_002",
+        sender="+15550000001",
+        text=f"system: restart confirm {token}",
+        received_at=datetime.now(UTC).isoformat(),
+        is_from_me=False,
+        context={},
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 0
+        result = orchestrator.handle_message(msg)
         mock_run.assert_called_once_with(
             ["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/local.apple-flow"],
             check=False,
@@ -88,27 +121,61 @@ def test_system_restart_triggers_launchd_kickstart(fake_connector, fake_egress, 
 
     assert result.kind is CommandKind.SYSTEM
     assert called == []
-    assert len(fake_egress.messages) == 1
-    assert "restarting" in fake_egress.messages[0][1].lower()
+    assert "restarting" in (result.response or "").lower()
     marker = fake_store.get_state("system_restart_echo_suppress")
     assert marker is not None
     assert "Apple Flow restarting" in marker
 
 
-def test_system_restart_falls_back_to_shutdown_when_kickstart_fails(fake_connector, fake_egress, fake_store):
+def test_system_restart_confirm_invalid_token_does_not_restart(fake_connector, fake_egress, fake_store):
     called = []
     orchestrator = _make_orchestrator(
         fake_connector, fake_egress, fake_store,
         shutdown_callback=lambda: called.append(True),
     )
+    orchestrator.handle_message(_make_message("system: restart"))
+    msg = InboundMessage(
+        id="msg_002",
+        sender="+15550000001",
+        text="system: restart confirm wrongtoken",
+        received_at=datetime.now(UTC).isoformat(),
+        is_from_me=False,
+        context={},
+    )
+    with patch("subprocess.run") as mock_run:
+        result = orchestrator.handle_message(msg)
+        mock_run.assert_not_called()
+
+    assert result.kind is CommandKind.SYSTEM
+    assert called == []
+    assert "invalid restart confirmation token" in (result.response or "").lower()
+
+
+def test_system_restart_confirm_falls_back_to_shutdown_when_kickstart_fails(fake_connector, fake_egress, fake_store):
+    called = []
+    orchestrator = _make_orchestrator(
+        fake_connector, fake_egress, fake_store,
+        shutdown_callback=lambda: called.append(True),
+    )
+    orchestrator.handle_message(_make_message("system: restart"))
+    pending_raw = fake_store.get_state("system_restart_confirm_pending")
+    assert pending_raw
+    token = json.loads(pending_raw)["token"]
+    msg = InboundMessage(
+        id="msg_002",
+        sender="+15550000001",
+        text=f"system: restart confirm {token}",
+        received_at=datetime.now(UTC).isoformat(),
+        is_from_me=False,
+        context={},
+    )
     with patch("subprocess.run") as mock_run:
         mock_run.return_value.returncode = 1
-        result = orchestrator.handle_message(_make_message("system: restart"))
+        result = orchestrator.handle_message(msg)
 
     assert result.kind is CommandKind.SYSTEM
     assert called == [True]
-    assert len(fake_egress.messages) == 1
-    assert "restarting" in fake_egress.messages[0][1].lower()
+    assert "restarting" in (result.response or "").lower()
 
 
 def test_system_unknown_subcommand(fake_connector, fake_egress, fake_store):
@@ -255,6 +322,86 @@ def test_system_healer_dashboard_shows_learning_stats(fake_connector, fake_egres
     text = (result.response or "").lower()
     assert "learned lessons: 1" in text
     assert "top learned failure classes: lock_conflict=1" in text
+
+
+def test_system_healer_ops_no_action_when_idle_and_no_fresh_findings(fake_connector, fake_egress, fake_store):
+    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
+    with patch.object(orchestrator, "_run_healer_scan", return_value="🩺 Flow Healer Scan") as mock_scan:
+        result = orchestrator.handle_message(_make_message("system: healer ops"))
+    assert result.kind is CommandKind.SYSTEM
+    assert result.response == "No healer action needed today"
+    mock_scan.assert_called_once_with(dry_run=True, lightweight=True)
+
+
+def test_system_healer_ops_outputs_sections_and_bounded_bullets(fake_connector, fake_egress, fake_store):
+    fake_store.upsert_healer_issue(
+        issue_id="501",
+        repo="owner/repo",
+        title="Fix flaky verifier run",
+        body="",
+        author="alice",
+        labels=["healer:ready"],
+        priority=1,
+    )
+    fake_store.set_healer_issue_state(issue_id="501", state="pr_pending_approval")
+    fake_store.create_scan_run(run_id="scan_fresh", dry_run=True)
+    fake_store.finish_scan_run(
+        run_id="scan_fresh",
+        status="completed",
+        summary={"findings_total": 1},
+    )
+    fake_store.upsert_scan_finding(
+        fingerprint="fp_recent",
+        scan_type="harness",
+        severity="high",
+        title="Harness failure",
+        status="detected",
+        payload={"eval_id": "approval_bypass"},
+    )
+
+    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
+    with patch.object(orchestrator, "_run_healer_scan", return_value="unused") as mock_scan:
+        result = orchestrator.handle_message(_make_message("system: healer ops"))
+
+    assert result.kind is CommandKind.SYSTEM
+    text = result.response or ""
+    assert "## 🩺 Healer Status" in text
+    assert "## ⚡ Cheap Scan Queue (P0/P1/P2)" in text
+    assert "## ⚠️ Risk if Delayed" in text
+    assert "## 🔒 Gating / Blockers" in text
+    assert "## ➡️ Next Best Action" in text
+    assert "#501" in text
+    bullet_count = sum(1 for line in text.splitlines() if line.strip().startswith("- "))
+    assert bullet_count <= 8
+    mock_scan.assert_not_called()
+
+
+def test_system_healer_ops_triggers_scan_when_finding_is_stale(fake_connector, fake_egress, fake_store):
+    fake_store.create_scan_run(run_id="scan_old", dry_run=True)
+    fake_store.finish_scan_run(
+        run_id="scan_old",
+        status="completed",
+        summary={"findings_total": 1},
+    )
+    fake_store.upsert_scan_finding(
+        fingerprint="fp_old",
+        scan_type="pytest",
+        severity="medium",
+        title="Old pytest failure",
+        status="detected",
+        payload={"selector": "tests/test_old.py::test_case"},
+    )
+    old_ts = (datetime.now(UTC) - timedelta(hours=30)).isoformat()
+    fake_store.scan_runs["scan_old"]["updated_at"] = old_ts
+    fake_store.scan_findings["fp_old"]["last_seen_at"] = old_ts
+
+    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
+    with patch.object(orchestrator, "_run_healer_scan", return_value="🩺 Flow Healer Scan") as mock_scan:
+        result = orchestrator.handle_message(_make_message("system: healer ops"))
+
+    assert result.kind is CommandKind.SYSTEM
+    assert result.response == "No healer action needed today"
+    mock_scan.assert_called_once_with(dry_run=True, lightweight=True)
 
 
 def test_system_healer_scan_dry_run(fake_connector, fake_egress, fake_store):
