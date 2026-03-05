@@ -73,6 +73,12 @@ class FakeStore:
         self.events: list[dict[str, Any]] = []
         self.state: dict[str, str] = {}
         self.run_jobs: dict[str, dict[str, Any]] = {}
+        self.healer_issues: dict[str, dict[str, Any]] = {}
+        self.healer_attempts: list[dict[str, Any]] = []
+        self.healer_lessons: list[dict[str, Any]] = []
+        self.healer_locks: list[dict[str, Any]] = []
+        self.scan_runs: dict[str, dict[str, Any]] = {}
+        self.scan_findings: dict[str, dict[str, Any]] = {}
 
     def bootstrap(self) -> None:
         pass
@@ -260,6 +266,215 @@ class FakeStore:
             "pending_approvals": len(self.list_pending_approvals()),
             "runs_by_state": runs_by_state,
             "last_event": self.events[-1] if self.events else None,
+        }
+
+    # --- Healer helpers (for system: healer tests) ---
+
+    def upsert_healer_issue(
+        self,
+        *,
+        issue_id: str,
+        repo: str,
+        title: str,
+        body: str,
+        author: str,
+        labels: list[str],
+        priority: int = 100,
+    ) -> None:
+        self.healer_issues[issue_id] = {
+            "issue_id": issue_id,
+            "repo": repo,
+            "title": title,
+            "body": body,
+            "author": author,
+            "labels": list(labels),
+            "priority": int(priority),
+            "state": self.healer_issues.get(issue_id, {}).get("state", "queued"),
+        }
+
+    def set_healer_issue_state(
+        self,
+        *,
+        issue_id: str,
+        state: str,
+        **_kwargs: Any,
+    ) -> bool:
+        issue = self.healer_issues.get(issue_id)
+        if issue is None:
+            return False
+        issue["state"] = state
+        return True
+
+    def list_healer_issues(self, *, states: list[str] | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        issues = list(self.healer_issues.values())
+        if states:
+            state_set = set(states)
+            issues = [item for item in issues if item.get("state") in state_set]
+        return issues[:limit]
+
+    def create_healer_attempt(
+        self,
+        *,
+        attempt_id: str,
+        issue_id: str,
+        attempt_no: int,
+        state: str,
+        prediction_source: str,
+        predicted_lock_set: list[str],
+    ) -> None:
+        self.healer_attempts.append(
+            {
+                "attempt_id": attempt_id,
+                "issue_id": issue_id,
+                "attempt_no": attempt_no,
+                "state": state,
+                "prediction_source": prediction_source,
+                "predicted_lock_set": list(predicted_lock_set),
+            }
+        )
+
+    def finish_healer_attempt(
+        self,
+        *,
+        attempt_id: str,
+        state: str,
+        actual_diff_set: list[str],
+        test_summary: dict[str, Any],
+        verifier_summary: dict[str, Any],
+        failure_class: str = "",
+        failure_reason: str = "",
+    ) -> bool:
+        for attempt in self.healer_attempts:
+            if attempt.get("attempt_id") == attempt_id:
+                attempt["state"] = state
+                attempt["actual_diff_set"] = list(actual_diff_set)
+                attempt["test_summary"] = dict(test_summary)
+                attempt["verifier_summary"] = dict(verifier_summary)
+                attempt["failure_class"] = failure_class
+                attempt["failure_reason"] = failure_reason
+                return True
+        return False
+
+    def list_recent_healer_attempts(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        return list(reversed(self.healer_attempts))[:limit]
+
+    def create_healer_lesson(
+        self,
+        *,
+        lesson_id: str,
+        issue_id: str,
+        attempt_id: str,
+        lesson_kind: str,
+        scope_key: str,
+        fingerprint: str,
+        problem_summary: str,
+        lesson_text: str,
+        test_hint: str,
+        guardrail: dict[str, Any],
+        confidence: int,
+        outcome: str,
+    ) -> None:
+        self.healer_lessons.append(
+            {
+                "lesson_id": lesson_id,
+                "issue_id": issue_id,
+                "attempt_id": attempt_id,
+                "lesson_kind": lesson_kind,
+                "scope_key": scope_key,
+                "fingerprint": fingerprint,
+                "problem_summary": problem_summary,
+                "lesson_text": lesson_text,
+                "test_hint": test_hint,
+                "guardrail": dict(guardrail or {}),
+                "confidence": confidence,
+                "outcome": outcome,
+                "use_count": 0,
+                "last_used_at": None,
+            }
+        )
+
+    def list_healer_lessons(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        return list(reversed(self.healer_lessons))[:limit]
+
+    def mark_healer_lessons_used(self, lesson_ids: list[str]) -> int:
+        updated = 0
+        wanted = set(lesson_ids)
+        for lesson in self.healer_lessons:
+            if lesson.get("lesson_id") not in wanted:
+                continue
+            lesson["use_count"] = int(lesson.get("use_count", 0)) + 1
+            lesson["last_used_at"] = datetime.now(UTC).isoformat()
+            updated += 1
+        return updated
+
+    def get_healer_lesson_stats(self) -> dict[str, Any]:
+        recurring: dict[str, int] = {}
+        recently_used = 0
+        for lesson in self.healer_lessons:
+            guardrail = lesson.get("guardrail", {})
+            failure_class = str(guardrail.get("failure_class") or "")
+            if failure_class:
+                recurring[failure_class] = recurring.get(failure_class, 0) + 1
+            if lesson.get("last_used_at"):
+                recently_used += 1
+        return {
+            "total_lessons": len(self.healer_lessons),
+            "recently_used": recently_used,
+            "top_failure_classes": [
+                {"failure_class": key, "count": count}
+                for key, count in sorted(recurring.items(), key=lambda item: (-item[1], item[0]))[:3]
+            ],
+        }
+
+    def list_healer_locks(self, *, issue_id: str | None = None) -> list[dict[str, Any]]:
+        if issue_id is None:
+            return list(self.healer_locks)
+        return [entry for entry in self.healer_locks if entry.get("issue_id") == issue_id]
+
+    # --- Scan pipeline helpers ---
+
+    def create_scan_run(self, *, run_id: str, dry_run: bool) -> None:
+        self.scan_runs[run_id] = {
+            "run_id": run_id,
+            "status": "running",
+            "dry_run": bool(dry_run),
+            "summary": {},
+        }
+
+    def finish_scan_run(self, *, run_id: str, status: str, summary: dict[str, Any]) -> bool:
+        run = self.scan_runs.get(run_id)
+        if run is None:
+            return False
+        run["status"] = status
+        run["summary"] = dict(summary or {})
+        return True
+
+    def get_scan_finding(self, fingerprint: str) -> dict[str, Any] | None:
+        finding = self.scan_findings.get(fingerprint)
+        if finding is None:
+            return None
+        return dict(finding)
+
+    def upsert_scan_finding(
+        self,
+        *,
+        fingerprint: str,
+        scan_type: str,
+        severity: str,
+        title: str,
+        status: str,
+        payload: dict[str, Any],
+        issue_number: int | None = None,
+    ) -> None:
+        existing = self.scan_findings.get(fingerprint, {})
+        self.scan_findings[fingerprint] = {
+            "fingerprint": fingerprint,
+            "scan_type": scan_type,
+            "severity": severity,
+            "title": title,
+            "status": status,
+            "payload": dict(payload or {}),
+            "issue_number": issue_number if issue_number is not None else existing.get("issue_number"),
         }
 
     def recent_messages(self, sender: str, limit: int = 10) -> list[dict[str, Any]]:

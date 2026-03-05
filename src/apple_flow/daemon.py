@@ -25,6 +25,7 @@ from .csv_audit import CsvAuditLogger
 from .egress import IMessageEgress
 from .gateway_setup import ensure_gateway_resources
 from .gemini_cli_connector import GeminiCliConnector
+from .healer_loop import AutonomousHealerLoop
 from .ingress import IMessageIngress
 from .kilo_cli_connector import KiloCliConnector
 from .mail_egress import AppleMailEgress
@@ -343,6 +344,19 @@ class RelayDaemon:
             else:
                 logger.warning("Companion enabled but no allowed_senders configured — skipping")
 
+        self.healer: AutonomousHealerLoop | None = None
+        if settings.enable_autonomous_healer:
+            if not settings.healer_repo_path.strip():
+                logger.warning("Autonomous healer enabled but healer_repo_path is empty — skipping")
+            else:
+                self.healer = AutonomousHealerLoop(
+                    settings=settings,
+                    store=self.store,
+                    connector=self.connector,
+                )
+                if not self.healer.enabled:
+                    self.healer = None
+
         # Ambient scanner (passive context enrichment)
         self.ambient: AmbientScanner | None = None
         if settings.enable_ambient_scanning and self.memory:
@@ -403,6 +417,12 @@ class RelayDaemon:
             run_executor=None,
             office_syncer=self.office_syncer,
             log_file_path=settings.log_file_path,
+            healer_repo_path=settings.healer_repo_path,
+            healer_scan_enable_issue_creation=settings.healer_scan_enable_issue_creation,
+            healer_scan_max_issues_per_run=settings.healer_scan_max_issues_per_run,
+            healer_scan_severity_threshold=settings.healer_scan_severity_threshold,
+            healer_scan_default_labels=settings.healer_scan_default_labels,
+            healer_scan_notes_log=settings.healer_scan_notes_log,
         )
 
         self.orchestrator = RelayOrchestrator(
@@ -663,6 +683,8 @@ class RelayDaemon:
             tasks.append(asyncio.create_task(self._companion_loop()))
         if self.ambient is not None:
             tasks.append(asyncio.create_task(self._ambient_loop()))
+        if getattr(self, "healer", None) is not None:
+            tasks.append(asyncio.create_task(self._healer_loop()))
         if getattr(self, "memory_service", None) is not None:
             tasks.append(asyncio.create_task(self._memory_maintenance_loop()))
         try:
@@ -704,6 +726,15 @@ class RelayDaemon:
             await self.ambient.run_forever(lambda: self._shutdown_requested)
         except Exception as exc:
             logger.exception("Ambient scanner loop error: %s", exc)
+
+    async def _healer_loop(self) -> None:
+        """Autonomous healer loop — issue ingestion + repair attempts."""
+        assert self.healer is not None
+        logger.info("Autonomous healer loop started")
+        try:
+            await self.healer.run_forever(lambda: self._shutdown_requested)
+        except Exception as exc:
+            logger.exception("Autonomous healer loop error: %s", exc)
 
     async def _memory_maintenance_loop(self) -> None:
         """Memory maintenance loop for v2 canonical store."""
@@ -1328,7 +1359,7 @@ class RelayDaemon:
             "❓ help",
             "✅ approve <id>  |  ❌ deny <id>  |  ❌❌ deny all  |  📊 status",
             "🏥 health  |  🔍 history: [query]  |  📈 usage  |  📋 logs  |  🔄 clear context",
-            "🔧 system: stop  |  restart  |  kill provider  |  cancel run <run_id>",
+            "🔧 system: stop  |  restart  |  kill provider  |  cancel run <run_id>  |  healer  |  healer pause/resume",
             "",
             "Power users:",
             "⚡ task: <cmd>        execute  (needs ✅)",

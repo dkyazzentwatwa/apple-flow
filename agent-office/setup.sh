@@ -337,6 +337,30 @@ write_if_missing "$ROOT/templates/weekly-review.md" \
 - Refine:
 '
 
+write_if_missing "$ROOT/templates/planner-mode-task.md" \
+'# Planner Mode Task — {{date}}
+
+## Objective
+-
+
+## Steps
+1.
+2.
+3.
+
+## Risks
+-
+
+## Done Criteria
+-
+
+## Guardrail Checks
+- [ ] Mutating actions are approval-gated.
+- [ ] Workspace path is explicit and allowlisted.
+- [ ] Context sources are minimal and relevant.
+- [ ] Success is measurable (not subjective only).
+'
+
 write_if_missing "$ROOT/templates/project-brief.md" \
 '# Project Brief — {{project_name}}
 

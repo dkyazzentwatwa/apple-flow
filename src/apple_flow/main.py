@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import secrets
+import sqlite3
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -12,6 +14,8 @@ from .config import RelaySettings
 from .csv_audit import CsvAuditLogger
 from .models import InboundMessage
 from .store import SQLiteStore
+
+logger = logging.getLogger("apple_flow.main")
 
 
 class ApprovalOverrideBody(BaseModel):
@@ -54,11 +58,23 @@ def build_app(store: Any | None = None) -> FastAPI:
             )
         active_store = SQLiteStore(Path(settings.db_path), csv_audit_logger=csv_audit_logger)
     if hasattr(active_store, "bootstrap"):
-        active_store.bootstrap()
+        try:
+            active_store.bootstrap()
+        except sqlite3.OperationalError as exc:
+            if store is not None or "readonly" not in str(exc).lower():
+                raise
+            fallback_db = Path("/tmp/apple-flow-admin-fallback.db")
+            logger.warning(
+                "Admin API DB path %s is read-only; falling back to %s",
+                settings.db_path,
+                fallback_db,
+            )
+            active_store = SQLiteStore(fallback_db)
+            active_store.bootstrap()
 
     verify_token = _make_auth_dependency(settings.admin_api_token)
 
-    app = FastAPI(title="Apple Flow Admin API", version="0.4.1")
+    app = FastAPI(title="Apple Flow Admin API", version="0.5.0")
     app.state.store = active_store
     # orchestrator is injected by daemon at startup (if running alongside polling)
     app.state.orchestrator = None

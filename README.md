@@ -53,6 +53,36 @@ Apple Flow is a local-first macOS daemon that bridges Apple apps to AI CLIs (Cod
 - New Apple Numbers support for workbook creation, sheet management, row insertion semantics, and styling automation.
 - Global skill packs for Codex/Claude-style workflows, including dedicated `apple-flow-pages`, `apple-flow-numbers`, `apple-flow-mail`, and `apple-flow-gateways` skills.
 - Production-friendly operations with service controls, health/status tooling, and comprehensive test coverage.
+- Harnessed engineering docs and risk eval pack for approval safety, retry recovery, duplicate suppression, and companion-noise controls.
+
+## Harness Engineering
+
+Use the harness docs + eval pack when changing orchestration, approvals, execution, egress, or companion behavior.
+
+- Spec and state contract: [docs/harness/README.md](docs/harness/README.md)
+- Risk eval mapping: [docs/harness/evals.md](docs/harness/evals.md)
+- Run eval pack: `python scripts/harness_eval_pack.py --json-out dist/harness-eval-pack.json`
+
+## Autonomous Healer (Experimental)
+
+Apple Flow includes an optional autonomous healer loop for GitHub-issue driven remediation. It is disabled by default and designed for guarded rollout.
+
+- Ingests only maintainer-blessed issues (`apple_flow_healer_issue_required_labels`)
+- Uses Docker sandbox execution (`apple_flow_healer_sandbox_mode=docker`)
+- Runs proposer + verifier passes before PR actions
+- Requires explicit PR-approval signal in guarded mode (`apple_flow_healer_pr_required_label`)
+- Can learn internal guardrails from prior attempts (`apple_flow_healer_learning_enabled`)
+- Enforces circuit breaker, retry budget, lock contention control, and reconciliation
+- Supports `system: healer scan` to run local checks and open deduped `healer:ready` issues
+
+See `.env.example` for all `apple_flow_healer_*` settings.
+
+Guides:
+- [What and why](docs/flow-healer/01-what-and-why.md)
+- [How to use (beginner + advanced)](docs/flow-healer/02-how-to-use.md)
+- [Operations and troubleshooting](docs/flow-healer/03-operations-and-troubleshooting.md)
+- [Workshop guide](docs/flow-healer/04-workshop-guide.md)
+- [Comprehensive manual](docs/flow-healer/Flow-Healer-Manual.md)
 
 ## Start Here
 

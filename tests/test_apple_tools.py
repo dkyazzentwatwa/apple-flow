@@ -597,6 +597,32 @@ class TestPagesFromMarkdown:
         assert result["qa_report"]["word_count"] > 0
         assert result["exports"]["pdf"].endswith(".pdf")
 
+    def test_toc_uses_native_pages_insertion(self, tmp_path):
+        source = tmp_path / "guide.md"
+        source.write_text(
+            "# Title\n\n## One\n\nBody.\n\n## Two\n\nMore.\n\n## Three\n\nMore.\n\n## Four\n\nMore.\n\n## Five\n\nMore.\n\n## Six\n\nMore.\n",
+            encoding="utf-8",
+        )
+        output = tmp_path / "guide.pages"
+        output.write_text("existing", encoding="utf-8")
+
+        with patch("subprocess.run", return_value=_ok_result("")):
+            with patch("apple_flow.apple_tools._warm_pages_app", return_value=True):
+                with patch("apple_flow.apple_tools._pages_app_target", return_value='application id "com.apple.Pages"'):
+                    with patch("apple_flow.apple_tools._run_script", return_value="ok"):
+                        with patch("apple_flow.apple_tools._insert_native_pages_toc", return_value=True) as toc_mock:
+                            result = pages_from_markdown(
+                                str(source),
+                                output_path=str(output),
+                                toc="on",
+                                overwrite=True,
+                            )
+
+        assert result["ok"] is True
+        assert result["options"]["toc"] is True
+        assert result["options"]["toc_native_inserted"] is True
+        toc_mock.assert_called_once()
+
     def test_page_break_marker_updates_stats(self, tmp_path):
         source = tmp_path / "breaks.md"
         source.write_text("# One\n\n[[PB]]\n\n# Two\n", encoding="utf-8")

@@ -117,6 +117,98 @@ class SQLiteStore:
                     FOREIGN KEY (run_id) REFERENCES runs (run_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS healer_issues (
+                    issue_id TEXT PRIMARY KEY,
+                    repo TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL DEFAULT '',
+                    author TEXT NOT NULL DEFAULT '',
+                    labels_json TEXT NOT NULL DEFAULT '[]',
+                    priority INTEGER NOT NULL DEFAULT 100,
+                    state TEXT NOT NULL DEFAULT 'queued',
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    backoff_until TEXT DEFAULT NULL,
+                    lease_owner TEXT DEFAULT NULL,
+                    lease_expires_at TEXT DEFAULT NULL,
+                    workspace_path TEXT NOT NULL DEFAULT '',
+                    branch_name TEXT NOT NULL DEFAULT '',
+                    pr_number INTEGER DEFAULT NULL,
+                    pr_state TEXT NOT NULL DEFAULT '',
+                    last_failure_class TEXT NOT NULL DEFAULT '',
+                    last_failure_reason TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS healer_attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    issue_id TEXT NOT NULL,
+                    attempt_no INTEGER NOT NULL,
+                    state TEXT NOT NULL,
+                    prediction_source TEXT NOT NULL DEFAULT '',
+                    predicted_lock_set_json TEXT NOT NULL DEFAULT '[]',
+                    actual_diff_set_json TEXT NOT NULL DEFAULT '[]',
+                    test_summary_json TEXT NOT NULL DEFAULT '{}',
+                    verifier_summary_json TEXT NOT NULL DEFAULT '{}',
+                    failure_class TEXT NOT NULL DEFAULT '',
+                    failure_reason TEXT NOT NULL DEFAULT '',
+                    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    finished_at TEXT DEFAULT NULL,
+                    FOREIGN KEY (issue_id) REFERENCES healer_issues (issue_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS healer_lessons (
+                    lesson_id TEXT PRIMARY KEY,
+                    issue_id TEXT NOT NULL,
+                    attempt_id TEXT NOT NULL,
+                    lesson_kind TEXT NOT NULL,
+                    scope_key TEXT NOT NULL DEFAULT 'repo:*',
+                    fingerprint TEXT NOT NULL DEFAULT '',
+                    problem_summary TEXT NOT NULL DEFAULT '',
+                    lesson_text TEXT NOT NULL,
+                    test_hint TEXT NOT NULL DEFAULT '',
+                    guardrail_json TEXT NOT NULL DEFAULT '{}',
+                    confidence INTEGER NOT NULL DEFAULT 50,
+                    outcome TEXT NOT NULL DEFAULT 'unknown',
+                    use_count INTEGER NOT NULL DEFAULT 0,
+                    last_used_at TEXT DEFAULT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (issue_id) REFERENCES healer_issues (issue_id),
+                    FOREIGN KEY (attempt_id) REFERENCES healer_attempts (attempt_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS healer_locks (
+                    lock_key TEXT PRIMARY KEY,
+                    granularity TEXT NOT NULL,
+                    issue_id TEXT NOT NULL,
+                    lease_owner TEXT NOT NULL,
+                    lease_expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (issue_id) REFERENCES healer_issues (issue_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS scan_runs (
+                    run_id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    dry_run INTEGER NOT NULL DEFAULT 0,
+                    summary_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS scan_findings (
+                    fingerprint TEXT PRIMARY KEY,
+                    scan_type TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    issue_number INTEGER DEFAULT NULL,
+                    status TEXT NOT NULL DEFAULT 'detected',
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
                 -- Performance indexes
                 CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender);
                 CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
@@ -125,6 +217,16 @@ class SQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_run_jobs_status_created ON run_jobs(status, created_at);
                 CREATE INDEX IF NOT EXISTS idx_run_jobs_run_status ON run_jobs(run_id, status);
                 CREATE INDEX IF NOT EXISTS idx_run_jobs_lease ON run_jobs(status, lease_expires_at);
+                CREATE INDEX IF NOT EXISTS idx_healer_issues_state_backoff ON healer_issues(state, backoff_until, priority, updated_at);
+                CREATE INDEX IF NOT EXISTS idx_healer_issues_lease ON healer_issues(state, lease_expires_at);
+                CREATE INDEX IF NOT EXISTS idx_healer_attempts_issue_started ON healer_attempts(issue_id, started_at);
+                CREATE INDEX IF NOT EXISTS idx_healer_lessons_scope_updated ON healer_lessons(scope_key, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_healer_lessons_outcome_updated ON healer_lessons(outcome, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_healer_locks_issue ON healer_locks(issue_id);
+                CREATE INDEX IF NOT EXISTS idx_healer_locks_lease ON healer_locks(lease_expires_at);
+                CREATE INDEX IF NOT EXISTS idx_scan_runs_created ON scan_runs(created_at);
+                CREATE INDEX IF NOT EXISTS idx_scan_findings_status ON scan_findings(status, last_seen_at);
+                CREATE INDEX IF NOT EXISTS idx_scan_findings_issue_number ON scan_findings(issue_number);
                 """
             )
             conn.commit()
@@ -136,6 +238,17 @@ class SQLiteStore:
             except sqlite3.OperationalError:
                 conn.execute("ALTER TABLE runs ADD COLUMN source_context TEXT DEFAULT NULL")
                 conn.commit()
+
+            for column_name, column_type in (
+                ("failure_class", "TEXT NOT NULL DEFAULT ''"),
+                ("failure_reason", "TEXT NOT NULL DEFAULT ''"),
+            ):
+                try:
+                    cursor = conn.execute(f"SELECT {column_name} FROM healer_attempts LIMIT 1")
+                    cursor.fetchone()
+                except sqlite3.OperationalError:
+                    conn.execute(f"ALTER TABLE healer_attempts ADD COLUMN {column_name} {column_type}")
+                    conn.commit()
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -602,6 +715,644 @@ class SQLiteStore:
             )
             conn.commit()
             return int(cursor.rowcount)
+
+    # --- Autonomous healer queue/state ---
+
+    @staticmethod
+    def _decode_healer_issue_row(data: dict[str, Any] | None) -> dict[str, Any] | None:
+        if data is None:
+            return None
+        try:
+            data["labels"] = json.loads(data.pop("labels_json", "[]"))
+        except json.JSONDecodeError:
+            data["labels"] = []
+        return data
+
+    @staticmethod
+    def _decode_healer_attempt_row(data: dict[str, Any] | None) -> dict[str, Any] | None:
+        if data is None:
+            return None
+        for key in ("predicted_lock_set_json", "actual_diff_set_json"):
+            try:
+                data[key.replace("_json", "")] = json.loads(data.pop(key, "[]"))
+            except json.JSONDecodeError:
+                data[key.replace("_json", "")] = []
+        for key in ("test_summary_json", "verifier_summary_json"):
+            try:
+                data[key.replace("_json", "")] = json.loads(data.pop(key, "{}"))
+            except json.JSONDecodeError:
+                data[key.replace("_json", "")] = {}
+        return data
+
+    @staticmethod
+    def _decode_healer_lesson_row(data: dict[str, Any] | None) -> dict[str, Any] | None:
+        if data is None:
+            return None
+        try:
+            data["guardrail"] = json.loads(data.pop("guardrail_json", "{}"))
+        except json.JSONDecodeError:
+            data["guardrail"] = {}
+        return data
+
+    def upsert_healer_issue(
+        self,
+        *,
+        issue_id: str,
+        repo: str,
+        title: str,
+        body: str,
+        author: str,
+        labels: list[str],
+        priority: int = 100,
+    ) -> None:
+        conn = self._connect()
+        with self._lock:
+            conn.execute(
+                """
+                INSERT INTO healer_issues(
+                    issue_id, repo, title, body, author, labels_json, priority, state
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, 'queued')
+                ON CONFLICT(issue_id) DO UPDATE SET
+                    repo = excluded.repo,
+                    title = excluded.title,
+                    body = excluded.body,
+                    author = excluded.author,
+                    labels_json = excluded.labels_json,
+                    priority = excluded.priority,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    issue_id,
+                    repo,
+                    title,
+                    body,
+                    author,
+                    json.dumps(labels or []),
+                    int(priority),
+                ),
+            )
+            conn.commit()
+
+    def get_healer_issue(self, issue_id: str) -> dict[str, Any] | None:
+        conn = self._connect()
+        with self._lock:
+            row = conn.execute(
+                "SELECT * FROM healer_issues WHERE issue_id = ?",
+                (issue_id,),
+            ).fetchone()
+        return self._decode_healer_issue_row(self._row_to_dict(row))
+
+    def list_healer_issues(self, *, states: list[str] | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        conn = self._connect()
+        with self._lock:
+            if states:
+                placeholders = ",".join("?" for _ in states)
+                query = (
+                    f"SELECT * FROM healer_issues WHERE state IN ({placeholders}) "
+                    "ORDER BY priority ASC, updated_at ASC LIMIT ?"
+                )
+                rows = conn.execute(query, [*states, int(limit)]).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM healer_issues ORDER BY updated_at DESC LIMIT ?",
+                    (int(limit),),
+                ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            issue = self._decode_healer_issue_row(self._row_to_dict(row))
+            if issue is not None:
+                out.append(issue)
+        return out
+
+    def claim_next_healer_issue(self, *, worker_id: str, lease_seconds: int) -> dict[str, Any] | None:
+        conn = self._connect()
+        with self._lock:
+            row = conn.execute(
+                """
+                SELECT issue_id
+                FROM healer_issues
+                WHERE state = 'queued'
+                  AND (backoff_until IS NULL OR backoff_until <= CURRENT_TIMESTAMP)
+                ORDER BY priority ASC, updated_at ASC
+                LIMIT 1
+                """
+            ).fetchone()
+            if row is None:
+                return None
+
+            issue_id = str(row["issue_id"])
+            cursor = conn.execute(
+                """
+                UPDATE healer_issues
+                SET state = 'claimed',
+                    lease_owner = ?,
+                    lease_expires_at = datetime('now', ?),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE issue_id = ? AND state = 'queued'
+                """,
+                (worker_id, f"+{int(max(1, lease_seconds))} seconds", issue_id),
+            )
+            if cursor.rowcount == 0:
+                conn.commit()
+                return None
+
+            claimed = conn.execute(
+                "SELECT * FROM healer_issues WHERE issue_id = ?",
+                (issue_id,),
+            ).fetchone()
+            conn.commit()
+        return self._decode_healer_issue_row(self._row_to_dict(claimed))
+
+    def renew_healer_issue_lease(self, *, issue_id: str, worker_id: str, lease_seconds: int) -> bool:
+        conn = self._connect()
+        with self._lock:
+            cursor = conn.execute(
+                """
+                UPDATE healer_issues
+                SET lease_expires_at = datetime('now', ?), updated_at = CURRENT_TIMESTAMP
+                WHERE issue_id = ? AND lease_owner = ? AND state IN ('claimed', 'running', 'verify_pending')
+                """,
+                (f"+{int(max(1, lease_seconds))} seconds", issue_id, worker_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def increment_healer_attempt(self, issue_id: str) -> int:
+        conn = self._connect()
+        with self._lock:
+            conn.execute(
+                """
+                UPDATE healer_issues
+                SET attempt_count = attempt_count + 1, updated_at = CURRENT_TIMESTAMP
+                WHERE issue_id = ?
+                """,
+                (issue_id,),
+            )
+            row = conn.execute(
+                "SELECT attempt_count FROM healer_issues WHERE issue_id = ?",
+                (issue_id,),
+            ).fetchone()
+            conn.commit()
+            if row is None:
+                return 0
+            return int(row["attempt_count"])
+
+    def set_healer_issue_state(
+        self,
+        *,
+        issue_id: str,
+        state: str,
+        backoff_until: str | None = None,
+        workspace_path: str | None = None,
+        branch_name: str | None = None,
+        pr_number: int | None = None,
+        pr_state: str | None = None,
+        last_failure_class: str | None = None,
+        last_failure_reason: str | None = None,
+        clear_lease: bool = False,
+    ) -> bool:
+        conn = self._connect()
+        with self._lock:
+            updates = ["state = ?", "updated_at = CURRENT_TIMESTAMP"]
+            params: list[Any] = [state]
+
+            if backoff_until is not None:
+                updates.append("backoff_until = ?")
+                params.append(backoff_until)
+            if workspace_path is not None:
+                updates.append("workspace_path = ?")
+                params.append(workspace_path)
+            if branch_name is not None:
+                updates.append("branch_name = ?")
+                params.append(branch_name)
+            if pr_number is not None:
+                updates.append("pr_number = ?")
+                params.append(int(pr_number))
+            if pr_state is not None:
+                updates.append("pr_state = ?")
+                params.append(pr_state)
+            if last_failure_class is not None:
+                updates.append("last_failure_class = ?")
+                params.append(last_failure_class)
+            if last_failure_reason is not None:
+                updates.append("last_failure_reason = ?")
+                params.append(last_failure_reason)
+            if clear_lease:
+                updates.append("lease_owner = NULL")
+                updates.append("lease_expires_at = NULL")
+
+            params.append(issue_id)
+            cursor = conn.execute(
+                f"UPDATE healer_issues SET {', '.join(updates)} WHERE issue_id = ?",
+                params,
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def requeue_expired_healer_issue_leases(self) -> int:
+        conn = self._connect()
+        with self._lock:
+            cursor = conn.execute(
+                """
+                UPDATE healer_issues
+                SET state = 'queued',
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE state IN ('claimed', 'running', 'verify_pending')
+                  AND lease_expires_at IS NOT NULL
+                  AND lease_expires_at <= CURRENT_TIMESTAMP
+                """
+            )
+            conn.commit()
+            return int(cursor.rowcount)
+
+    def create_healer_attempt(
+        self,
+        *,
+        attempt_id: str,
+        issue_id: str,
+        attempt_no: int,
+        state: str,
+        prediction_source: str,
+        predicted_lock_set: list[str],
+    ) -> None:
+        conn = self._connect()
+        with self._lock:
+            conn.execute(
+                """
+                INSERT INTO healer_attempts(
+                    attempt_id, issue_id, attempt_no, state, prediction_source, predicted_lock_set_json
+                )
+                VALUES(?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    attempt_id,
+                    issue_id,
+                    int(attempt_no),
+                    state,
+                    prediction_source,
+                    json.dumps(predicted_lock_set or []),
+                ),
+            )
+            conn.commit()
+
+    def finish_healer_attempt(
+        self,
+        *,
+        attempt_id: str,
+        state: str,
+        actual_diff_set: list[str],
+        test_summary: dict[str, Any],
+        verifier_summary: dict[str, Any],
+        failure_class: str = "",
+        failure_reason: str = "",
+    ) -> bool:
+        conn = self._connect()
+        with self._lock:
+            cursor = conn.execute(
+                """
+                UPDATE healer_attempts
+                SET state = ?,
+                    actual_diff_set_json = ?,
+                    test_summary_json = ?,
+                    verifier_summary_json = ?,
+                    failure_class = ?,
+                    failure_reason = ?,
+                    finished_at = CURRENT_TIMESTAMP
+                WHERE attempt_id = ?
+                """,
+                (
+                    state,
+                    json.dumps(actual_diff_set or []),
+                    json.dumps(test_summary or {}),
+                    json.dumps(verifier_summary or {}),
+                    (failure_class or "")[:120],
+                    (failure_reason or "")[:500],
+                    attempt_id,
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def list_healer_attempts(self, *, issue_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        conn = self._connect()
+        with self._lock:
+            rows = conn.execute(
+                """
+                SELECT * FROM healer_attempts
+                WHERE issue_id = ?
+                ORDER BY started_at DESC
+                LIMIT ?
+                """,
+                (issue_id, int(limit)),
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            data = self._decode_healer_attempt_row(self._row_to_dict(row))
+            if data is not None:
+                out.append(data)
+        return out
+
+    def list_recent_healer_attempts(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        conn = self._connect()
+        with self._lock:
+            rows = conn.execute(
+                """
+                SELECT * FROM healer_attempts
+                ORDER BY started_at DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            data = self._decode_healer_attempt_row(self._row_to_dict(row))
+            if data is not None:
+                out.append(data)
+        return out
+
+    def create_healer_lesson(
+        self,
+        *,
+        lesson_id: str,
+        issue_id: str,
+        attempt_id: str,
+        lesson_kind: str,
+        scope_key: str,
+        fingerprint: str,
+        problem_summary: str,
+        lesson_text: str,
+        test_hint: str,
+        guardrail: dict[str, Any],
+        confidence: int,
+        outcome: str,
+    ) -> None:
+        conn = self._connect()
+        with self._lock:
+            conn.execute(
+                """
+                INSERT INTO healer_lessons(
+                    lesson_id, issue_id, attempt_id, lesson_kind, scope_key, fingerprint,
+                    problem_summary, lesson_text, test_hint, guardrail_json, confidence, outcome
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    lesson_id,
+                    issue_id,
+                    attempt_id,
+                    lesson_kind,
+                    scope_key or "repo:*",
+                    fingerprint,
+                    problem_summary,
+                    lesson_text,
+                    test_hint,
+                    json.dumps(guardrail or {}, ensure_ascii=True),
+                    int(max(0, min(100, confidence))),
+                    outcome,
+                ),
+            )
+            conn.commit()
+
+    def list_healer_lessons(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        conn = self._connect()
+        with self._lock:
+            rows = conn.execute(
+                """
+                SELECT * FROM healer_lessons
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            data = self._decode_healer_lesson_row(self._row_to_dict(row))
+            if data is not None:
+                out.append(data)
+        return out
+
+    def mark_healer_lessons_used(self, lesson_ids: list[str]) -> int:
+        unique_ids = [lesson_id for lesson_id in dict.fromkeys(lesson_ids) if str(lesson_id).strip()]
+        if not unique_ids:
+            return 0
+        conn = self._connect()
+        with self._lock:
+            placeholders = ",".join("?" for _ in unique_ids)
+            cursor = conn.execute(
+                f"""
+                UPDATE healer_lessons
+                SET use_count = use_count + 1,
+                    last_used_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE lesson_id IN ({placeholders})
+                """,
+                unique_ids,
+            )
+            conn.commit()
+            return int(cursor.rowcount or 0)
+
+    def get_healer_lesson_stats(self) -> dict[str, Any]:
+        lessons = self.list_healer_lessons(limit=500)
+        recurring: dict[str, int] = {}
+        recent_used = 0
+        for lesson in lessons:
+            guardrail = lesson.get("guardrail") if isinstance(lesson.get("guardrail"), dict) else {}
+            failure_class = str(guardrail.get("failure_class") or "").strip()
+            if failure_class:
+                recurring[failure_class] = recurring.get(failure_class, 0) + 1
+            if lesson.get("last_used_at"):
+                recent_used += 1
+        top_failure_classes = [
+            {"failure_class": key, "count": count}
+            for key, count in sorted(recurring.items(), key=lambda item: (-item[1], item[0]))[:3]
+        ]
+        return {
+            "total_lessons": len(lessons),
+            "recently_used": recent_used,
+            "top_failure_classes": top_failure_classes,
+        }
+
+    # --- Autonomous healer lock registry ---
+
+    def cleanup_expired_healer_locks(self) -> int:
+        conn = self._connect()
+        with self._lock:
+            cursor = conn.execute(
+                "DELETE FROM healer_locks WHERE lease_expires_at <= CURRENT_TIMESTAMP"
+            )
+            conn.commit()
+            return int(cursor.rowcount)
+
+    def acquire_healer_lock(
+        self,
+        *,
+        lock_key: str,
+        granularity: str,
+        issue_id: str,
+        lease_owner: str,
+        lease_seconds: int,
+    ) -> bool:
+        conn = self._connect()
+        with self._lock:
+            conn.execute(
+                "DELETE FROM healer_locks WHERE lease_expires_at <= CURRENT_TIMESTAMP"
+            )
+            row = conn.execute(
+                "SELECT * FROM healer_locks WHERE lock_key = ?",
+                (lock_key,),
+            ).fetchone()
+            if row is None:
+                conn.execute(
+                    """
+                    INSERT INTO healer_locks(lock_key, granularity, issue_id, lease_owner, lease_expires_at)
+                    VALUES(?, ?, ?, ?, datetime('now', ?))
+                    """,
+                    (lock_key, granularity, issue_id, lease_owner, f"+{int(max(1, lease_seconds))} seconds"),
+                )
+                conn.commit()
+                return True
+
+            existing_issue = str(row["issue_id"])
+            if existing_issue != issue_id:
+                conn.commit()
+                return False
+
+            conn.execute(
+                """
+                UPDATE healer_locks
+                SET granularity = ?,
+                    lease_owner = ?,
+                    lease_expires_at = datetime('now', ?)
+                WHERE lock_key = ? AND issue_id = ?
+                """,
+                (
+                    granularity,
+                    lease_owner,
+                    f"+{int(max(1, lease_seconds))} seconds",
+                    lock_key,
+                    issue_id,
+                ),
+            )
+            conn.commit()
+            return True
+
+    def release_healer_locks(self, *, issue_id: str, lock_keys: list[str] | None = None) -> int:
+        conn = self._connect()
+        with self._lock:
+            if lock_keys:
+                placeholders = ",".join("?" for _ in lock_keys)
+                cursor = conn.execute(
+                    f"DELETE FROM healer_locks WHERE issue_id = ? AND lock_key IN ({placeholders})",
+                    [issue_id, *lock_keys],
+                )
+            else:
+                cursor = conn.execute(
+                    "DELETE FROM healer_locks WHERE issue_id = ?",
+                    (issue_id,),
+                )
+            conn.commit()
+            return int(cursor.rowcount)
+
+    def list_healer_locks(self, *, issue_id: str | None = None) -> list[dict[str, Any]]:
+        conn = self._connect()
+        with self._lock:
+            if issue_id:
+                rows = conn.execute(
+                    "SELECT * FROM healer_locks WHERE issue_id = ? ORDER BY lock_key ASC",
+                    (issue_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM healer_locks ORDER BY lock_key ASC",
+                ).fetchall()
+        return [self._row_to_dict(row) for row in rows if row is not None]
+
+    # --- Scan pipeline state ---
+
+    def create_scan_run(self, *, run_id: str, dry_run: bool) -> None:
+        conn = self._connect()
+        with self._lock:
+            conn.execute(
+                """
+                INSERT INTO scan_runs(run_id, status, dry_run)
+                VALUES(?, 'running', ?)
+                """,
+                (run_id, 1 if dry_run else 0),
+            )
+            conn.commit()
+
+    def finish_scan_run(self, *, run_id: str, status: str, summary: dict[str, Any]) -> bool:
+        conn = self._connect()
+        with self._lock:
+            cursor = conn.execute(
+                """
+                UPDATE scan_runs
+                SET status = ?, summary_json = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE run_id = ?
+                """,
+                (status, json.dumps(summary or {}), run_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_scan_finding(self, fingerprint: str) -> dict[str, Any] | None:
+        conn = self._connect()
+        with self._lock:
+            row = conn.execute(
+                "SELECT * FROM scan_findings WHERE fingerprint = ?",
+                (fingerprint,),
+            ).fetchone()
+        data = self._row_to_dict(row)
+        if data is None:
+            return None
+        try:
+            data["payload"] = json.loads(data.pop("payload_json", "{}"))
+        except json.JSONDecodeError:
+            data["payload"] = {}
+        return data
+
+    def upsert_scan_finding(
+        self,
+        *,
+        fingerprint: str,
+        scan_type: str,
+        severity: str,
+        title: str,
+        status: str,
+        payload: dict[str, Any],
+        issue_number: int | None = None,
+    ) -> None:
+        conn = self._connect()
+        with self._lock:
+            conn.execute(
+                """
+                INSERT INTO scan_findings(
+                    fingerprint, scan_type, severity, title, issue_number, status, payload_json
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(fingerprint) DO UPDATE SET
+                    scan_type = excluded.scan_type,
+                    severity = excluded.severity,
+                    title = excluded.title,
+                    issue_number = COALESCE(excluded.issue_number, scan_findings.issue_number),
+                    status = excluded.status,
+                    payload_json = excluded.payload_json,
+                    last_seen_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    fingerprint,
+                    scan_type,
+                    severity,
+                    title,
+                    issue_number,
+                    status,
+                    json.dumps(payload or {}),
+                ),
+            )
+            conn.commit()
 
     def set_state(self, key: str, value: str) -> None:
         conn = self._connect()

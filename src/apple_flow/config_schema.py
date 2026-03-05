@@ -19,6 +19,7 @@ _SECTION_ORDER: list[tuple[str, str, bool]] = [
     ("calendar", "Calendar", False),
     ("attachments", "Attachments", False),
     ("execution", "Progress & Execution", False),
+    ("healer", "Autonomous Healer", False),
     ("companion", "Companion", False),
     ("memory", "Memory", False),
     ("scheduler", "Scheduler & Ambient", False),
@@ -54,6 +55,9 @@ _ENUM_OPTIONS: dict[str, list[str]] = {
         "saturday",
         "sunday",
     ],
+    "apple_flow_healer_mode": ["guarded_pr", "auto_merge_low_risk", "full_auto"],
+    "apple_flow_healer_sandbox_mode": ["docker"],
+    "apple_flow_healer_scan_severity_threshold": ["low", "medium", "high", "critical"],
 }
 
 _SKIP_KEYS = {
@@ -146,6 +150,8 @@ def _section_for_key(key: str) -> str:
         "apple_flow_codex_turn_timeout"
     ) or key.startswith("apple_flow_max_concurrent_") or key.startswith("apple_flow_enable_verifier"):
         return "execution"
+    if key.startswith("apple_flow_enable_autonomous_healer") or key.startswith("apple_flow_healer_"):
+        return "healer"
     if key.startswith("apple_flow_enable_companion") or key.startswith("apple_flow_companion_") or key.startswith(
         "apple_flow_soul_file"
     ):

@@ -31,3 +31,6 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+      - name: Run harness eval pack
+        run: python scripts/harness_eval_pack.py --json-out dist/harness-eval-pack.json

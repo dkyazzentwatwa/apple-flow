@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.1] - 2026-03-03
+## [0.5.0] - 2026-03-05
+
+### Added
+- **Autonomous Flow Healer control plane**: Added GitHub-issue-driven autonomous remediation with queue ingestion, leases, reconciliation, lock prediction/upgrade, isolated workspaces, proposer/verifier passes, guarded PR flow, and healer dashboard visibility.
+- **Healer scan pipeline**: Added local scan-to-issue workflow, deduplicated finding fingerprints, scan summary reporting, and `system: healer scan [dry-run]` controls.
+- **Healer memory layer**: Added optional internal lesson storage and retrieval (`apple_flow_healer_learning_enabled`) so prior successful fixes and meaningful failures can become future guardrails.
+- **Flow Healer docs pack**: Added dedicated healer guides, including what/why, how-to, operations/troubleshooting, workshop guide, and a comprehensive manual.
+- **Harness eval artifacts/docs**: Added focused harness pack script and supporting docs for risk-bundle/release-gate evaluation.
+
+### Changed
+- **Healer GitHub auth fallback**: Flow Healer now falls back to reading `GITHUB_TOKEN` from the project `.env` when launchd does not export it into the daemon environment.
+- **Release-facing docs**: README, `.env.example`, and healer docs now describe the autonomous healer, learning layer, dashboard semantics, and workshop/release-readiness flows.
+- **Pages workshop export**: Refreshed the official Flow Healer workshop Pages document from the updated Markdown source with a native TOC.
+
+### Fixed
+- **Healer launchd token blind spot**: Fixed a runtime configuration gap where healer remained disabled under launchd despite `GITHUB_TOKEN` being present in `.env`.
 
 ### Added
 - **Multimodal image fallback for iMessage attachments**: Attachment prompt blocks now include image source paths so multimodal-capable CLI providers can analyze images directly even when local OCR is unavailable.
@@ -183,6 +198,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.5.0 | 2026-03-05 | Autonomous Flow Healer, scan-to-issue pipeline, healer learning layer, and dedicated healer docs/manuals |
 | 0.4.1 | 2026-03-03 | iMessage image multimodal fallback via attachment source paths; no Tesseract requirement for multimodal providers |
 | 0.4.0 | 2026-03-02 | Native Ollama connector, local Qwen support, and inbound attachment processing with safety limits/tests |
 | 0.3.1 | 2026-02-28 | Canonical memory v2 rollout (feature-flagged), shadow mode, maintenance, and docs/tests updates |
@@ -193,7 +209,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.3.0...v0.3.1

@@ -178,6 +178,33 @@ class RelaySettings(BaseSettings):
     # Executor / verifier behaviour
     enable_verifier: bool = False  # run a verification turn after execution (adds latency)
 
+    # Autonomous healer (GitHub issue-driven remediation loop)
+    enable_autonomous_healer: bool = False
+    healer_mode: str = "guarded_pr"  # guarded_pr | auto_merge_low_risk | full_auto
+    healer_repo_path: str = ""
+    healer_poll_interval_seconds: float = 120.0
+    healer_max_concurrent_issues: int = 2
+    healer_retry_budget: int = 8
+    healer_backoff_initial_seconds: int = 60
+    healer_backoff_max_seconds: int = 3600
+    healer_circuit_breaker_failure_rate: float = 0.5
+    healer_circuit_breaker_window: int = 20
+    healer_sandbox_mode: str = "docker"  # docker (phase-1 default/supported)
+    healer_issue_required_labels: list[str] = Field(default_factory=lambda: ["healer:ready"])
+    healer_trusted_actors: list[str] = Field(default_factory=list)
+    healer_max_wall_clock_seconds_per_issue: int = 1800
+    healer_max_diff_files: int = 20
+    healer_max_diff_lines: int = 1200
+    healer_max_failed_tests_allowed: int = 0
+    healer_pr_actions_require_approval: bool = True
+    healer_pr_required_label: str = "healer:pr-approved"
+    healer_learning_enabled: bool = False
+    healer_scan_enable_issue_creation: bool = True
+    healer_scan_max_issues_per_run: int = 5
+    healer_scan_severity_threshold: str = "medium"  # low | medium | high | critical
+    healer_scan_default_labels: list[str] = Field(default_factory=lambda: ["healer:ready", "kind:scan"])
+    healer_scan_notes_log: bool = False
+
     # File attachment settings
     enable_attachments: bool = False
     max_attachment_size_mb: int = 10
@@ -253,6 +280,9 @@ class RelaySettings(BaseSettings):
         "mail_allowed_senders",
         "claude_cli_tools",
         "claude_cli_allowed_tools",
+        "healer_issue_required_labels",
+        "healer_trusted_actors",
+        "healer_scan_default_labels",
         mode="before",
     )
     @classmethod
@@ -277,6 +307,11 @@ class RelaySettings(BaseSettings):
         "memory_v2_shadow_mode",
         "memory_v2_migrate_on_start",
         "memory_v2_include_legacy_fallback",
+        "enable_autonomous_healer",
+        "healer_pr_actions_require_approval",
+        "healer_learning_enabled",
+        "healer_scan_enable_issue_creation",
+        "healer_scan_notes_log",
         "enable_csv_audit_log",
         "csv_audit_include_headers_if_missing",
         "enable_markdown_automation_log",
@@ -314,6 +349,35 @@ class RelaySettings(BaseSettings):
                 f"Invalid timezone {value!r}. Use an IANA timezone like 'America/Los_Angeles'."
             ) from exc
         return value
+
+    @field_validator("healer_mode", mode="after")
+    @classmethod
+    def _validate_healer_mode(cls, value: str) -> str:
+        allowed = {"guarded_pr", "auto_merge_low_risk", "full_auto"}
+        normalized = (value or "").strip().lower()
+        if normalized in allowed:
+            return normalized
+        raise ValueError(f"Invalid healer_mode {value!r}. Allowed: {', '.join(sorted(allowed))}")
+
+    @field_validator("healer_sandbox_mode", mode="after")
+    @classmethod
+    def _validate_healer_sandbox_mode(cls, value: str) -> str:
+        allowed = {"docker"}
+        normalized = (value or "").strip().lower()
+        if normalized in allowed:
+            return normalized
+        raise ValueError(f"Invalid healer_sandbox_mode {value!r}. Allowed: {', '.join(sorted(allowed))}")
+
+    @field_validator("healer_scan_severity_threshold", mode="after")
+    @classmethod
+    def _validate_healer_scan_severity_threshold(cls, value: str) -> str:
+        allowed = {"low", "medium", "high", "critical"}
+        normalized = (value or "").strip().lower()
+        if normalized in allowed:
+            return normalized
+        raise ValueError(
+            f"Invalid healer_scan_severity_threshold {value!r}. Allowed: {', '.join(sorted(allowed))}"
+        )
 
     @field_validator("db_path", "messages_db_path", mode="after")
     @classmethod

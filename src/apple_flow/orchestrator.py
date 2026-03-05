@@ -15,6 +15,8 @@ from uuid import uuid4
 from .agent_teams import AgentTeamCatalog
 from .approval import ApprovalHandler, OrchestrationResult
 from .commanding import CommandKind, ParsedCommand, is_likely_mutating, parse_command
+from .healer_scan import FlowHealerScanner
+from .healer_tracker import GitHubHealerTracker
 from .models import InboundMessage, RunState
 from .notes_logging import log_to_notes
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
@@ -74,6 +76,12 @@ class RelayOrchestrator:
         office_syncer: OfficeSyncer | None = None,
         log_file_path: str | None = None,
         approval_sender_override: str = "",
+        healer_repo_path: str = "",
+        healer_scan_enable_issue_creation: bool = True,
+        healer_scan_max_issues_per_run: int = 5,
+        healer_scan_severity_threshold: str = "medium",
+        healer_scan_default_labels: list[str] | None = None,
+        healer_scan_notes_log: bool = False,
     ):
         self.connector = connector
         self.egress = egress
@@ -99,6 +107,12 @@ class RelayOrchestrator:
         self.office_syncer = office_syncer
         self.log_file_path = log_file_path
         self.team_catalog = AgentTeamCatalog(Path(__file__).resolve().parents[2])
+        self.healer_repo_path = (healer_repo_path or "").strip()
+        self.healer_scan_enable_issue_creation = bool(healer_scan_enable_issue_creation)
+        self.healer_scan_max_issues_per_run = max(1, int(healer_scan_max_issues_per_run))
+        self.healer_scan_severity_threshold = (healer_scan_severity_threshold or "medium").strip().lower()
+        self.healer_scan_default_labels = healer_scan_default_labels or ["healer:ready", "kind:scan"]
+        self.healer_scan_notes_log = bool(healer_scan_notes_log)
 
         self._approval = ApprovalHandler(
             connector=connector,
@@ -344,6 +358,7 @@ class RelayOrchestrator:
             "🔧 System controls:",
             "- 🔧 system: stop | restart | kill provider | cancel run <run_id>",
             "- 🔇 system: mute | unmute",
+            "- 🩺 system: healer | healer pause | healer resume | healer scan [dry-run]",
             "- 🔄 system: sync office",
             "- 🧩 system: teams list | team load <slug> | team current | team unload",
             "",
@@ -1011,6 +1026,27 @@ class RelayOrchestrator:
             self.store.set_state("companion_muted", "false")
             response = "Companion unmuted. Proactive messages re-enabled."
             self._send(sender, response, context=message.context)
+        elif sub in {"healer", "healer status", "healer dashboard"}:
+            response = self._healer_dashboard()
+            self._send(sender, response, context=message.context)
+        elif sub in {"healer pause", "pause healer"}:
+            self.store.set_state("healer_paused", "true")
+            response = "Flow Healer paused. Send `system: healer resume` to continue autonomous healing."
+            self._send(sender, response, context=message.context)
+        elif sub in {"healer resume", "resume healer"}:
+            self.store.set_state("healer_paused", "false")
+            response = "Flow Healer resumed."
+            self._send(sender, response, context=message.context)
+        elif sub in {"healer scan", "scan healer"}:
+            response = self._run_healer_scan(dry_run=False)
+            self._send(sender, response, context=message.context)
+            if self.healer_scan_notes_log:
+                self._log_to_notes("system", sender, "healer scan", response)
+        elif sub in {"healer scan dry-run", "healer scan dry run", "scan healer dry-run", "scan healer dry run"}:
+            response = self._run_healer_scan(dry_run=True)
+            self._send(sender, response, context=message.context)
+            if self.healer_scan_notes_log:
+                self._log_to_notes("system", sender, "healer scan dry-run", response)
         elif sub in ("sync office", "sync"):
             if self.office_syncer:
                 try:
@@ -1024,11 +1060,158 @@ class RelayOrchestrator:
         else:
             response = (
                 "Unknown system command. Use: "
-                "system: stop | restart | kill provider | cancel run <run_id> | mute | unmute | sync office | "
+                "system: stop | restart | kill provider | cancel run <run_id> | mute | unmute | "
+                "healer | healer pause | healer resume | healer scan [dry-run] | sync office | "
                 "teams list | team load <slug> | team current | team unload"
             )
             self._send(sender, response, context=message.context)
         return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
+
+    def _healer_dashboard(self) -> str:
+        if not hasattr(self.store, "list_healer_issues"):
+            return "Flow Healer dashboard unavailable: this store backend does not expose healer state."
+
+        states = [
+            "queued",
+            "claimed",
+            "running",
+            "verify_pending",
+            "pr_pending_approval",
+            "pr_open",
+            "blocked",
+            "failed",
+            "resolved",
+        ]
+        issues = self.store.list_healer_issues(states=states, limit=500)
+        by_state: dict[str, int] = {state: 0 for state in states}
+        for issue in issues:
+            state = str(issue.get("state") or "").lower()
+            if state in by_state:
+                by_state[state] += 1
+            else:
+                by_state[state] = by_state.get(state, 0) + 1
+
+        attempts: list[dict[str, Any]] = []
+        if hasattr(self.store, "list_recent_healer_attempts"):
+            attempts = self.store.list_recent_healer_attempts(limit=20)
+        attempt_total = len(attempts)
+        failure_count = 0
+        for attempt in attempts:
+            state = str(attempt.get("state") or "").lower()
+            if state not in {"pr_open", "resolved", "pr_pending_approval"}:
+                failure_count += 1
+        failure_rate = (failure_count / attempt_total) if attempt_total else 0.0
+
+        active_locks = 0
+        if hasattr(self.store, "list_healer_locks"):
+            active_locks = len(self.store.list_healer_locks())
+
+        pending = sorted(
+            [issue for issue in issues if str(issue.get("state") or "") in {"queued", "claimed", "running"}],
+            key=lambda item: (int(item.get("priority", 100)), str(item.get("issue_id", ""))),
+        )
+
+        lines = [
+            "🩺 Flow Healer Dashboard",
+            f"Paused: {'yes' if self.store.get_state('healer_paused') == 'true' else 'no'}",
+            f"Total tracked issues: {len(issues)}",
+            (
+                "State counts: "
+                f"queued={by_state.get('queued', 0)}, "
+                f"running={by_state.get('running', 0)}, "
+                f"verify_pending={by_state.get('verify_pending', 0)}, "
+                f"pr_pending_approval={by_state.get('pr_pending_approval', 0)}, "
+                f"pr_open={by_state.get('pr_open', 0)}, "
+                f"blocked={by_state.get('blocked', 0)}, "
+                f"failed={by_state.get('failed', 0)}, "
+                f"resolved={by_state.get('resolved', 0)}"
+            ),
+            (
+                f"Recent attempts: {attempt_total} "
+                f"(failure_rate={failure_rate:.0%})"
+            ),
+            f"Active lock leases: {active_locks}",
+        ]
+
+        if hasattr(self.store, "get_healer_lesson_stats"):
+            stats = self.store.get_healer_lesson_stats()
+            total_lessons = int(stats.get("total_lessons", 0) or 0)
+            recently_used = int(stats.get("recently_used", 0) or 0)
+            lines.append(f"Learned lessons: {total_lessons} (recently_used={recently_used})")
+            top_failure_classes = stats.get("top_failure_classes") or []
+            if isinstance(top_failure_classes, list) and top_failure_classes:
+                rendered = ", ".join(
+                    f"{entry.get('failure_class', '?')}={entry.get('count', 0)}"
+                    for entry in top_failure_classes[:3]
+                    if isinstance(entry, dict)
+                )
+                if rendered:
+                    lines.append(f"Top learned failure classes: {rendered}")
+
+        if pending:
+            lines.append("Top pending:")
+            for issue in pending[:5]:
+                issue_id = issue.get("issue_id", "?")
+                title = str(issue.get("title") or "").strip().replace("\n", " ")
+                if len(title) > 80:
+                    title = f"{title[:77]}..."
+                priority = issue.get("priority", "?")
+                state = issue.get("state", "?")
+                lines.append(f"- #{issue_id} [{state}] p={priority} {title}")
+        else:
+            lines.append("Top pending: none")
+
+        lines.append("Tip: use labels `healer:ready` + `healer:pr-approved` to advance guarded PR flow.")
+        return "\n".join(lines)
+
+    def _run_healer_scan(self, *, dry_run: bool) -> str:
+        if not self.healer_repo_path:
+            return "Flow Healer scan unavailable: `apple_flow_healer_repo_path` is not configured."
+        repo_path = Path(self.healer_repo_path).expanduser().resolve()
+        if not repo_path.exists():
+            return f"Flow Healer scan unavailable: repo path does not exist: {repo_path}"
+
+        tracker = GitHubHealerTracker(repo_path=repo_path)
+        scanner = FlowHealerScanner(
+            repo_path=repo_path,
+            store=self.store,
+            tracker=tracker,
+            severity_threshold=self.healer_scan_severity_threshold,
+            max_issues_per_run=self.healer_scan_max_issues_per_run,
+            default_labels=self.healer_scan_default_labels,
+            enable_issue_creation=self.healer_scan_enable_issue_creation,
+        )
+        summary = scanner.run_scan(dry_run=dry_run)
+        created = summary.get("created_issues") or []
+        created_lines = []
+        for issue in created[:5]:
+            number = issue.get("number", "?")
+            url = issue.get("html_url", "")
+            if url:
+                created_lines.append(f"- #{number}: {url}")
+            else:
+                created_lines.append(f"- #{number}")
+        lines = [
+            "🩺 Flow Healer Scan",
+            f"Mode: {'dry-run' if dry_run else 'live'}",
+            f"Run ID: {summary.get('run_id', '?')}",
+            f"Findings: {summary.get('findings_total', 0)} total, {summary.get('findings_over_threshold', 0)} at/above threshold",
+            f"Threshold: {summary.get('severity_threshold', self.healer_scan_severity_threshold)}",
+            (
+                f"Issues: {len(created)} created, "
+                f"{summary.get('deduped_count', 0)} deduped, "
+                f"{summary.get('skipped_budget_count', 0)} skipped (budget)"
+            ),
+        ]
+        failed_checks = summary.get("failed_checks") or []
+        if failed_checks:
+            lines.append("Failed checks: " + ", ".join(str(item) for item in failed_checks))
+        if created_lines:
+            lines.append("Created issue(s):")
+            lines.extend(created_lines)
+        elif not dry_run:
+            lines.append("Created issue(s): none")
+        return "\n".join(lines)
 
     def _parse_team_system_command(self, subcommand: str) -> tuple[str, str, str]:
         """Return (action, slug, remainder) for supported team system commands."""

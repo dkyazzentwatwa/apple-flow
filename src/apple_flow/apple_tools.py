@@ -1070,6 +1070,57 @@ def _build_toc_html(headings: list[dict[str, Any]]) -> str:
     return "".join(lines)
 
 
+def _insert_native_pages_toc(
+    pages_path: Path,
+    *,
+    include_title_page: bool,
+    warnings: list[str],
+) -> bool:
+    """Insert a real native Pages TOC so in-document links work."""
+
+    def _esc(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
+
+    esc_path = _esc(str(pages_path))
+    move_cursor_script = ""
+    if include_title_page:
+        # Best-effort move toward the document body so the TOC lands after the
+        # title page instead of on top of it.
+        move_cursor_script = """
+        tell application "System Events"
+            tell process "Pages"
+                key code 125 using {command down}
+            end tell
+        end tell
+        delay 0.3
+        """
+
+    script = f'''
+    tell application "Pages"
+        activate
+        open POSIX file "{esc_path}"
+    end tell
+    delay 1.5
+    {move_cursor_script}
+    tell application "System Events"
+        tell process "Pages"
+            click menu item "Document" of menu 1 of menu item "Table of Contents" of menu 1 of menu bar item "Insert" of menu bar 1
+        end tell
+    end tell
+    delay 1.0
+    tell application "Pages"
+        save front document
+        close front document saving yes
+    end tell
+    return "ok"
+    '''
+    result = _run_script(script, timeout=60.0)
+    if result == "ok":
+        return True
+    warnings.append(f"native Pages TOC insertion failed: {result or 'unknown error'}")
+    return False
+
+
 def _build_sources_html(citation_links: list[dict[str, str]]) -> str:
     if not citation_links:
         return ""
@@ -1301,11 +1352,9 @@ def _markdown_to_html_document(
     fallback_title = heading_entries[0]["text"] if heading_entries else ""
     if include_title_page:
         preface_parts.append(_build_title_page_html(metadata, fallback_title))
-    if include_toc and heading_entries:
-        preface_parts.append(_build_toc_html(heading_entries))
-    if include_toc and heading_entries and not include_title_page:
-        preface_parts.append(f"<p>{PAGES_PAGEBREAK_TOKEN}</p>")
-        stats["page_breaks"] += 1
+    # We no longer embed an HTML TOC here because those links do not survive
+    # the HTML -> RTF -> Pages conversion path as working internal links.
+    # A native Pages TOC is inserted after document creation instead.
 
     appendix_parts: list[str] = []
     if include_citations and citation_links:
@@ -1484,6 +1533,7 @@ def _render_pages_markdown(
         return value.replace("\\", "\\\\").replace('"', '\\"')
 
     exports: dict[str, str] = {}
+    native_toc_inserted = False
     try:
         with tempfile.TemporaryDirectory(prefix="appleflow-pages-") as tmp_dir:
             stem = source_path.stem if source_path is not None else "stdin-report"
@@ -1540,6 +1590,13 @@ def _render_pages_markdown(
             if result != "ok":
                 return {"ok": False, "error": result or "Pages conversion failed"}
 
+            if include_toc and headings:
+                native_toc_inserted = _insert_native_pages_toc(
+                    output,
+                    include_title_page=include_title_page,
+                    warnings=warnings,
+                )
+
             exports = _pages_export_document(output, export_targets, pages_app, warnings)
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "conversion timed out"}
@@ -1562,6 +1619,7 @@ def _render_pages_markdown(
         "options": {
             "title_page": include_title_page,
             "toc": include_toc,
+            "toc_native_inserted": native_toc_inserted,
             "citations": include_citations,
             "images": include_images,
             "page_break_marker": marker,

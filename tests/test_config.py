@@ -178,3 +178,41 @@ def test_timezone_rejects_invalid_name(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError, match="Invalid timezone"):
         RelaySettings(timezone="Not/A_Real_Zone")
+
+
+def test_healer_defaults(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.enable_autonomous_healer is False
+    assert settings.healer_mode == "guarded_pr"
+    assert settings.healer_sandbox_mode == "docker"
+    assert settings.healer_issue_required_labels == ["healer:ready"]
+    assert settings.healer_learning_enabled is False
+    assert settings.healer_scan_default_labels == ["healer:ready", "kind:scan"]
+    assert settings.healer_scan_severity_threshold == "medium"
+
+
+def test_healer_csv_list_parsing():
+    settings = RelaySettings(
+        healer_issue_required_labels="healer:ready,bug",
+        healer_trusted_actors="alice,bob",
+        healer_scan_default_labels="healer:ready,kind:scan,source:auto",
+    )
+    assert settings.healer_issue_required_labels == ["healer:ready", "bug"]
+    assert settings.healer_trusted_actors == ["alice", "bob"]
+    assert settings.healer_scan_default_labels == ["healer:ready", "kind:scan", "source:auto"]
+
+
+def test_healer_mode_validation():
+    with pytest.raises(ValueError, match="Invalid healer_mode"):
+        RelaySettings(healer_mode="bad-mode")
+
+
+def test_healer_sandbox_mode_validation():
+    with pytest.raises(ValueError, match="Invalid healer_sandbox_mode"):
+        RelaySettings(healer_sandbox_mode="local")
+
+
+def test_healer_scan_severity_threshold_validation():
+    with pytest.raises(ValueError, match="Invalid healer_scan_severity_threshold"):
+        RelaySettings(healer_scan_severity_threshold="urgent")

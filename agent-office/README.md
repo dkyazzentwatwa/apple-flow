@@ -95,5 +95,6 @@ All other content (daily notes, memory, logs) is gitignored. This is your person
 ## See Also
 
 - [Apple Flow documentation](../README.md)
+- [Harness workspace ops](./docs/HARNESS_WORKSPACE_OPS.md)
 - [AGENTS.md](../AGENTS.md) for complete agent instructions
 - `SCAFFOLD.md` for the full recreation specification

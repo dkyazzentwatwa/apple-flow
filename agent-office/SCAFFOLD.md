@@ -36,7 +36,7 @@ An AI reads this document and follows the numbered Recreation Steps at the end t
 | `70_playbooks/` | SOPs and checklists | — | Repeatable operating procedures, checklists | One-off notes or daily logs |
 | `80_automation/` | Automation specs | `apple-flow-routines.md` | Automation specs, routine definitions | Manual-only process notes (use playbooks) |
 | `90_logs/` | Automation audit trail | `automation-log.md` | Timestamped run results, actions, blockers | Planning notes or durable memory |
-| `templates/` | Note templates | 6 template files | Starter templates only | Filled-in notes or live content |
+| `templates/` | Note templates | 7 template files | Starter templates only | Filled-in notes or live content |
 
 ---
 
@@ -164,6 +164,31 @@ Last Updated: YYYY-MM-DD
 - Add:
 - Remove:
 - Refine:
+```
+
+### `templates/planner-mode-task.md`
+```markdown
+# Planner Mode Task — {{date}}
+
+## Objective
+-
+
+## Steps
+1.
+2.
+3.
+
+## Risks
+-
+
+## Done Criteria
+-
+
+## Guardrail Checks
+- [ ] Mutating actions are approval-gated.
+- [ ] Workspace path is explicit and allowlisted.
+- [ ] Context sources are minimal and relevant.
+- [ ] Success is measurable (not subjective only).
 ```
 
 ### `templates/project-brief.md`
@@ -435,11 +460,12 @@ Follow these steps in order to rebuild the workspace from zero:
    - `90_logs/automation-log.md`
    - `MEMORY.md`
 
-5. **Create all 6 template files** using verbatim content from the Template Contents section above:
+5. **Create all 7 template files** using verbatim content from the Template Contents section above:
    - `templates/capture-item.md`
    - `templates/daily-note.md`
    - `templates/automation-run-log.md`
    - `templates/weekly-review.md`
+   - `templates/planner-mode-task.md`
    - `templates/project-brief.md`
    - `templates/memory-entry.md`
 
@@ -455,6 +481,6 @@ Follow these steps in order to rebuild the workspace from zero:
    - All 10 numbered folders exist plus `templates/`.
    - Each numbered folder has an `intro.md`.
    - `00_inbox/inbox.md`, `90_logs/automation-log.md`, and `MEMORY.md` exist with correct headers.
-   - All 6 template files exist in `templates/`.
+   - All 7 template files exist in `templates/`.
    - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `SECURITY.md`, `CONTRIBUTING.md`, `README.md`, and `SCAFFOLD.md` exist at root.
    - No live user content was overwritten.
