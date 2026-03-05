@@ -46,6 +46,13 @@ def test_parse_fallback_to_chat():
     assert parsed.payload == "hello there"
 
 
+def test_parse_chat_does_not_treat_file_alias_as_workspace_alias():
+    parsed = parse_command("@f:context-bank summarize this file")
+    assert parsed.kind is CommandKind.CHAT
+    assert parsed.workspace == ""
+    assert parsed.payload == "@f:context-bank summarize this file"
+
+
 def test_parse_natural_team_commands():
     parsed = parse_command("list available agent teams")
     assert parsed.kind is CommandKind.SYSTEM

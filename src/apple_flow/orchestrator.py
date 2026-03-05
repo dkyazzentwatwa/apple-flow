@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
 _SEP = "━" * 30
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+_FILE_ALIAS_RE = re.compile(r"@f:([A-Za-z0-9][\w.-]*)")
 
 
 class RelayOrchestrator:
@@ -46,6 +47,7 @@ class RelayOrchestrator:
         require_chat_prefix: bool = True,
         chat_prefix: str = "relay:",
         workspace_aliases: dict[str, str] | None = None,
+        file_aliases: dict[str, str] | None = None,
         auto_context_messages: int = 0,
         enable_progress_streaming: bool = False,
         progress_update_interval_seconds: float = 30.0,
@@ -84,6 +86,7 @@ class RelayOrchestrator:
         self.require_chat_prefix = require_chat_prefix
         self.chat_prefix = (chat_prefix or "relay:").strip()
         self.workspace_aliases = workspace_aliases or {}
+        self.file_aliases = file_aliases or {}
         self.auto_context_messages = auto_context_messages
         self.enable_attachments = enable_attachments
         self.attachment_processor = attachment_processor
@@ -236,6 +239,16 @@ class RelayOrchestrator:
         if command.kind is CommandKind.SYSTEM:
             return self._handle_system(message, command.payload)
 
+        payload, file_alias_mappings, file_alias_warnings = self._resolve_file_aliases(command.payload)
+        if payload != command.payload:
+            command = ParsedCommand(kind=command.kind, payload=payload, workspace=command.workspace)
+        if file_alias_warnings:
+            self._send(
+                message.sender,
+                "File alias warnings:\n" + "\n".join(f"- {line}" for line in file_alias_warnings),
+                context=message.context,
+            )
+
         # Natural language mode: auto-promote bare CHAT messages with mutating intent to TASK
         if (
             command.kind is CommandKind.CHAT
@@ -270,6 +283,14 @@ class RelayOrchestrator:
             self._consume_active_team(message.sender)
 
         prompt = self._build_non_mutating_prompt(command.kind, command.payload, workspace)
+        if file_alias_mappings:
+            prompt = "Referenced file aliases:\n" + "\n".join(
+                f"- @f:{alias} -> {resolved}" for alias, resolved in file_alias_mappings
+            ) + f"\n\n{prompt}"
+        if file_alias_warnings:
+            prompt = "File alias warnings:\n" + "\n".join(
+                f"- {line}" for line in file_alias_warnings
+            ) + f"\n\n{prompt}"
         prompt = self._apply_team_prompt_fallback(prompt, team_context)
         prompt = self._inject_auto_context(message.sender, prompt)
         prompt = self._inject_attachment_context(message, prompt)
@@ -1361,6 +1382,63 @@ class RelayOrchestrator:
             if allowed_path == target or allowed_path in target.parents:
                 return True
         return False
+
+    def _resolve_file_aliases(self, payload: str) -> tuple[str, list[tuple[str, str]], list[str]]:
+        """Resolve inline @f:<alias> tokens to validated absolute file paths.
+
+        Returns (rewritten_payload, resolved_mappings, warnings).
+        """
+        if not payload or "@f:" not in payload:
+            return payload, [], []
+
+        resolved_by_alias: dict[str, str | None] = {}
+        resolved_pairs: list[tuple[str, str]] = []
+        seen_resolved: set[str] = set()
+        warnings: list[str] = []
+        seen_warnings: set[str] = set()
+
+        def _warn_once(message: str) -> None:
+            if message in seen_warnings:
+                return
+            seen_warnings.add(message)
+            warnings.append(message)
+
+        def _resolve(alias: str) -> str | None:
+            if alias in resolved_by_alias:
+                return resolved_by_alias[alias]
+
+            configured = str(self.file_aliases.get(alias) or "").strip()
+            if not configured:
+                _warn_once(f"@f:{alias} is not configured.")
+                resolved_by_alias[alias] = None
+                return None
+
+            target = Path(configured).expanduser().resolve()
+            if not target.exists() or not target.is_file():
+                _warn_once(f"@f:{alias} target missing file: {target}")
+                resolved_by_alias[alias] = None
+                return None
+            if not self._is_workspace_allowed(str(target)):
+                _warn_once(f"@f:{alias} is outside allowed_workspaces: {target}")
+                resolved_by_alias[alias] = None
+                return None
+
+            resolved_path = str(target)
+            resolved_by_alias[alias] = resolved_path
+            if alias not in seen_resolved:
+                seen_resolved.add(alias)
+                resolved_pairs.append((alias, resolved_path))
+            return resolved_path
+
+        def _replace(match: re.Match[str]) -> str:
+            alias = match.group(1)
+            resolved = _resolve(alias)
+            if resolved:
+                return resolved
+            return match.group(0)
+
+        rewritten = _FILE_ALIAS_RE.sub(_replace, payload)
+        return rewritten, resolved_pairs, warnings
 
     @staticmethod
     def _parse_dt(value: str | None) -> datetime | None:

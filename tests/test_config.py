@@ -51,6 +51,14 @@ def test_parse_claude_tool_lists_from_settings_init():
     assert settings.claude_cli_allowed_tools == ["WebSearch"]
 
 
+def test_parse_file_aliases_json_from_settings_init():
+    settings = RelaySettings(
+        file_aliases='{"context-bank":"/Users/cypher/Public/code/codex-flow/agent-office/MEMORY.md"}',
+    )
+    aliases = settings.get_file_aliases()
+    assert aliases["context-bank"] == str(Path("/Users/cypher/Public/code/codex-flow/agent-office/MEMORY.md").resolve())
+
+
 def test_personality_prompt_default_nonempty(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = RelaySettings()

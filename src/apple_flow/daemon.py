@@ -380,6 +380,7 @@ class RelayDaemon:
 
         # Shared orchestrator params
         workspace_aliases = settings.get_workspace_aliases()
+        file_aliases = settings.get_file_aliases()
         orchestrator_kwargs = dict(
             connector=self.connector,
             store=self.store,
@@ -388,6 +389,7 @@ class RelayDaemon:
             approval_ttl_minutes=settings.approval_ttl_minutes,
             chat_prefix=settings.chat_prefix,
             workspace_aliases=workspace_aliases,
+            file_aliases=file_aliases,
             auto_context_messages=settings.auto_context_messages,
             enable_progress_streaming=settings.enable_progress_streaming,
             progress_update_interval_seconds=settings.progress_update_interval_seconds,

@@ -32,7 +32,9 @@ class ParsedCommand:
 
 
 # Pattern: @alias at the start of the payload, e.g. "@web-app fix CSS"
-_WORKSPACE_ALIAS_RE = re.compile(r"^@([\w.-]+)\s*")
+# Require whitespace or end-of-string after alias to avoid collisions with tokens
+# like "@f:context-bank" that are intended as file references.
+_WORKSPACE_ALIAS_RE = re.compile(r"^@([\w.-]+)(?:\s+|$)")
 
 _MUTATING_VERB_RE = re.compile(
     r"\b(create|write|generate|scaffold|bootstrap|init(?:ialise|ialize)?|"

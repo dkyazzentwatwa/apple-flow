@@ -97,6 +97,8 @@ class RelaySettings(BaseSettings):
 
     # Workspace aliases for multi-workspace routing
     workspace_aliases: str = ""  # JSON dict: '{"web-app":"/path/to/web-app"}'
+    # File aliases for prompt references via @f:<alias>
+    file_aliases: str = ""  # JSON dict: '{"context-bank":"/path/to/MEMORY.md"}'
 
     # AI personality prompt (injected as system context for all chat turns)
     personality_prompt: str = (
@@ -361,6 +363,18 @@ class RelaySettings(BaseSettings):
             return {}
         try:
             aliases = json.loads(self.workspace_aliases)
+            if isinstance(aliases, dict):
+                return {k: str(Path(v).resolve()) for k, v in aliases.items()}
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return {}
+
+    def get_file_aliases(self) -> dict[str, str]:
+        """Parse file_aliases JSON string into an alias->absolute-filepath dict."""
+        if not self.file_aliases:
+            return {}
+        try:
+            aliases = json.loads(self.file_aliases)
             if isinstance(aliases, dict):
                 return {k: str(Path(v).resolve()) for k, v in aliases.items()}
         except (json.JSONDecodeError, TypeError):

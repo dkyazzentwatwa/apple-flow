@@ -118,6 +118,7 @@ def _section_for_key(key: str) -> str:
             "apple_flow_inject_tools_context",
             "apple_flow_trigger_tag",
             "apple_flow_workspace_aliases",
+            "apple_flow_file_aliases",
             "apple_flow_personality_prompt",
         )
     ):

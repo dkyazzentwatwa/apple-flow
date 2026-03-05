@@ -243,6 +243,26 @@ apple_flow_workspace_aliases={"web-app":"/Users/yourname/Projects/web-app","api"
 
 Then send: `task: @web-app run the test suite`
 
+### File Alias References
+
+Reference commonly used files in prompts with `@f:<alias>`.
+
+| Variable | Default | Description |
+|---|---|---|
+| `apple_flow_file_aliases` | `{}` | JSON object mapping alias names to absolute file paths. |
+
+**Example:**
+```bash
+apple_flow_file_aliases={"context-bank":"/Users/yourname/code/codex-flow/agent-office/MEMORY.md"}
+```
+
+Then send: `plan: summarize @f:context-bank`
+
+Behavior:
+- Apple Flow resolves known aliases to absolute file paths before prompting the connector.
+- Unknown/missing/out-of-policy aliases produce a warning and continue.
+- v1 is path-only (does not auto-inject file contents from this feature).
+
 ---
 
 ## Progress Streaming

@@ -224,6 +224,15 @@ task: @web-app deploy to staging
 @api show recent errors
 ```
 
+### File references with aliases
+
+Define file aliases in `.env` via `apple_flow_file_aliases` and reference them in prompts with `@f:<alias>`.
+
+```text
+plan: summarize @f:context-bank
+task: review @f:runbook and propose updates
+```
+
 ## Optional Integrations
 
 All optional gateways are off by default.
