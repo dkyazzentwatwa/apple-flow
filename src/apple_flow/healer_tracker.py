@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,16 +40,34 @@ class GitHubHealerTracker:
 
     def __init__(self, *, repo_path: Path, token: str | None = None) -> None:
         self.repo_path = Path(repo_path).resolve()
+        self._explicit_token = (token or "").strip()
+        self._env_token = os.getenv("GITHUB_TOKEN", "").strip()
+        self._dotenv_token = self._load_token_from_env_file().strip()
         self.token = (
-            token
-            or os.getenv("GITHUB_TOKEN", "")
-            or self._load_token_from_env_file()
+            self._explicit_token
+            or self._env_token
+            or self._dotenv_token
         ).strip()
         self.repo_slug = self._infer_repo_slug(self.repo_path)
+        self._gh_auth_ok_cache: bool | None = None
 
     @property
     def enabled(self) -> bool:
-        return bool(self.token and self.repo_slug)
+        return bool(self.repo_slug and (self._gh_auth_ok() or self.token))
+
+    @property
+    def background_auth_available(self) -> bool:
+        return bool(self.repo_slug and self.token)
+
+    @property
+    def auth_source(self) -> str:
+        if self._explicit_token or self._env_token:
+            return "token_env"
+        if self._dotenv_token:
+            return "token_dotenv"
+        if self.repo_slug and self._gh_auth_ok():
+            return "gh_cli"
+        return "none"
 
     def list_ready_issues(
         self,
@@ -210,6 +229,63 @@ class GitHubHealerTracker:
         return str(payload.get("state") or "")
 
     def _request_json(self, path: str, *, method: str = "GET", body: dict[str, Any] | None = None) -> Any:
+        if self.token:
+            payload = self._request_json_via_http(path, method=method, body=body)
+            if payload is not None:
+                return payload
+        if self._gh_auth_ok():
+            payload = self._request_json_via_gh(path, method=method, body=body)
+            if payload is not None:
+                return payload
+        return {}
+
+    def _request_json_via_gh(self, path: str, *, method: str = "GET", body: dict[str, Any] | None = None) -> Any | None:
+        route = path.lstrip("/")
+        if not route:
+            return None
+
+        cmd = [
+            "gh",
+            "api",
+            route,
+            "--method",
+            method.upper(),
+            "--header",
+            "Accept: application/vnd.github+json",
+        ]
+        payload = None
+        if body is not None:
+            payload = json.dumps(body)
+            cmd.extend(["--header", "Content-Type: application/json", "--input", "-"])
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+                input=payload,
+                timeout=20,
+            )
+        except Exception as exc:
+            logger.warning("gh api %s %s failed to start: %s", method, path, exc)
+            return None
+
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or "").strip()
+            logger.warning("gh api %s %s failed: %s", method, path, detail[:300])
+            return None
+
+        raw = (proc.stdout or "").strip()
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("gh api returned non-JSON response for %s %s", method, path)
+            return None
+
+    def _request_json_via_http(self, path: str, *, method: str = "GET", body: dict[str, Any] | None = None) -> Any | None:
         url = f"https://api.github.com{path}"
         data: bytes | None = None
         if body is not None:
@@ -226,13 +302,33 @@ class GitHubHealerTracker:
                 return json.loads(raw) if raw else {}
         except HTTPError as exc:
             logger.warning("GitHub API %s %s failed: %s", method, path, exc)
-            return {}
+            return None
         except URLError as exc:
             logger.warning("GitHub API network error for %s %s: %s", method, path, exc)
-            return {}
+            return None
         except json.JSONDecodeError:
             logger.warning("GitHub API returned non-JSON response for %s %s", method, path)
-            return {}
+            return None
+
+    def _gh_auth_ok(self) -> bool:
+        if self._gh_auth_ok_cache is not None:
+            return self._gh_auth_ok_cache
+        if shutil.which("gh") is None:
+            self._gh_auth_ok_cache = False
+            return False
+        try:
+            proc = subprocess.run(
+                ["gh", "auth", "status", "--hostname", "github.com"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except Exception:
+            self._gh_auth_ok_cache = False
+            return False
+        self._gh_auth_ok_cache = proc.returncode == 0
+        return self._gh_auth_ok_cache
 
     def _load_token_from_env_file(self) -> str:
         candidates = [

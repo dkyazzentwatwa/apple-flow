@@ -227,3 +227,51 @@ def test_heartbeat_reports_last_output_staleness():
     assert any("last output" in text for text in heartbeat_messages)
     heartbeat_events = [evt for evt in orch.store.events if evt.get("event_type") == "heartbeat"]
     assert any((evt.get("payload") or {}).get("last_snippet") == "line: setup done" for evt in heartbeat_events)
+
+
+def test_streaming_used_for_plain_chat_turn():
+    orch = RelayOrchestrator(
+        connector=StreamingConnector(),
+        egress=FakeEgress(),
+        store=FakeStore(),
+        allowed_workspaces=["/workspace/default"],
+        default_workspace="/workspace/default",
+        require_chat_prefix=False,
+        enable_progress_streaming=True,
+        progress_update_interval_seconds=0.0,
+    )
+
+    msg = InboundMessage(
+        id="m30", sender="+15551234567", text="Search the web for latest news on OpenAI",
+        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+
+    assert "Streaming result" in (result.response or "")
+    assert len(orch.connector.stream_calls) == 1
+    progress_messages = [text for _, text in orch.egress.messages if "[Progress]" in text]
+    assert progress_messages
+
+
+def test_plain_chat_heartbeat_reports_no_streamed_output_detail():
+    orch = RelayOrchestrator(
+        connector=SilentStreamingConnector(),
+        egress=FakeEgress(),
+        store=FakeStore(),
+        allowed_workspaces=["/workspace/default"],
+        default_workspace="/workspace/default",
+        require_chat_prefix=False,
+        enable_progress_streaming=True,
+        progress_update_interval_seconds=0.0,
+    )
+    orch._approval.execution_heartbeat_seconds = 0.01
+
+    msg = InboundMessage(
+        id="m31", sender="+15551234567", text="Search the web for latest news on OpenAI",
+        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+    )
+    orch.handle_message(msg)
+
+    heartbeat_messages = [text for _, text in orch.egress.messages if "Still working (chat)" in text]
+    assert heartbeat_messages
+    assert any("no streamed output yet" in text for text in heartbeat_messages)

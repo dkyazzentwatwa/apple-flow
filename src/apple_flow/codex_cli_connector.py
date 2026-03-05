@@ -48,6 +48,9 @@ class CodexCliConnector:
         self.inject_tools_context = inject_tools_context
         self.soul_prompt: str = ""
         self._processes = ManagedProcessRegistry("codex-cli")
+        reaped = self._processes.reap_orphans()
+        if reaped:
+            logger.warning("Reaped %d orphaned codex-cli process(es) from prior daemon instance(s)", reaped)
 
         # Store minimal conversation history per sender for context
         # Format: {"sender": ["User: ...\nAssistant: ...", ...]}

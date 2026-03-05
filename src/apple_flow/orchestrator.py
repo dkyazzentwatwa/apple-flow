@@ -6,6 +6,7 @@ import os
 import re
 import signal
 import subprocess
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -96,6 +97,7 @@ class RelayOrchestrator:
         self.workspace_aliases = workspace_aliases or {}
         self.file_aliases = file_aliases or {}
         self.auto_context_messages = auto_context_messages
+        self.enable_progress_streaming = enable_progress_streaming
         self.enable_attachments = enable_attachments
         self.attachment_processor = attachment_processor
         self.personality_prompt = personality_prompt
@@ -310,11 +312,13 @@ class RelayOrchestrator:
         prompt = self._inject_attachment_context(message, prompt)
         prompt = self._inject_memory_context(prompt)
 
-        response = self._run_connector_turn(
-            thread_id,
-            prompt,
+        response = self._run_non_mutating_turn(
+            sender=message.sender,
+            thread_id=thread_id,
+            prompt=prompt,
+            context=message.context,
             team_context=team_context,
-            allow_tools=False,
+            allow_tools=True,
         )
         self._send(message.sender, response, context=message.context)
         self._log_to_notes(command.kind.value, message.sender, command.payload, response)
@@ -1491,6 +1495,156 @@ class RelayOrchestrator:
             except TypeError:
                 pass
         return self.connector.run_turn(thread_id, prompt)
+
+    def _run_connector_turn_streaming(
+        self,
+        thread_id: str,
+        prompt: str,
+        on_progress: Any,
+        team_context: dict[str, Any] | None = None,
+        *,
+        allow_tools: bool = False,
+        cwd: str | None = None,
+    ) -> str:
+        options: dict[str, Any] = {}
+        if team_context and team_context.get("codex_config_path"):
+            options["codex_config_path"] = team_context["codex_config_path"]
+        if allow_tools:
+            options["allow_tools"] = True
+        if cwd and allow_tools:
+            options["cwd"] = cwd
+        if options:
+            try:
+                return self.connector.run_turn_streaming(
+                    thread_id,
+                    prompt,
+                    on_progress,
+                    options=options,
+                )  # type: ignore[arg-type]
+            except TypeError:
+                pass
+        return self.connector.run_turn_streaming(thread_id, prompt, on_progress)
+
+    def _run_non_mutating_turn(
+        self,
+        *,
+        sender: str,
+        thread_id: str,
+        prompt: str,
+        context: dict[str, Any] | None = None,
+        team_context: dict[str, Any] | None = None,
+        allow_tools: bool = True,
+        cwd: str | None = None,
+    ) -> str:
+        if self.enable_progress_streaming and hasattr(self.connector, "run_turn_streaming"):
+            return self._run_non_mutating_with_progress(
+                sender=sender,
+                thread_id=thread_id,
+                prompt=prompt,
+                context=context,
+                team_context=team_context,
+                allow_tools=allow_tools,
+                cwd=cwd,
+            )
+        return self._run_non_mutating_with_heartbeat(
+            sender=sender,
+            runner=lambda: self._run_connector_turn(
+                thread_id,
+                prompt,
+                team_context=team_context,
+                allow_tools=allow_tools,
+                cwd=cwd,
+            ),
+            context=context,
+        )
+
+    def _run_non_mutating_with_progress(
+        self,
+        *,
+        sender: str,
+        thread_id: str,
+        prompt: str,
+        context: dict[str, Any] | None = None,
+        team_context: dict[str, Any] | None = None,
+        allow_tools: bool = True,
+        cwd: str | None = None,
+    ) -> str:
+        last_update = 0.0
+        progress_state: dict[str, Any] = {
+            "last_output_monotonic": None,
+            "last_snippet": "",
+        }
+
+        def on_progress(line: str) -> None:
+            nonlocal last_update
+            now = time.monotonic()
+            preview = line.strip()[:200]
+            if preview:
+                progress_state["last_output_monotonic"] = now
+                progress_state["last_snippet"] = preview
+            if preview and (now - last_update) >= self._approval.progress_update_interval_seconds:
+                self._send(sender, f"[Progress] {preview}", context=context)
+                last_update = now
+
+        return self._run_non_mutating_with_heartbeat(
+            sender=sender,
+            runner=lambda: self._run_connector_turn_streaming(
+                thread_id,
+                prompt,
+                on_progress,
+                team_context=team_context,
+                allow_tools=allow_tools,
+                cwd=cwd,
+            ),
+            context=context,
+            progress_state=progress_state,
+        )
+
+    def _run_non_mutating_with_heartbeat(
+        self,
+        *,
+        sender: str,
+        runner: Callable[[], str],
+        context: dict[str, Any] | None = None,
+        progress_state: dict[str, Any] | None = None,
+    ) -> str:
+        done = threading.Event()
+        result: dict[str, str] = {}
+        error: dict[str, Exception] = {}
+        start = time.monotonic()
+
+        def _target() -> None:
+            try:
+                result["output"] = runner()
+            except Exception as exc:  # pragma: no cover - runtime safety
+                error["exc"] = exc
+            finally:
+                done.set()
+
+        thread = threading.Thread(target=_target, daemon=True)
+        thread.start()
+
+        while not done.wait(timeout=self._approval.execution_heartbeat_seconds):
+            now = time.monotonic()
+            elapsed = int(now - start)
+            detail = "no streamed output yet"
+            if progress_state:
+                last_output = progress_state.get("last_output_monotonic")
+                last_snippet = str(progress_state.get("last_snippet") or "")
+                if isinstance(last_output, (int, float)):
+                    stale_for = max(0, int(now - float(last_output)))
+                    if last_snippet:
+                        detail = f"last output {stale_for}s ago: {last_snippet}"
+            self._send(
+                sender,
+                f"⏳ Still working (chat) — {elapsed}s elapsed; {detail}.",
+                context=context,
+            )
+
+        if "exc" in error:
+            raise error["exc"]
+
+        return result.get("output", "")
 
     def _is_codex_cli_connector(self) -> bool:
         return self.connector.__class__.__name__ == "CodexCliConnector"

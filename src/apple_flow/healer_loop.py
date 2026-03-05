@@ -69,8 +69,14 @@ class AutonomousHealerLoop:
         if not self.repo_path.exists():
             logger.warning("Autonomous healer repo path does not exist: %s", self.repo_path)
             return False
-        if not self.tracker.enabled:
-            logger.warning("Autonomous healer disabled: missing GitHub token or origin slug.")
+        if not self.tracker.repo_slug:
+            logger.warning("Autonomous healer disabled: missing GitHub origin slug.")
+            return False
+        if not self.tracker.background_auth_available:
+            logger.warning(
+                "Autonomous healer disabled: missing background GitHub token (auth_source=%s).",
+                self.tracker.auth_source,
+            )
             return False
         return True
 
@@ -78,10 +84,11 @@ class AutonomousHealerLoop:
         if not self.enabled:
             return
         logger.info(
-            "Autonomous healer loop enabled (repo=%s, mode=%s, poll=%.0fs)",
+            "Autonomous healer loop enabled (repo=%s, mode=%s, poll=%.0fs, auth_source=%s)",
             self.repo_path,
             self.settings.healer_mode,
             self.settings.healer_poll_interval_seconds,
+            self.tracker.auth_source,
         )
         while not is_shutdown():
             try:
