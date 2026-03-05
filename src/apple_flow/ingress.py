@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import string
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ class IMessageIngress:
         self.enable_attachments = enable_attachments
         self.max_attachment_size_mb = max_attachment_size_mb
         self._conn: sqlite3.Connection | None = None
+        self._message_columns: set[str] | None = None
 
     def _connect(self) -> sqlite3.Connection:
         if self._conn is not None:
@@ -36,6 +38,14 @@ class IMessageIngress:
             except Exception:
                 pass
             self._conn = None
+        self._message_columns = None
+
+    def _get_message_columns(self) -> set[str]:
+        if self._message_columns is not None:
+            return self._message_columns
+        rows = self._query_all("PRAGMA table_info(message)", [])
+        self._message_columns = {str(row["name"]) for row in rows}
+        return self._message_columns
 
     def _query_all(self, query: str, params: list[Any]) -> list[sqlite3.Row]:
         # Retry once after reconnect for transient DB-open failures.
@@ -80,11 +90,16 @@ class IMessageIngress:
         if predicate_parts:
             predicate = f"WHERE {' AND '.join(predicate_parts)}"
 
+        columns = self._get_message_columns()
+        has_attributed_body = "attributedBody" in columns
+
+        attributed_body_select = "m.attributedBody AS attributed_body" if has_attributed_body else "X'' AS attributed_body"
         query = f"""
             SELECT
                 m.ROWID as rowid,
                 COALESCE(h.id, m.destination_caller_id, 'unknown') as sender,
                 COALESCE(m.text, '') as text,
+                {attributed_body_select},
                 datetime(m.date / 1000000000 + strftime('%s','2001-01-01'), 'unixepoch') as received_at,
                 m.is_from_me as is_from_me
             FROM message m
@@ -106,17 +121,86 @@ class IMessageIngress:
                 attachments = self._fetch_attachments(int(row["rowid"]))
                 if attachments:
                     context["attachments"] = attachments
+            resolved_text = self._resolve_message_text(row["text"], row["attributed_body"])
             messages.append(
                 InboundMessage(
                     id=str(row["rowid"]),
                     sender=normalize_sender(row["sender"]),
-                    text=row["text"],
+                    text=resolved_text,
                     received_at=row["received_at"],
                     is_from_me=bool(row["is_from_me"]),
                     context=context,
                 )
             )
         return messages
+
+    @staticmethod
+    def _resolve_message_text(text: str | None, attributed_body: bytes | None) -> str:
+        direct = (text or "").strip()
+        if direct:
+            return direct
+        if not attributed_body:
+            return ""
+        return IMessageIngress._decode_attributed_body(attributed_body)
+
+    @staticmethod
+    def _decode_attributed_body(blob: bytes | bytearray) -> str:
+        if not blob:
+            return ""
+        data = bytes(blob)
+        printable = set(string.printable.encode("ascii"))
+        runs: list[str] = []
+        current = bytearray()
+        for byte in data:
+            if byte in printable:
+                current.append(byte)
+            else:
+                if len(current) >= 3:
+                    runs.append(current.decode("ascii", "ignore"))
+                current = bytearray()
+        if len(current) >= 3:
+            runs.append(current.decode("ascii", "ignore"))
+        if not runs:
+            return ""
+
+        metadata_tokens = (
+            "streamtyped",
+            "NSAttributedString",
+            "NSMutableAttributedString",
+            "NSMutableString",
+            "NSDictionary",
+            "NSObject",
+            "NSString",
+            "NSNumber",
+            "NSValue",
+            "__kIM",
+        )
+        command_tokens = (
+            "relay:",
+            "task:",
+            "project:",
+            "plan:",
+            "idea:",
+            "status",
+            "approve",
+            "deny",
+            "health",
+            "history:",
+        )
+
+        def score(value: str) -> int:
+            s = value.strip()
+            if not s:
+                return -10_000
+            token_penalty = sum(40 for token in metadata_tokens if token in s)
+            command_bonus = sum(120 for token in command_tokens if token in s.lower())
+            natural_bonus = 30 if any(ch.isspace() for ch in s) else 0
+            return len(s) + command_bonus + natural_bonus - token_penalty
+
+        candidate = max(runs, key=score).strip()
+        if candidate.startswith("+") and len(candidate) > 3 and candidate[1].isalpha() and candidate[2].isalpha():
+            candidate = candidate[2:]
+        return candidate.strip()
 
     def _fetch_attachments(self, message_rowid: int) -> list[dict[str, str]]:
         """Fetch attachment metadata for a message from chat.db."""
