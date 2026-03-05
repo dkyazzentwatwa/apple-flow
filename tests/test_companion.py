@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -783,6 +784,11 @@ class TestStartupGreeting:
         recipient, text = egress.messages[0]
         assert recipient == comp.owner
         assert "Companion online" in text
+        suppress = store.get_state("companion_echo_suppress")
+        assert suppress is not None
+        markers = json.loads(suppress)
+        assert any(m.get("sender") == comp.owner for m in markers)
+        assert any("Companion online" in str(m.get("text", "")) for m in markers)
 
     async def test_startup_greeting_throttled(self):
         """No greeting sent if companion_greeted_at already equals the current hour."""
@@ -881,3 +887,17 @@ class TestCheckAndNotifyTelemetry:
             comp._check_and_notify()
         assert store.get_state("companion_last_sent_at") is not None
         assert store.get_state("companion_last_skip_reason") == ""
+
+    def test_echo_suppress_stores_chunk_markers(self):
+        class ChunkingEgress(FakeEgress):
+            def _chunk(self, _text):  # pragma: no cover - called via reflection
+                return ["chunk one", "chunk two"]
+
+        store = FakeStore()
+        comp = _make_companion(egress=ChunkingEgress(), store=store)
+        comp._remember_companion_echo_suppress("this is long")
+        raw = store.get_state("companion_echo_suppress")
+        assert raw is not None
+        markers = json.loads(raw)
+        assert [m.get("text") for m in markers] == ["chunk one", "chunk two"]
+        assert all(m.get("sender") == comp.owner for m in markers)

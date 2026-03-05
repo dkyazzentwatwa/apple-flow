@@ -1,6 +1,8 @@
 import asyncio
+import json
 import sqlite3
 import threading
+import time
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -703,6 +705,49 @@ def test_consume_restart_echo_suppress_ignores_non_matching_text():
 
     assert not daemon._consume_restart_echo_suppress("+15551234567", "hello there")
     assert marker_store["clears"] == 0
+
+
+def test_consume_companion_echo_suppress_matches_and_clears():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    future = time.time() + 120.0
+    marker_store = {
+        "value": json.dumps([
+            {"sender": "+15551234567", "text": "🤖 Companion online", "expires_at": future},
+            {"sender": "+15557654321", "text": "keep me", "expires_at": future},
+        ])
+    }
+    daemon.store = SimpleNamespace(
+        get_state=lambda _key: marker_store["value"],
+        set_state=lambda _key, value: marker_store.__setitem__("value", value),
+    )
+
+    matched = daemon._consume_companion_echo_suppress("+15551234567", "Companion online")
+
+    assert matched is True
+    remaining = json.loads(marker_store["value"])
+    assert len(remaining) == 1
+    assert remaining[0]["sender"] == "+15557654321"
+
+
+def test_consume_companion_echo_suppress_prunes_expired_without_match():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    marker_store = {
+        "value": json.dumps([
+            {"sender": "+15551234567", "text": "old", "expires_at": time.time() - 1},
+            {"sender": "+15557654321", "text": "keep me", "expires_at": time.time() + 300},
+        ])
+    }
+    daemon.store = SimpleNamespace(
+        get_state=lambda _key: marker_store["value"],
+        set_state=lambda _key, value: marker_store.__setitem__("value", value),
+    )
+
+    matched = daemon._consume_companion_echo_suppress("+15551234567", "different")
+
+    assert matched is False
+    remaining = json.loads(marker_store["value"])
+    assert len(remaining) == 1
+    assert remaining[0]["text"] == "keep me"
 
 
 @pytest.mark.asyncio

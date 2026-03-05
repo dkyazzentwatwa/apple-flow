@@ -12,8 +12,10 @@ with dedup/chunking support.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
+import time as pytime
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -24,6 +26,8 @@ if TYPE_CHECKING:
     from .office_sync import OfficeSyncer
     from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
     from .scheduler import FollowUpScheduler
+
+from .utils import normalize_echo_text, normalize_sender
 
 logger = logging.getLogger("apple_flow.companion")
 
@@ -106,7 +110,7 @@ class CompanionLoop:
                     "overdue reminders, and inbox items.\n"
                     "Text 'health' for status."
                 )
-                self.egress.send(self.owner, greeting)
+                self._send_with_poll_suppression(greeting)
         while not is_shutdown():
             try:
                 await asyncio.to_thread(self._check_and_notify)
@@ -148,7 +152,7 @@ class CompanionLoop:
 
         message = self._synthesize_message(observations)
         if message:
-            self.egress.send(self.owner, message)
+            self._send_with_poll_suppression(message)
             self._record_proactive_send()
             self._log_to_office("observation", observations, message)
             self.store.set_state("companion_last_sent_at", datetime.now().isoformat())
@@ -371,7 +375,7 @@ class CompanionLoop:
                 if self._is_digest_time() and not self._digest_sent_today():
                     digest = await asyncio.to_thread(self._build_daily_digest)
                     if digest:
-                        self.egress.send(self.owner, digest)
+                        self._send_with_poll_suppression(digest)
                         self.store.set_state("companion_last_digest_date", date.today().isoformat())
                         self._write_daily_note(digest)
                         self._log_to_office("daily_digest", [], digest)
@@ -512,7 +516,7 @@ class CompanionLoop:
                 if self._is_weekly_review_time() and not self._weekly_review_sent_this_week():
                     review = await asyncio.to_thread(self._build_weekly_review)
                     if review:
-                        self.egress.send(self.owner, review)
+                        self._send_with_poll_suppression(review)
                         self.store.set_state(
                             "companion_last_weekly_review",
                             datetime.now().strftime("%Y-W%W"),
@@ -648,6 +652,87 @@ class CompanionLoop:
         except ValueError:
             count = 0
         self.store.set_state(key, str(count + 1))
+
+    def _send_with_poll_suppression(self, text: str) -> None:
+        """Send companion iMessage and persist durable echo-suppress markers."""
+        self._remember_companion_echo_suppress(text)
+        self.egress.send(self.owner, text)
+
+    def _remember_companion_echo_suppress(self, text: str) -> None:
+        """Store short-lived suppress entries so polling ignores companion echoes."""
+        owner = normalize_sender(self.owner)
+        if not owner or not text.strip():
+            return
+
+        # Mirror egress chunking so inbound chunk echoes are matched one-to-one.
+        chunks = [text]
+        chunker = getattr(self.egress, "_chunk", None)
+        if callable(chunker):
+            try:
+                chunked = chunker(text)
+                if isinstance(chunked, list):
+                    chunks = [str(chunk) for chunk in chunked if str(chunk).strip()]
+            except Exception:
+                pass
+        if not chunks:
+            return
+
+        now_ts = pytime.time()
+        ttl_seconds = max(float(self.config.companion_poll_interval_seconds) * 2.0, 600.0)
+        expires_at = now_ts + ttl_seconds
+
+        raw_markers = self.store.get_state("companion_echo_suppress")
+        existing: list[dict[str, object]] = []
+        if raw_markers:
+            try:
+                parsed = json.loads(raw_markers)
+                if isinstance(parsed, list):
+                    for item in parsed:
+                        if not isinstance(item, dict):
+                            continue
+                        try:
+                            item_expires = float(item.get("expires_at", 0))
+                        except (TypeError, ValueError):
+                            continue
+                        if item_expires <= now_ts:
+                            continue
+                        item_sender = normalize_sender(str(item.get("sender", "")))
+                        item_text = str(item.get("text", ""))
+                        if not item_sender or not item_text:
+                            continue
+                        existing.append({
+                            "sender": item_sender,
+                            "text": item_text,
+                            "expires_at": item_expires,
+                        })
+            except Exception:
+                existing = []
+
+        for chunk in chunks:
+            existing.append({
+                "sender": owner,
+                "text": chunk,
+                "expires_at": expires_at,
+            })
+
+        # Keep list bounded to prevent unbounded kv-state growth.
+        deduped: list[dict[str, object]] = []
+        seen: set[tuple[str, str]] = set()
+        for item in reversed(existing):
+            sender_key = normalize_sender(str(item.get("sender", "")))
+            text_key = normalize_echo_text(str(item.get("text", "")))
+            if not sender_key or not text_key:
+                continue
+            compound = (sender_key, text_key)
+            if compound in seen:
+                continue
+            seen.add(compound)
+            deduped.append(item)
+            if len(deduped) >= 64:
+                break
+
+        deduped.reverse()
+        self.store.set_state("companion_echo_suppress", json.dumps(deduped))
 
     # ------------------------------------------------------------------
     # Office logging

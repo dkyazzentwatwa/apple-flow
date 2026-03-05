@@ -43,6 +43,7 @@ from .reminders_ingress import AppleRemindersIngress
 from .run_executor import RunExecutor
 from .scheduler import FollowUpScheduler
 from .store import SQLiteStore
+from .utils import normalize_echo_text, normalize_sender
 
 logger = logging.getLogger("apple_flow.daemon")
 
@@ -58,14 +59,6 @@ _FASTLANE_COMMANDS = {
     CommandKind.CLEAR_CONTEXT,
     CommandKind.SYSTEM,
 }
-
-
-def _normalize_echo_text(text: str) -> str:
-    normalized = (text or "")
-    normalized = normalized.replace("\u2019", "'").replace("\u2018", "'")
-    normalized = normalized.replace('"', "'")
-    return " ".join(normalized.lower().split())
-
 
 def migrate_legacy_db_if_needed(
     settings: RelaySettings,
@@ -782,6 +775,9 @@ class RelayDaemon:
                     if self._consume_restart_echo_suppress(msg.sender, msg.text):
                         logger.info("Ignoring restart confirmation echo from %s (rowid=%s)", msg.sender, msg.id)
                         continue
+                    if self._consume_companion_echo_suppress(msg.sender, msg.text):
+                        logger.info("Ignoring companion-originated echo from %s (rowid=%s)", msg.sender, msg.id)
+                        continue
                     logger.info(
                         "Inbound message rowid=%s sender=%s chars=%s text=%r",
                         msg.id,
@@ -914,7 +910,7 @@ class RelayDaemon:
                 return False
             marker_sender = str(marker.get("sender", ""))
             marker_text = str(marker.get("text", ""))
-            if marker_sender == sender and _normalize_echo_text(marker_text) == _normalize_echo_text(text):
+            if marker_sender == sender and normalize_echo_text(marker_text) == normalize_echo_text(text):
                 self.store.set_state("system_restart_echo_suppress", "")
                 return True
         except Exception:
@@ -922,6 +918,57 @@ class RelayDaemon:
             self.store.set_state("system_restart_echo_suppress", "")
             return False
         return False
+
+    def _consume_companion_echo_suppress(self, sender: str, text: str) -> bool:
+        """Consume durable companion suppress entries and return True on match."""
+        raw_markers = self.store.get_state("companion_echo_suppress")
+        if not raw_markers:
+            return False
+
+        try:
+            entries = json.loads(raw_markers)
+        except Exception:
+            self.store.set_state("companion_echo_suppress", "")
+            return False
+        if not isinstance(entries, list):
+            self.store.set_state("companion_echo_suppress", "")
+            return False
+
+        now_ts = time.time()
+        normalized_sender = normalize_sender(sender)
+        normalized_text = normalize_echo_text(text)
+        matched = False
+        kept: list[dict[str, object]] = []
+
+        for item in entries:
+            if not isinstance(item, dict):
+                continue
+            item_sender = normalize_sender(str(item.get("sender", "")))
+            item_text = normalize_echo_text(str(item.get("text", "")))
+            try:
+                expires_at = float(item.get("expires_at", 0))
+            except (TypeError, ValueError):
+                expires_at = 0.0
+            if expires_at <= now_ts:
+                continue
+
+            if not matched and item_sender == normalized_sender and item_text == normalized_text:
+                matched = True
+                continue
+
+            kept.append({
+                "sender": item_sender,
+                "text": str(item.get("text", "")),
+                "expires_at": expires_at,
+            })
+
+        if matched:
+            self.store.set_state("companion_echo_suppress", json.dumps(kept) if kept else "")
+        elif len(kept) != len(entries):
+            # Prune expired/invalid entries even when no message matched.
+            self.store.set_state("companion_echo_suppress", json.dumps(kept) if kept else "")
+
+        return matched
 
     async def _poll_mail_loop(self) -> None:
         """Apple Mail polling loop — runs alongside iMessage when enabled."""
