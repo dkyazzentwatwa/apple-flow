@@ -72,3 +72,18 @@ apps/macos/AppleFlowApp/DerivedData/
 
 # Team packages
 /team-packages/
+
+# Large local model artifacts (downloadable dependencies)
+models/
+*.onnx
+*.onnx.json
+*.gguf
+*.safetensors
+
+# Local macOS app bundles / release archives (build outputs)
+dashboard-app/*.app/
+dashboard-app/*.zip
+dist/*.app/
+dist/*.zip
+dist/*.dmg
+dist/harness-eval-pack.json
