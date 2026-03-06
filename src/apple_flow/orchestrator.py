@@ -147,6 +147,8 @@ class RelayOrchestrator:
             log_notes_egress=log_notes_egress,
             notes_log_folder_name=notes_log_folder_name,
             approval_sender_override=approval_sender_override,
+            require_chat_prefix=require_chat_prefix,
+            chat_prefix=self.chat_prefix,
             phone_owner_number=phone_owner_number,
             phone_tts_voice=phone_tts_voice,
             phone_tts_rate=phone_tts_rate,

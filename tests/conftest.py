@@ -51,6 +51,8 @@ class FakeEgress:
 
     def __init__(self) -> None:
         self.messages: list[tuple[str, str]] = []
+        self.marked_outbound: list[tuple[str, str]] = []
+        self.marked_attachment_outbound: list[str] = []
 
     def send(self, recipient: str, text: str, context: dict[str, Any] | None = None) -> None:
         self.messages.append((recipient, text))
@@ -59,7 +61,10 @@ class FakeEgress:
         return False
 
     def mark_outbound(self, recipient: str, text: str) -> None:
-        pass
+        self.marked_outbound.append((recipient, text))
+
+    def mark_attachment_outbound(self, recipient: str) -> None:
+        self.marked_attachment_outbound.append(recipient)
 
 
 class FakeStore:

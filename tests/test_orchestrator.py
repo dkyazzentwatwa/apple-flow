@@ -128,6 +128,8 @@ def test_voice_command_sends_message_on_approval():
     send_voice_mock.assert_called_once()
     assert send_voice_mock.call_args.kwargs["recipient"] == "+15551234567"
     assert send_voice_mock.call_args.kwargs["tts_engine"] == "say"
+    assert ("+15551234567", "relay: analyze attached files") in egress.marked_outbound
+    assert "+15551234567" in egress.marked_attachment_outbound
 
 
 def test_voice_command_requires_owner_number_config():
@@ -185,29 +187,32 @@ def test_voice_task_command_runs_task_and_sends_voice_followup():
     assert task_result.approval_request_id is not None
 
     with patch(
-        "apple_flow.apple_tools.messages_send_voice",
-        return_value={
-            "ok": True,
-            "recipient": "+15551234567",
-            "text_length": 18,
-            "tts_engine": "say",
-        },
-    ) as send_voice_mock:
-        approve_msg = InboundMessage(
-            id="m_voice_task_exec_2",
-            sender="+15551234567",
-            text=f"approve {task_result.approval_request_id}",
-            received_at="2026-02-16T12:01:00Z",
-            is_from_me=False,
-        )
-        approval_result = orchestrator.handle_message(approve_msg)
+        "apple_flow.apple_tools._synthesize_tts_to_audio_file",
+        return_value={"ok": True, "engine": "say", "path": "/tmp/voice-task.wav"},
+    ) as synth_mock:
+        with patch(
+            "apple_flow.apple_tools._send_imessage_attachment",
+            return_value={"ok": True},
+        ) as send_attachment_mock:
+            with patch("pathlib.Path.unlink") as unlink_mock:
+                approve_msg = InboundMessage(
+                    id="m_voice_task_exec_2",
+                    sender="+15551234567",
+                    text=f"approve {task_result.approval_request_id}",
+                    received_at="2026-02-16T12:01:00Z",
+                    is_from_me=False,
+                )
+                approval_result = orchestrator.handle_message(approve_msg)
 
     assert approval_result.kind is CommandKind.APPROVE
     assert store.get_run(task_result.run_id)["state"] == "completed"
     assert connector.turns
     assert any("assistant-response" in text for _, text in egress.messages)
-    send_voice_mock.assert_called_once()
-    assert send_voice_mock.call_args.kwargs["recipient"] == "+15551234567"
+    synth_mock.assert_called_once()
+    send_attachment_mock.assert_called_once_with("+15551234567", "/tmp/voice-task.wav")
+    unlink_mock.assert_called()
+    assert ("+15551234567", "relay: analyze attached files") in egress.marked_outbound
+    assert "+15551234567" in egress.marked_attachment_outbound
 
 
 def test_voice_task_from_notes_appends_result_and_sends_voice_followup():
@@ -267,27 +272,28 @@ def test_voice_task_from_notes_appends_result_and_sends_voice_followup():
     assert task_result.approval_request_id is not None
 
     with patch(
-        "apple_flow.apple_tools.messages_send_voice",
-        return_value={
-            "ok": True,
-            "recipient": "+15551234567",
-            "text_length": 18,
-            "tts_engine": "say",
-        },
-    ) as send_voice_mock:
-        approve_msg = InboundMessage(
-            id="voice_note_2",
-            sender="+15551234567",
-            text=f"approve {task_result.approval_request_id}",
-            received_at="2026-02-16T12:01:00Z",
-            is_from_me=False,
-        )
-        orchestrator.handle_message(approve_msg)
+        "apple_flow.apple_tools._synthesize_tts_to_audio_file",
+        return_value={"ok": True, "engine": "say", "path": "/tmp/voice-note.wav"},
+    ) as synth_mock:
+        with patch(
+            "apple_flow.apple_tools._send_imessage_attachment",
+            return_value={"ok": True},
+        ) as send_attachment_mock:
+            with patch("pathlib.Path.unlink"):
+                approve_msg = InboundMessage(
+                    id="voice_note_2",
+                    sender="+15551234567",
+                    text=f"approve {task_result.approval_request_id}",
+                    received_at="2026-02-16T12:01:00Z",
+                    is_from_me=False,
+                )
+                orchestrator.handle_message(approve_msg)
 
     assert notes_egress.appended_notes
     assert notes_egress.moved_notes
     assert "[Apple Flow Result]" in notes_egress.moved_notes[0]["result_text"]
-    send_voice_mock.assert_called_once()
+    synth_mock.assert_called_once()
+    send_attachment_mock.assert_called_once_with("+15551234567", "/tmp/voice-note.wav")
 
 def test_chat_requires_prefix_when_enabled():
     connector = FakeConnector()

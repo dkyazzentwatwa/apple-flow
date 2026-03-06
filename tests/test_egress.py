@@ -75,3 +75,11 @@ def test_was_recent_outbound_matches_medium_fragment(monkeypatch):
 
     fragment = "system: stop | restart | kill provider | cancel run <run_id>"
     assert egress.was_recent_outbound("+15551234567", fragment)
+
+
+def test_attachment_echo_marker_tracks_recent_recipients():
+    egress = IMessageEgress()
+    egress.mark_attachment_outbound("+15551234567")
+
+    assert egress.was_recent_attachment_outbound("+15551234567") is True
+    assert egress.was_recent_attachment_outbound("+15550000000") is False

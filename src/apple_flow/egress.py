@@ -25,6 +25,7 @@ class IMessageEgress:
         self.suppress_duplicate_outbound_seconds = suppress_duplicate_outbound_seconds
         self._recent_fingerprints: dict[str, float] = {}
         self._recent_normalized_texts: dict[tuple[str, str], float] = {}
+        self._recent_attachment_recipients: dict[str, float] = {}
 
     def _chunk(self, text: str) -> list[str]:
         if len(text) <= self.max_chunk_chars:
@@ -82,6 +83,13 @@ class IMessageEgress:
         ]
         for key in expired_texts:
             self._recent_normalized_texts.pop(key, None)
+        expired_attachments = [
+            recipient
+            for recipient, ts in self._recent_attachment_recipients.items()
+            if (now - ts) > self.echo_window_seconds
+        ]
+        for recipient in expired_attachments:
+            self._recent_attachment_recipients.pop(recipient, None)
 
     def was_recent_outbound(self, sender: str, text: str) -> bool:
         self._gc_recent()
@@ -113,6 +121,14 @@ class IMessageEgress:
         normalized_text = normalize_echo_text(text)
         if normalized_text:
             self._recent_normalized_texts[(normalized_sender, normalized_text)] = now
+
+    def mark_attachment_outbound(self, recipient: str) -> None:
+        self._gc_recent()
+        self._recent_attachment_recipients[normalize_sender(recipient)] = time.time()
+
+    def was_recent_attachment_outbound(self, sender: str) -> bool:
+        self._gc_recent()
+        return normalize_sender(sender) in self._recent_attachment_recipients
 
     def send(self, recipient: str, text: str, context: dict | None = None) -> None:
         self._gc_recent()

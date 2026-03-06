@@ -65,6 +65,7 @@ _FASTLANE_COMMANDS = {
 
 _HEALER_SCHEDULE_LAST_DAILY_DATE_KEY = "healer_schedule_last_daily_date"
 _HEALER_SCHEDULE_LAST_WEEKLY_KEY = "healer_schedule_last_weekly_week"
+_ATTACHMENT_PLACEHOLDER_TEXTS = {"\uFFFC", "￼"}
 
 def migrate_legacy_db_if_needed(
     settings: RelaySettings,
@@ -1036,6 +1037,14 @@ class RelayDaemon:
                     if msg.is_from_me:
                         continue
                     has_attachments = bool((msg.context or {}).get("attachments"))
+                    placeholder_only = (msg.text or "").strip() in _ATTACHMENT_PLACEHOLDER_TEXTS
+                    if placeholder_only and self.egress.was_recent_attachment_outbound(msg.sender):
+                        logger.info(
+                            "Ignoring probable outbound attachment placeholder echo from %s (rowid=%s)",
+                            msg.sender,
+                            msg.id,
+                        )
+                        continue
                     if not msg.text.strip() and not has_attachments:
                         logger.info("Ignoring empty inbound rowid=%s sender=%s", msg.id, msg.sender)
                         continue
@@ -1051,6 +1060,9 @@ class RelayDaemon:
                             msg.sender,
                             msg.text,
                         )
+                    if has_attachments and self.egress.was_recent_attachment_outbound(msg.sender):
+                        logger.info("Ignoring probable outbound attachment echo from %s (rowid=%s)", msg.sender, msg.id)
+                        continue
                     if self._consume_restart_echo_suppress(msg.sender, msg.text):
                         logger.info("Ignoring restart confirmation echo from %s (rowid=%s)", msg.sender, msg.id)
                         continue

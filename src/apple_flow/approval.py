@@ -7,6 +7,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -57,6 +58,8 @@ class ApprovalHandler:
         notes_log_folder_name: str,
         run_executor: RunExecutor | None = None,
         approval_sender_override: str = "",
+        require_chat_prefix: bool = True,
+        chat_prefix: str = "relay:",
         phone_owner_number: str = "",
         phone_tts_voice: str = "",
         phone_tts_rate: float = 180.0,
@@ -85,6 +88,8 @@ class ApprovalHandler:
         self.notes_log_folder_name = notes_log_folder_name
         self.run_executor = run_executor
         self.approval_sender_override = approval_sender_override
+        self.require_chat_prefix = bool(require_chat_prefix)
+        self.chat_prefix = (chat_prefix or "relay:").strip()
         self.phone_owner_number = (phone_owner_number or "").strip()
         self.phone_tts_voice = phone_tts_voice or ""
         self.phone_tts_rate = float(phone_tts_rate)
@@ -438,6 +443,10 @@ class ApprovalHandler:
         else:
             final = execution_output
 
+        prepared_voice_followup = None
+        if voice_followup_action is not None:
+            prepared_voice_followup = self._prepare_voice_followup(final)
+
         self.store.update_run_state(run_id, RunState.COMPLETED.value)
         self._safe_send(sender, final, context=egress_context)
         self._log(kind.value, sender, run_request_text, final)
@@ -452,6 +461,7 @@ class ApprovalHandler:
                 request_id=request_id,
                 attempt=attempt,
                 final_text=final,
+                prepared=prepared_voice_followup,
                 egress_context=egress_context,
             )
 
@@ -704,6 +714,7 @@ class ApprovalHandler:
             self._log(kind.value, sender, run_request_text, final)
             return OrchestrationResult(kind=kind, run_id=run_id, response=final)
 
+        self._mark_voice_attachment_outbound(self.phone_owner_number)
         final = (
             "✅ Voice message sent.\n"
             f"- number: {result.get('recipient') or self.phone_owner_number}\n"
@@ -756,25 +767,37 @@ class ApprovalHandler:
         request_id: str,
         attempt: int,
         final_text: str,
+        prepared: dict[str, Any] | None,
         egress_context: dict[str, Any] | None,
     ) -> None:
-        from .apple_tools import messages_send_voice
+        if prepared is None:
+            prepared = self._prepare_voice_followup(final_text)
 
-        audio_text = self._prepare_voice_followup_text(final_text)
-        try:
-            result = messages_send_voice(
-                text=audio_text,
-                recipient=self.phone_owner_number,
-                voice=self.phone_tts_voice,
-                rate=self.phone_tts_rate,
-                tts_engine=self.phone_tts_engine,
-                piper_command=self.phone_piper_command,
-                piper_model_path=self.phone_piper_model_path,
+        if not prepared.get("ok"):
+            reason = str(prepared.get("error", "voice follow-up synthesis failed"))
+            self._create_event(
+                run_id=run_id,
+                step="voice_followup",
+                event_type="execution_failed",
+                payload={
+                    "request_id": request_id,
+                    "attempt": attempt,
+                    "channel": "voice_message",
+                    "reason": reason,
+                    "stage": prepared.get("stage", "synthesis"),
+                },
             )
-        except Exception as exc:  # pragma: no cover - runtime safety
-            result = {"ok": False, "error": f"{type(exc).__name__}: {exc}", "stage": "send"}
+            self._safe_send(
+                sender,
+                f"⚠️ Task finished, but the voice copy failed ({reason}).",
+                context=egress_context,
+            )
+            return
 
+        result = self._send_prepared_voice_followup(prepared)
         if result.get("ok"):
+            prepared_audio_text = str(prepared.get("audio_text") or final_text)
+            self._mark_voice_attachment_outbound(self.phone_owner_number)
             self._create_event(
                 run_id=run_id,
                 step="voice_followup",
@@ -785,7 +808,7 @@ class ApprovalHandler:
                     "channel": "voice_message",
                     "recipient": result.get("recipient", self.phone_owner_number),
                     "tts_engine": result.get("tts_engine", self.phone_tts_engine),
-                    "text_length": result.get("text_length", len(audio_text)),
+                    "text_length": result.get("text_length", len(prepared_audio_text)),
                 },
             )
             return
@@ -808,6 +831,83 @@ class ApprovalHandler:
             f"⚠️ Task finished, but the voice copy failed ({reason}).",
             context=egress_context,
         )
+
+    def _prepare_voice_followup(self, final_text: str) -> dict[str, Any]:
+        from .apple_tools import _synthesize_tts_to_audio_file
+
+        audio_text = self._prepare_voice_followup_text(final_text)
+        try:
+            synth = _synthesize_tts_to_audio_file(
+                audio_text,
+                voice=self.phone_tts_voice,
+                rate=self.phone_tts_rate,
+                tts_engine=self.phone_tts_engine,
+                piper_command=self.phone_piper_command,
+                piper_model_path=self.phone_piper_model_path,
+            )
+        except Exception as exc:  # pragma: no cover - runtime safety
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "stage": "synthesis"}
+
+        if not synth.get("ok"):
+            return {
+                "ok": False,
+                "error": synth.get("error", "voice follow-up synthesis failed"),
+                "stage": "synthesis",
+            }
+        return {
+            "ok": True,
+            "audio_text": audio_text,
+            "audio_path": synth.get("path", ""),
+            "tts_engine": synth.get("engine", self.phone_tts_engine),
+        }
+
+    def _send_prepared_voice_followup(self, prepared: dict[str, Any]) -> dict[str, Any]:
+        from .apple_tools import _send_imessage_attachment
+
+        audio_path = str(prepared.get("audio_path") or "").strip()
+        audio_text = str(prepared.get("audio_text") or "")
+        if not audio_path:
+            return {"ok": False, "error": "no audio path returned", "stage": "synthesis"}
+
+        try:
+            send_result = _send_imessage_attachment(self.phone_owner_number, audio_path)
+        except Exception as exc:  # pragma: no cover - runtime safety
+            send_result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        finally:
+            try:
+                Path(audio_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        if not send_result.get("ok"):
+            return {
+                "ok": False,
+                "error": send_result.get("error", "voice follow-up send failed"),
+                "stage": "send",
+            }
+        return {
+            "ok": True,
+            "recipient": self.phone_owner_number,
+            "text_length": len(audio_text),
+            "tts_engine": prepared.get("tts_engine", self.phone_tts_engine),
+        }
+
+    def _attachment_only_echo_text(self) -> str:
+        text = "analyze attached files"
+        if self.require_chat_prefix and self.chat_prefix:
+            return f"{self.chat_prefix} {text}"
+        return text
+
+    def _mark_voice_attachment_outbound(self, recipient: str) -> None:
+        if not recipient:
+            return
+        try:
+            if hasattr(self.egress, "mark_outbound"):
+                self.egress.mark_outbound(recipient, self._attachment_only_echo_text())
+            if hasattr(self.egress, "mark_attachment_outbound"):
+                self.egress.mark_attachment_outbound(recipient)
+        except Exception as exc:
+            logger.debug("Failed to mark voice attachment outbound for %s: %s", recipient, exc)
 
     # --- Internal helpers ---
 
