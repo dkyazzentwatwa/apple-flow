@@ -11,6 +11,8 @@ class CommandKind(str, Enum):
     PLAN = "plan"
     TASK = "task"
     PROJECT = "project"
+    VOICE = "voice"
+    VOICE_TASK = "voice_task"
     HELP = "help"
     CLEAR_CONTEXT = "clear_context"
     APPROVE = "approve"
@@ -122,6 +124,8 @@ _PREFIX_TO_KIND = {
     "plan": CommandKind.PLAN,
     "task": CommandKind.TASK,
     "project": CommandKind.PROJECT,
+    "voice": CommandKind.VOICE,
+    "voice-task": CommandKind.VOICE_TASK,
     "help": CommandKind.HELP,
     "health": CommandKind.HEALTH,
     "history": CommandKind.HISTORY,

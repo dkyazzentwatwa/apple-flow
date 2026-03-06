@@ -48,7 +48,7 @@ def test_task_command_creates_approval_request():
     assert any("approve" in text.lower() for _, text in egress.messages)
 
 
-def test_task_call_me_creates_deterministic_approval_without_planner_turn():
+def test_voice_command_creates_approval_without_planner_turn():
     connector = FakeConnector()
     egress = FakeEgress()
     store = FakeStore()
@@ -60,28 +60,25 @@ def test_task_call_me_creates_deterministic_approval_without_planner_turn():
         allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
         default_workspace="/Users/cypher/Public/code/codex-flow",
         phone_owner_number="+15551234567",
-        phone_deterministic_in_call_audio=True,
-        phone_virtual_audio_input_device="BlackHole 2ch",
-        phone_virtual_audio_output_device="BlackHole 2ch",
         phone_tts_engine="say",
     )
 
     msg = InboundMessage(
-        id="m_call_approval_1",
+        id="m_voice_approval_1",
         sender="+15551234567",
-        text="task: call me and say hello from test",
+        text="voice: hello from test",
         received_at="2026-02-16T12:00:00Z",
         is_from_me=False,
     )
 
     result = orchestrator.handle_message(msg)
-    assert result.kind is CommandKind.TASK
+    assert result.kind is CommandKind.VOICE
     assert result.approval_request_id is not None
     assert connector.turns == []
-    assert any("Phone call plan" in text for _, text in egress.messages)
+    assert any("Voice message plan" in text for _, text in egress.messages)
 
 
-def test_task_call_me_runs_phone_action_on_approval():
+def test_voice_command_sends_message_on_approval():
     connector = FakeConnector()
     egress = FakeEgress()
     store = FakeStore()
@@ -93,16 +90,13 @@ def test_task_call_me_runs_phone_action_on_approval():
         allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
         default_workspace="/Users/cypher/Public/code/codex-flow",
         phone_owner_number="+15551234567",
-        phone_deterministic_in_call_audio=True,
-        phone_virtual_audio_input_device="BlackHole 2ch",
-        phone_virtual_audio_output_device="BlackHole 2ch",
         phone_tts_engine="say",
     )
 
     task_msg = InboundMessage(
-        id="m_call_exec_1",
+        id="m_voice_exec_1",
         sender="+15551234567",
-        text="task: call me and say hello from test",
+        text="voice: hello from test",
         received_at="2026-02-16T12:00:00Z",
         is_from_me=False,
     )
@@ -110,15 +104,16 @@ def test_task_call_me_runs_phone_action_on_approval():
     assert task_result.approval_request_id is not None
 
     with patch(
-        "apple_flow.apple_tools.phone_call_me",
+        "apple_flow.apple_tools.messages_send_voice",
         return_value={
             "ok": True,
-            "number": "+15551234567",
-            "call": {"uri": "tel:+15551234567", "app": "phone", "fallback_used": False},
+            "recipient": "+15551234567",
+            "text_length": 15,
+            "tts_engine": "say",
         },
-    ) as call_me_mock:
+    ) as send_voice_mock:
         approve_msg = InboundMessage(
-            id="m_call_exec_2",
+            id="m_voice_exec_2",
             sender="+15551234567",
             text=f"approve {task_result.approval_request_id}",
             received_at="2026-02-16T12:01:00Z",
@@ -129,16 +124,13 @@ def test_task_call_me_runs_phone_action_on_approval():
     assert approval_result.kind is CommandKind.APPROVE
     assert store.get_run(task_result.run_id)["state"] == "completed"
     assert connector.turns == []
-    assert any("Phone callback launched" in text for _, text in egress.messages)
-    call_me_mock.assert_called_once()
-    assert call_me_mock.call_args.kwargs["owner_number"] == "+15551234567"
-    assert call_me_mock.call_args.kwargs["deterministic_audio"] is True
-    assert call_me_mock.call_args.kwargs["virtual_audio_input_device"] == "BlackHole 2ch"
-    assert call_me_mock.call_args.kwargs["virtual_audio_output_device"] == "BlackHole 2ch"
-    assert call_me_mock.call_args.kwargs["tts_engine"] == "say"
+    assert any("Voice message sent" in text for _, text in egress.messages)
+    send_voice_mock.assert_called_once()
+    assert send_voice_mock.call_args.kwargs["recipient"] == "+15551234567"
+    assert send_voice_mock.call_args.kwargs["tts_engine"] == "say"
 
 
-def test_task_call_me_requires_owner_number_config():
+def test_voice_command_requires_owner_number_config():
     connector = FakeConnector()
     egress = FakeEgress()
     store = FakeStore()
@@ -153,18 +145,149 @@ def test_task_call_me_requires_owner_number_config():
     )
 
     msg = InboundMessage(
-        id="m_call_config_1",
+        id="m_voice_config_1",
         sender="+15551234567",
-        text="task: call me",
+        text="voice: hello",
         received_at="2026-02-16T12:00:00Z",
         is_from_me=False,
     )
     result = orchestrator.handle_message(msg)
 
-    assert result.kind is CommandKind.TASK
+    assert result.kind is CommandKind.VOICE
     assert result.approval_request_id is None
     assert any("phone_owner_number" in text for _, text in egress.messages)
 
+
+def test_voice_task_command_runs_task_and_sends_voice_followup():
+    connector = FakeConnector()
+    egress = FakeEgress()
+    store = FakeStore()
+
+    orchestrator = RelayOrchestrator(
+        connector=connector,
+        egress=egress,
+        store=store,
+        allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
+        default_workspace="/Users/cypher/Public/code/codex-flow",
+        phone_owner_number="+15551234567",
+        phone_tts_engine="say",
+    )
+
+    task_msg = InboundMessage(
+        id="m_voice_task_exec_1",
+        sender="+15551234567",
+        text="voice-task: analyze my workspace",
+        received_at="2026-02-16T12:00:00Z",
+        is_from_me=False,
+    )
+    task_result = orchestrator.handle_message(task_msg)
+    assert task_result.kind is CommandKind.VOICE_TASK
+    assert task_result.approval_request_id is not None
+
+    with patch(
+        "apple_flow.apple_tools.messages_send_voice",
+        return_value={
+            "ok": True,
+            "recipient": "+15551234567",
+            "text_length": 18,
+            "tts_engine": "say",
+        },
+    ) as send_voice_mock:
+        approve_msg = InboundMessage(
+            id="m_voice_task_exec_2",
+            sender="+15551234567",
+            text=f"approve {task_result.approval_request_id}",
+            received_at="2026-02-16T12:01:00Z",
+            is_from_me=False,
+        )
+        approval_result = orchestrator.handle_message(approve_msg)
+
+    assert approval_result.kind is CommandKind.APPROVE
+    assert store.get_run(task_result.run_id)["state"] == "completed"
+    assert connector.turns
+    assert any("assistant-response" in text for _, text in egress.messages)
+    send_voice_mock.assert_called_once()
+    assert send_voice_mock.call_args.kwargs["recipient"] == "+15551234567"
+
+
+def test_voice_task_from_notes_appends_result_and_sends_voice_followup():
+    class FakeNotesEgress:
+        def __init__(self):
+            self.appended_notes = []
+            self.moved_notes = []
+
+        def append_result(self, note_id, result_text):
+            self.appended_notes.append({
+                "note_id": note_id,
+                "result_text": result_text,
+            })
+            return True
+
+        def move_to_archive(self, note_id, result_text, source_folder_name, archive_subfolder_name):
+            self.moved_notes.append({
+                "note_id": note_id,
+                "result_text": result_text,
+                "source_folder_name": source_folder_name,
+                "archive_subfolder_name": archive_subfolder_name,
+            })
+            return True
+
+    connector = FakeConnector()
+    egress = FakeEgress()
+    store = FakeStore()
+    notes_egress = FakeNotesEgress()
+
+    orchestrator = RelayOrchestrator(
+        connector=connector,
+        egress=egress,
+        store=store,
+        allowed_workspaces=["/Users/cypher/Public/code/codex-flow"],
+        default_workspace="/Users/cypher/Public/code/codex-flow",
+        notes_egress=notes_egress,
+        notes_archive_folder_name="agent-archive",
+        phone_owner_number="+15551234567",
+        phone_tts_engine="say",
+    )
+
+    task_msg = InboundMessage(
+        id="voice_note_1",
+        sender="+15551234567",
+        text="voice-task: summarize this note",
+        received_at="2026-02-16T12:00:00Z",
+        is_from_me=False,
+        context={
+            "channel": "notes",
+            "note_id": "x-coredata://NOTE123",
+            "note_title": "Workspace note",
+            "folder_name": "agent-task",
+        },
+    )
+    task_result = orchestrator.handle_message(task_msg)
+    assert task_result.kind is CommandKind.VOICE_TASK
+    assert task_result.approval_request_id is not None
+
+    with patch(
+        "apple_flow.apple_tools.messages_send_voice",
+        return_value={
+            "ok": True,
+            "recipient": "+15551234567",
+            "text_length": 18,
+            "tts_engine": "say",
+        },
+    ) as send_voice_mock:
+        approve_msg = InboundMessage(
+            id="voice_note_2",
+            sender="+15551234567",
+            text=f"approve {task_result.approval_request_id}",
+            received_at="2026-02-16T12:01:00Z",
+            is_from_me=False,
+        )
+        orchestrator.handle_message(approve_msg)
+
+    assert notes_egress.appended_notes
+    assert notes_egress.moved_notes
+    assert "[Apple Flow Result]" in notes_egress.moved_notes[0]["result_text"]
+    send_voice_mock.assert_called_once()
 
 def test_chat_requires_prefix_when_enabled():
     connector = FakeConnector()

@@ -41,10 +41,7 @@ from apple_flow.apple_tools import (
     pages_from_markdown,
     pages_template,
     pages_update_sections,
-    phone_call,
-    phone_call_me,
-    phone_tts_in_call,
-    phone_tts_say,
+    messages_send_voice,
     reminders_complete,
     reminders_create,
     reminders_list,
@@ -283,7 +280,7 @@ class TestToolsContext:
         assert len(TOOLS_CONTEXT) > 100
 
     def test_mentions_all_categories(self):
-        for category in ("NOTES", "PAGES", "NUMBERS", "MAIL", "REMINDERS", "CALENDAR", "MESSAGES", "PHONE"):
+        for category in ("NOTES", "PAGES", "NUMBERS", "MAIL", "REMINDERS", "CALENDAR", "MESSAGES"):
             assert category in TOOLS_CONTEXT, f"TOOLS_CONTEXT missing category: {category}"
 
     def test_mentions_apple_flow_tools(self):
@@ -291,111 +288,80 @@ class TestToolsContext:
 
 
 # ---------------------------------------------------------------------------
-# Phone / TTS
+# Voice messages / TTS
 # ---------------------------------------------------------------------------
 
-class TestPhoneCall:
-    def test_phone_call_success(self):
-        with patch("subprocess.run", return_value=_ok_result("")):
-            result = phone_call("+15551234567")
-        assert result["ok"] is True
-        assert result["uri"].startswith("tel:")
-
-    def test_phone_call_fallbacks_to_facetime_audio(self):
-        with patch("subprocess.run", side_effect=[_err_result("no tel"), _ok_result("")]):
-            result = phone_call("+15551234567", app="phone")
-        assert result["ok"] is True
-        assert result["uri"].startswith("facetime-audio://")
-        assert result["fallback_used"] is True
-
-    def test_phone_call_rejects_invalid_number(self):
-        result = phone_call("bad-number")
-        assert result["ok"] is False
-
-
-class TestPhoneTts:
-    def test_phone_tts_say_success(self):
-        with patch("subprocess.run", return_value=_ok_result("")):
-            result = phone_tts_say("hello there", voice="Samantha", rate=170)
-        assert result["ok"] is True
-
-    def test_phone_tts_say_requires_text(self):
-        result = phone_tts_say("")
-        assert result["ok"] is False
-
-    def test_phone_tts_in_call_waits_then_speaks(self):
-        with patch("apple_flow.apple_tools.time.sleep") as sleep_mock:
-            with patch("subprocess.run", return_value=_ok_result("")):
-                result = phone_tts_in_call("hello", delay_seconds=2.0)
-        assert result["ok"] is True
-        sleep_mock.assert_called_once_with(2.0)
-
-    def test_phone_tts_in_call_deterministic_routes_audio(self):
+class TestVoiceMessages:
+    def test_messages_send_voice_success(self):
         with patch(
             "apple_flow.apple_tools._synthesize_tts_to_audio_file",
             return_value={"ok": True, "engine": "say", "path": "/tmp/fake.aiff"},
         ):
             with patch(
-                "apple_flow.apple_tools._route_audio_file_to_call_input",
-                return_value={"ok": True, "virtual_input_device": "BlackHole 2ch", "virtual_output_device": "BlackHole 2ch"},
-            ) as route_mock:
-                result = phone_tts_in_call(
-                    "hello from deterministic path",
-                    deterministic_audio=True,
-                    virtual_audio_input_device="BlackHole 2ch",
-                    virtual_audio_output_device="BlackHole 2ch",
-                )
+                "apple_flow.apple_tools._send_imessage_attachment",
+                return_value={"ok": True},
+            ) as send_mock:
+                with patch("pathlib.Path.unlink") as unlink_mock:
+                    result = messages_send_voice(
+                        "hello from test",
+                        "+15551234567",
+                        voice="Samantha",
+                        rate=170,
+                        tts_engine="say",
+                    )
         assert result["ok"] is True
-        assert result["deterministic_audio"] is True
+        assert result["recipient"] == "+15551234567"
         assert result["tts_engine"] == "say"
-        route_mock.assert_called_once()
+        send_mock.assert_called_once_with("+15551234567", "/tmp/fake.aiff")
+        unlink_mock.assert_called()
 
-    def test_phone_tts_in_call_deterministic_hard_fails_on_route_error(self):
+    def test_messages_send_voice_requires_valid_number(self):
+        result = messages_send_voice("hello from test", "bad-number")
+        assert result["ok"] is False
+        assert result["stage"] == "validation"
+
+    def test_messages_send_voice_reports_synthesis_failure(self):
+        with patch(
+            "apple_flow.apple_tools._synthesize_tts_to_audio_file",
+            return_value={"ok": False, "error": "tts broke"},
+        ):
+            result = messages_send_voice("hello from test", "+15551234567")
+        assert result["ok"] is False
+        assert result["stage"] == "synthesis"
+        assert "tts broke" in result["error"]
+
+    def test_messages_send_voice_reports_send_failure(self):
         with patch(
             "apple_flow.apple_tools._synthesize_tts_to_audio_file",
             return_value={"ok": True, "engine": "piper", "path": "/tmp/fake.wav"},
         ):
             with patch(
-                "apple_flow.apple_tools._route_audio_file_to_call_input",
-                return_value={"ok": False, "error": "virtual input device not found"},
+                "apple_flow.apple_tools._send_imessage_attachment",
+                return_value={"ok": False, "error": "Messages unavailable"},
             ):
-                result = phone_tts_in_call(
-                    "hello from deterministic path",
-                    deterministic_audio=True,
-                    virtual_audio_input_device="BlackHole 2ch",
-                    virtual_audio_output_device="BlackHole 2ch",
-                )
-        assert result["ok"] is False
-        assert "virtual input device" in result["error"]
-
-
-class TestPhoneCallMe:
-    def test_phone_call_me_runs_all_steps(self):
-        with patch("apple_flow.apple_tools.phone_tts_say", return_value={"ok": True}) as pre_mock:
-            with patch("apple_flow.apple_tools.phone_call", return_value={"ok": True, "uri": "tel:+1555", "app": "phone"}):
-                with patch("apple_flow.apple_tools.phone_tts_in_call", return_value={"ok": True}) as in_call_mock:
-                    result = phone_call_me(
-                        owner_number="+15551234567",
-                        preflight_text="Starting call now.",
-                        in_call_text="Hi from Apple Flow",
+                with patch("pathlib.Path.unlink") as unlink_mock:
+                    result = messages_send_voice(
+                        "hello from test",
+                        "+15551234567",
+                        tts_engine="piper",
                     )
-        assert result["ok"] is True
-        pre_mock.assert_called_once()
-        in_call_mock.assert_called_once()
-
-    def test_phone_call_me_fails_when_deterministic_in_call_audio_fails(self):
-        with patch("apple_flow.apple_tools.phone_call", return_value={"ok": True, "uri": "tel:+1555", "app": "phone"}):
-            with patch(
-                "apple_flow.apple_tools.phone_tts_in_call",
-                return_value={"ok": False, "error": "virtual input device not found"},
-            ):
-                result = phone_call_me(
-                    owner_number="+15551234567",
-                    in_call_text="Hello from Apple Flow",
-                    deterministic_audio=True,
-                )
         assert result["ok"] is False
-        assert "virtual input device not found" in result["error"]
+        assert result["stage"] == "send"
+        assert "Messages unavailable" in result["error"]
+        unlink_mock.assert_called()
+
+    def test_send_imessage_attachment_preserves_plus_number(self):
+        file_path = "/tmp/fake.aiff"
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("pathlib.Path.is_file", return_value=True):
+                with patch(
+                    "apple_flow.apple_tools._run_command",
+                    return_value={"ok": True, "stderr": "", "error": "", "stdout": "", "returncode": 0},
+                ) as run_mock:
+                    result = at._send_imessage_attachment("+15551234567", file_path)
+        assert result == {"ok": True}
+        script = run_mock.call_args.args[0][2]
+        assert 'buddy "+15551234567"' in script
 
 
 # ---------------------------------------------------------------------------

@@ -25,7 +25,7 @@ def test_schema_classifies_recent_config_families_into_expected_sections():
         "apple_flow_enable_ambient_scanning": "scheduler",
         "apple_flow_enable_csv_audit_log": "office_sync",
         "apple_flow_enable_markdown_automation_log": "office_sync",
-        "apple_flow_phone_preferred_app": "phone",
+        "apple_flow_phone_tts_engine": "phone",
     }
 
     for key, section_id in expected_sections.items():

@@ -284,30 +284,24 @@ apple_flow_enable_notes_polling=true
 apple_flow_enable_calendar_polling=true
 ```
 
-Phone callback + TTS example:
+Voice message examples:
 
 ```env
 apple_flow_phone_owner_number=+15551234567
-apple_flow_phone_preferred_app=phone
 apple_flow_phone_tts_voice=
 apple_flow_phone_tts_rate=180
 apple_flow_phone_tts_engine=auto
 apple_flow_phone_piper_model_path=/Users/you/models/en_US-amy-medium.onnx
-apple_flow_phone_in_call_tts_delay_seconds=4
-apple_flow_phone_enable_in_call_tts=true
-apple_flow_phone_deterministic_in_call_audio=true
-apple_flow_phone_virtual_audio_input_device=BlackHole 2ch
-apple_flow_phone_virtual_audio_output_device=BlackHole 2ch
 ```
 
 Then trigger with:
 
 ```text
-task: call me
-task: call me and say standup starts in 10 minutes
+voice: standup starts in 10 minutes
+voice-task: analyze my workspace
 ```
 
-This flow stays behind approvals. With deterministic mode enabled, Apple Flow hard-fails when virtual routing is unavailable instead of falling back to speaker/mic pickup.
+`voice:` speaks the exact text you send. `voice-task:` runs the task first, then sends both the text result and a synthesized audio copy over iMessage to the configured owner number.
 
 Companion + memory examples:
 

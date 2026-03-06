@@ -17,7 +17,7 @@ _SECTION_ORDER: list[tuple[str, str, bool]] = [
     ("reminders", "Reminders", False),
     ("notes", "Notes", False),
     ("calendar", "Calendar", False),
-    ("phone", "Phone", False),
+    ("phone", "Voice Messages", False),
     ("attachments", "Attachments", False),
     ("execution", "Progress & Execution", False),
     ("healer", "Autonomous Healer", False),
@@ -68,7 +68,6 @@ _ENUM_OPTIONS: dict[str, list[str]] = {
         "saturday",
         "sunday",
     ],
-    "apple_flow_phone_preferred_app": ["phone", "facetime"],
     "apple_flow_phone_tts_engine": ["auto", "say", "piper"],
 }
 

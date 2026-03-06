@@ -14,6 +14,18 @@ def test_parse_prefixed_idea_command():
     assert parsed.payload == "build me a scraper"
 
 
+def test_parse_prefixed_voice_command():
+    parsed = parse_command("voice: send a quick update")
+    assert parsed.kind is CommandKind.VOICE
+    assert parsed.payload == "send a quick update"
+
+
+def test_parse_prefixed_voice_task_command():
+    parsed = parse_command("voice-task: analyze my workspace")
+    assert parsed.kind is CommandKind.VOICE_TASK
+    assert parsed.payload == "analyze my workspace"
+
+
 def test_parse_approval_commands():
     approve = parse_command("approve 12345")
     deny = parse_command("deny req-9")

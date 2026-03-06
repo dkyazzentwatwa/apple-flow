@@ -163,22 +163,13 @@ class RelaySettings(BaseSettings):
     calendar_poll_interval_seconds: float = 30.0
     calendar_lookahead_minutes: int = 5
 
-    # Phone call + TTS settings (local-assisted callback flow)
+    # Voice message + TTS settings
     phone_owner_number: str = ""
-    phone_preferred_app: str = "phone"  # phone | facetime
     phone_tts_voice: str = ""
     phone_tts_rate: float = 180.0
     phone_tts_engine: str = "auto"  # auto | say | piper
     phone_piper_command: str = "piper"
     phone_piper_model_path: str = ""
-    phone_in_call_tts_delay_seconds: float = 4.0
-    phone_enable_in_call_tts: bool = True
-    phone_deterministic_in_call_audio: bool = False
-    phone_virtual_audio_input_device: str = "BlackHole 2ch"
-    phone_virtual_audio_output_device: str = "BlackHole 2ch"
-    phone_audio_switch_command: str = "SwitchAudioSource"
-    phone_audio_play_command: str = "afplay"
-    phone_audio_route_settle_seconds: float = 0.8
 
     # Progress streaming for long tasks
     enable_progress_streaming: bool = True
@@ -346,19 +337,10 @@ class RelaySettings(BaseSettings):
         "enable_csv_audit_log",
         "csv_audit_include_headers_if_missing",
         "enable_markdown_automation_log",
-        "phone_preferred_app",
         "phone_tts_rate",
         "phone_tts_engine",
         "phone_piper_command",
         "phone_piper_model_path",
-        "phone_in_call_tts_delay_seconds",
-        "phone_enable_in_call_tts",
-        "phone_deterministic_in_call_audio",
-        "phone_virtual_audio_input_device",
-        "phone_virtual_audio_output_device",
-        "phone_audio_switch_command",
-        "phone_audio_play_command",
-        "phone_audio_route_settle_seconds",
         mode="before",
     )
     @classmethod
@@ -449,15 +431,6 @@ class RelaySettings(BaseSettings):
         raise ValueError(
             f"Invalid healer_weekly_deep_scan_day {value!r}. Allowed: {', '.join(sorted(allowed))}"
         )
-
-    @field_validator("phone_preferred_app", mode="after")
-    @classmethod
-    def _validate_phone_preferred_app(cls, value: str) -> str:
-        allowed = {"phone", "facetime"}
-        normalized = (value or "").strip().lower()
-        if normalized in allowed:
-            return normalized
-        raise ValueError(f"Invalid phone_preferred_app {value!r}. Allowed: {', '.join(sorted(allowed))}")
 
     @field_validator("phone_tts_engine", mode="after")
     @classmethod

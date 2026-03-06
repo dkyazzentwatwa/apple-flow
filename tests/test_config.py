@@ -239,18 +239,11 @@ def test_phone_defaults(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = RelaySettings()
     assert settings.phone_owner_number == ""
-    assert settings.phone_preferred_app == "phone"
+    assert settings.phone_tts_voice == ""
     assert settings.phone_tts_rate == 180.0
     assert settings.phone_tts_engine == "auto"
-    assert settings.phone_enable_in_call_tts is True
-    assert settings.phone_deterministic_in_call_audio is False
-    assert settings.phone_virtual_audio_input_device == "BlackHole 2ch"
-    assert settings.phone_virtual_audio_output_device == "BlackHole 2ch"
-
-
-def test_phone_preferred_app_validation():
-    with pytest.raises(ValueError, match="Invalid phone_preferred_app"):
-        RelaySettings(phone_preferred_app="zoom")
+    assert settings.phone_piper_command == "piper"
+    assert settings.phone_piper_model_path == ""
 
 
 def test_phone_tts_engine_validation():

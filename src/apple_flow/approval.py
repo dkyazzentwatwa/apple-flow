@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import threading
 import time
 from dataclasses import dataclass
@@ -22,7 +21,6 @@ if TYPE_CHECKING:
     from .scheduler import FollowUpScheduler
 
 logger = logging.getLogger("apple_flow.approval")
-_CALL_ME_RE = re.compile(r"^\s*call\s+me(?:\s+and\s+say\s+(?P<say>.+))?\s*$", re.IGNORECASE | re.DOTALL)
 
 
 @dataclass(slots=True)
@@ -60,20 +58,11 @@ class ApprovalHandler:
         run_executor: RunExecutor | None = None,
         approval_sender_override: str = "",
         phone_owner_number: str = "",
-        phone_preferred_app: str = "phone",
         phone_tts_voice: str = "",
         phone_tts_rate: float = 180.0,
         phone_tts_engine: str = "auto",
         phone_piper_command: str = "piper",
         phone_piper_model_path: str = "",
-        phone_in_call_tts_delay_seconds: float = 4.0,
-        phone_enable_in_call_tts: bool = True,
-        phone_deterministic_in_call_audio: bool = False,
-        phone_virtual_audio_input_device: str = "BlackHole 2ch",
-        phone_virtual_audio_output_device: str = "BlackHole 2ch",
-        phone_audio_switch_command: str = "SwitchAudioSource",
-        phone_audio_play_command: str = "afplay",
-        phone_audio_route_settle_seconds: float = 0.8,
     ) -> None:
         self.connector = connector
         self.egress = egress
@@ -97,20 +86,11 @@ class ApprovalHandler:
         self.run_executor = run_executor
         self.approval_sender_override = approval_sender_override
         self.phone_owner_number = (phone_owner_number or "").strip()
-        self.phone_preferred_app = (phone_preferred_app or "phone").strip().lower()
         self.phone_tts_voice = phone_tts_voice or ""
         self.phone_tts_rate = float(phone_tts_rate)
         self.phone_tts_engine = (phone_tts_engine or "auto").strip().lower()
         self.phone_piper_command = phone_piper_command or "piper"
         self.phone_piper_model_path = phone_piper_model_path or ""
-        self.phone_in_call_tts_delay_seconds = float(phone_in_call_tts_delay_seconds)
-        self.phone_enable_in_call_tts = bool(phone_enable_in_call_tts)
-        self.phone_deterministic_in_call_audio = bool(phone_deterministic_in_call_audio)
-        self.phone_virtual_audio_input_device = phone_virtual_audio_input_device or "BlackHole 2ch"
-        self.phone_virtual_audio_output_device = phone_virtual_audio_output_device or "BlackHole 2ch"
-        self.phone_audio_switch_command = phone_audio_switch_command or "SwitchAudioSource"
-        self.phone_audio_play_command = phone_audio_play_command or "afplay"
-        self.phone_audio_route_settle_seconds = float(phone_audio_route_settle_seconds)
 
     # --- Public API ---
 
@@ -274,7 +254,14 @@ class ApprovalHandler:
         if run is None:
             response = f"Run `{run_id}` not found."
             return OrchestrationResult(kind=CommandKind.TASK, run_id=run_id, response=response)
-        kind = CommandKind.PROJECT if run.get("intent") == CommandKind.PROJECT.value else CommandKind.TASK
+        if run.get("intent") == CommandKind.PROJECT.value:
+            kind = CommandKind.PROJECT
+        elif run.get("intent") == CommandKind.VOICE_TASK.value:
+            kind = CommandKind.VOICE_TASK
+        elif run.get("intent") == CommandKind.VOICE.value:
+            kind = CommandKind.VOICE
+        else:
+            kind = CommandKind.TASK
         self.store.update_run_state(run_id, RunState.EXECUTING.value)
         return self._execute_run_attempt(
             kind=kind,
@@ -322,9 +309,9 @@ class ApprovalHandler:
                 context=egress_context,
             )
 
-        phone_action = self._extract_phone_call_action(source_context)
-        if phone_action is not None:
-            return self._execute_phone_call_action(
+        voice_message_action = self._extract_voice_message_action(source_context)
+        if voice_message_action is not None:
+            return self._execute_voice_message_action(
                 kind=kind,
                 sender=sender,
                 run_id=run_id,
@@ -332,9 +319,10 @@ class ApprovalHandler:
                 attempt=attempt,
                 extra_instructions=extra_instructions,
                 run_request_text=run_request_text,
-                phone_action=phone_action,
+                voice_message_action=voice_message_action,
                 egress_context=egress_context,
             )
+        voice_followup_action = self._extract_voice_followup_action(source_context)
 
         thread_id = self.connector.get_or_create_thread(sender)
         team_context = None
@@ -457,6 +445,16 @@ class ApprovalHandler:
         if source_context:
             self._handle_post_execution_cleanup(source_context, final)
 
+        if voice_followup_action is not None:
+            self._deliver_voice_followup(
+                sender=sender,
+                run_id=run_id,
+                request_id=request_id,
+                attempt=attempt,
+                final_text=final,
+                egress_context=egress_context,
+            )
+
         if self.scheduler:
             try:
                 self.scheduler.schedule(
@@ -491,11 +489,12 @@ class ApprovalHandler:
             self._safe_send(message.sender, response)
             return OrchestrationResult(kind=kind, response=response)
 
-        phone_action = self._parse_phone_call_me_request(kind=kind, payload=payload)
-        if phone_action is not None and not self.phone_owner_number:
+        voice_message_action = self._parse_voice_message_request(kind=kind, payload=payload)
+        voice_followup_requested = kind is CommandKind.VOICE_TASK
+        if (voice_message_action is not None or voice_followup_requested) and not self.phone_owner_number:
             response = (
-                "Phone callback is not configured. Set `apple_flow_phone_owner_number` "
-                "in your .env to use `task: call me`."
+                "Voice message sending is not configured. Set `apple_flow_phone_owner_number` "
+                "in your .env to use `voice:` or `voice-task:`."
             )
             self._safe_send(message.sender, response)
             return OrchestrationResult(kind=kind, response=response)
@@ -534,11 +533,18 @@ class ApprovalHandler:
                     "mail_subject_raw": message.context.get("mail_subject_raw"),
                     "mail_subject_sanitized": message.context.get("mail_subject_sanitized"),
                 }
-        if phone_action is not None:
+        if voice_message_action is not None:
             if source_context is None:
                 source_context = {}
-            source_context["channel"] = "phone"
-            source_context["phone_action"] = phone_action
+            source_context["channel"] = "voice_message"
+            source_context["voice_message_action"] = voice_message_action
+        if voice_followup_requested:
+            if source_context is None:
+                source_context = {}
+            source_context["voice_followup_action"] = {
+                "action": "voice_followup",
+                "request_text": payload,
+            }
         if team_context:
             if source_context is None:
                 source_context = {}
@@ -565,8 +571,8 @@ class ApprovalHandler:
             payload={"request": payload, "intent": kind.value},
         )
 
-        if phone_action is not None:
-            plan_output = self._build_phone_call_plan(phone_action=phone_action, workspace=ws)
+        if voice_message_action is not None:
+            plan_output = self._build_voice_message_plan(voice_message_action=voice_message_action, workspace=ws)
         else:
             planner_prompt = (
                 "planner mode: produce an objective, steps, risks, and done criteria. "
@@ -608,64 +614,44 @@ class ApprovalHandler:
         self._log(kind.value, message.sender, payload, outbound)
         return OrchestrationResult(kind=kind, run_id=run_id, approval_request_id=request_id, response=outbound)
 
-    def _parse_phone_call_me_request(self, *, kind: CommandKind, payload: str) -> dict[str, Any] | None:
-        if kind is not CommandKind.TASK:
+    def _parse_voice_message_request(self, *, kind: CommandKind, payload: str) -> dict[str, Any] | None:
+        if kind is not CommandKind.VOICE:
             return None
         text = (payload or "").strip()
         if not text:
             return None
-        match = _CALL_ME_RE.match(text)
-        if not match:
-            return None
-        in_call_text = str(match.group("say") or "").strip()
         return {
-            "action": "call_me",
+            "action": "voice_message",
             "request_text": text,
-            "preflight_text": "Starting call now.",
-            "in_call_text": in_call_text,
+            "message_text": text,
         }
 
-    def _build_phone_call_plan(self, *, phone_action: dict[str, Any], workspace: str) -> str:
-        in_call_text = str(phone_action.get("in_call_text") or "").strip()
-        in_call_line = (
-            f"- in-call TTS: {in_call_text}"
-            if in_call_text
-            else "- in-call TTS: skipped (no `and say ...` text provided)"
-        )
+    def _build_voice_message_plan(self, *, voice_message_action: dict[str, Any], workspace: str) -> str:
+        message_text = str(voice_message_action.get("message_text") or "").strip()
+        preview = message_text if len(message_text) <= 120 else f"{message_text[:117]}..."
         return "\n".join(
             [
-                "Phone call plan (local-assisted):",
+                "Voice message plan:",
                 f"- workspace: {workspace}",
                 f"- target number: configured owner (`{self.phone_owner_number or '(unset)'}`)",
-                f"- call app preference: {self.phone_preferred_app}",
-                "- preflight TTS: \"Starting call now.\"",
-                in_call_line,
-                f"- in-call delay: {self.phone_in_call_tts_delay_seconds:.1f}s",
-                f"- deterministic in-call audio: {'enabled' if self.phone_deterministic_in_call_audio else 'disabled'}",
+                f"- text preview: {preview}",
                 f"- TTS engine: {self.phone_tts_engine}",
-                "",
-                "Risks:",
-                "- macOS may still show a system prompt for call launch.",
-                (
-                    "- deterministic mode hard-fails if virtual audio routing is unavailable."
-                    if self.phone_deterministic_in_call_audio
-                    else "- voicemail delivery is best-effort (not guaranteed)."
-                ),
+                "- delivery: send as an iMessage audio attachment",
             ]
         )
 
     @staticmethod
-    def _extract_phone_call_action(source_context: dict[str, Any]) -> dict[str, Any] | None:
+    def _extract_voice_message_action(source_context: dict[str, Any]) -> dict[str, Any] | None:
         if not isinstance(source_context, dict):
             return None
-        phone_action = source_context.get("phone_action")
-        if not isinstance(phone_action, dict):
+        voice_message_action = source_context.get("voice_message_action")
+        if not isinstance(voice_message_action, dict):
             return None
-        if str(phone_action.get("action", "")) != "call_me":
+        if str(voice_message_action.get("action", "")) != "voice_message":
             return None
-        return phone_action
+        return voice_message_action
 
-    def _execute_phone_call_action(
+    def _execute_voice_message_action(
         self,
         *,
         kind: CommandKind,
@@ -675,42 +661,32 @@ class ApprovalHandler:
         attempt: int,
         extra_instructions: str,
         run_request_text: str,
-        phone_action: dict[str, Any],
+        voice_message_action: dict[str, Any],
         egress_context: dict[str, Any] | None,
     ) -> OrchestrationResult:
-        from .apple_tools import phone_call_me
+        from .apple_tools import messages_send_voice
 
-        in_call_text = str(phone_action.get("in_call_text") or "").strip()
+        message_text = str(voice_message_action.get("message_text") or "").strip()
         extra = (extra_instructions or "").strip()
         if extra:
-            in_call_text = f"{in_call_text}\n{extra}".strip() if in_call_text else extra
+            message_text = f"{message_text}\n{extra}".strip()
 
         try:
-            result = phone_call_me(
-                owner_number=self.phone_owner_number,
-                preflight_text=str(phone_action.get("preflight_text") or "").strip(),
-                in_call_text=in_call_text,
-                preferred_app=self.phone_preferred_app,
+            result = messages_send_voice(
+                text=message_text,
+                recipient=self.phone_owner_number,
                 voice=self.phone_tts_voice,
                 rate=self.phone_tts_rate,
                 tts_engine=self.phone_tts_engine,
                 piper_command=self.phone_piper_command,
                 piper_model_path=self.phone_piper_model_path,
-                in_call_delay_seconds=self.phone_in_call_tts_delay_seconds,
-                enable_in_call_tts=self.phone_enable_in_call_tts,
-                deterministic_audio=self.phone_deterministic_in_call_audio,
-                virtual_audio_input_device=self.phone_virtual_audio_input_device,
-                virtual_audio_output_device=self.phone_virtual_audio_output_device,
-                audio_switch_command=self.phone_audio_switch_command,
-                audio_play_command=self.phone_audio_play_command,
-                audio_route_settle_seconds=self.phone_audio_route_settle_seconds,
             )
         except Exception as exc:  # pragma: no cover - runtime safety
-            result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            result = {"ok": False, "error": f"{type(exc).__name__}: {exc}", "stage": "send"}
 
         if not result.get("ok"):
             self.store.update_run_state(run_id, RunState.FAILED.value)
-            reason = str(result.get("error", "phone action failed"))
+            reason = str(result.get("error", "voice message send failed"))
             self._create_event(
                 run_id=run_id,
                 step="executor",
@@ -719,29 +695,21 @@ class ApprovalHandler:
                     "request_id": request_id,
                     "attempt": attempt,
                     "reason": reason,
-                    "channel": "phone",
+                    "channel": "voice_message",
+                    "stage": result.get("stage", "unknown"),
                 },
             )
-            final = f"❌ Phone callback failed ({reason})."
+            final = f"❌ Voice message failed ({reason})."
             self._safe_send(sender, final, context=egress_context)
             self._log(kind.value, sender, run_request_text, final)
             return OrchestrationResult(kind=kind, run_id=run_id, response=final)
 
-        call_meta = result.get("call", {}) if isinstance(result.get("call"), dict) else {}
-        warnings = result.get("warnings", []) if isinstance(result.get("warnings"), list) else []
-        summary_lines = [
-            "✅ Phone callback launched.",
-            f"- number: {result.get('number') or self.phone_owner_number}",
-            f"- call URI: {call_meta.get('uri', 'unknown')}",
-            f"- app: {call_meta.get('app', self.phone_preferred_app)}",
-            f"- deterministic audio: {'yes' if self.phone_deterministic_in_call_audio else 'no'}",
-        ]
-        if call_meta.get("fallback_used"):
-            summary_lines.append("- fallback: used FaceTime Audio URL")
-        if warnings:
-            summary_lines.append("- warnings: " + ", ".join(str(item) for item in warnings))
-        final = "\n".join(summary_lines)
-
+        final = (
+            "✅ Voice message sent.\n"
+            f"- number: {result.get('recipient') or self.phone_owner_number}\n"
+            f"- chars: {result.get('text_length', len(message_text))}\n"
+            f"- TTS: {result.get('tts_engine', self.phone_tts_engine)}"
+        )
         self.store.update_run_state(run_id, RunState.COMPLETED.value)
         self._create_event(
             run_id=run_id,
@@ -750,27 +718,96 @@ class ApprovalHandler:
             payload={
                 "request_id": request_id,
                 "attempt": attempt,
-                "channel": "phone",
-                "call_uri": call_meta.get("uri", ""),
-                "warnings": warnings,
-                "deterministic_audio": self.phone_deterministic_in_call_audio,
+                "channel": "voice_message",
+                "recipient": result.get("recipient", self.phone_owner_number),
+                "tts_engine": result.get("tts_engine", self.phone_tts_engine),
             },
         )
         self._safe_send(sender, final, context=egress_context)
         self._log(kind.value, sender, run_request_text, final)
-
-        if self.scheduler:
-            try:
-                self.scheduler.schedule(
-                    run_id=run_id,
-                    sender=sender,
-                    action_type="follow_up",
-                    payload={"summary": f"Follow up on approved task {request_id}"},
-                )
-            except Exception as exc:
-                logger.debug("Failed to schedule follow-up: %s", exc)
-
         return OrchestrationResult(kind=kind, run_id=run_id, response=final)
+
+    @staticmethod
+    def _extract_voice_followup_action(source_context: dict[str, Any]) -> dict[str, Any] | None:
+        if not isinstance(source_context, dict):
+            return None
+        voice_followup_action = source_context.get("voice_followup_action")
+        if not isinstance(voice_followup_action, dict):
+            return None
+        if str(voice_followup_action.get("action", "")) != "voice_followup":
+            return None
+        return voice_followup_action
+
+    @staticmethod
+    def _prepare_voice_followup_text(final_text: str) -> str:
+        cleaned = " ".join((final_text or "").replace("`", "").split())
+        if not cleaned:
+            return "Your Apple Flow task completed successfully."
+        max_chars = 1200
+        if len(cleaned) <= max_chars:
+            return cleaned
+        return cleaned[: max_chars - 26].rstrip() + " End of spoken summary."
+
+    def _deliver_voice_followup(
+        self,
+        *,
+        sender: str,
+        run_id: str,
+        request_id: str,
+        attempt: int,
+        final_text: str,
+        egress_context: dict[str, Any] | None,
+    ) -> None:
+        from .apple_tools import messages_send_voice
+
+        audio_text = self._prepare_voice_followup_text(final_text)
+        try:
+            result = messages_send_voice(
+                text=audio_text,
+                recipient=self.phone_owner_number,
+                voice=self.phone_tts_voice,
+                rate=self.phone_tts_rate,
+                tts_engine=self.phone_tts_engine,
+                piper_command=self.phone_piper_command,
+                piper_model_path=self.phone_piper_model_path,
+            )
+        except Exception as exc:  # pragma: no cover - runtime safety
+            result = {"ok": False, "error": f"{type(exc).__name__}: {exc}", "stage": "send"}
+
+        if result.get("ok"):
+            self._create_event(
+                run_id=run_id,
+                step="voice_followup",
+                event_type="completed",
+                payload={
+                    "request_id": request_id,
+                    "attempt": attempt,
+                    "channel": "voice_message",
+                    "recipient": result.get("recipient", self.phone_owner_number),
+                    "tts_engine": result.get("tts_engine", self.phone_tts_engine),
+                    "text_length": result.get("text_length", len(audio_text)),
+                },
+            )
+            return
+
+        reason = str(result.get("error", "voice follow-up send failed"))
+        self._create_event(
+            run_id=run_id,
+            step="voice_followup",
+            event_type="execution_failed",
+            payload={
+                "request_id": request_id,
+                "attempt": attempt,
+                "channel": "voice_message",
+                "reason": reason,
+                "stage": result.get("stage", "unknown"),
+            },
+        )
+        self._safe_send(
+            sender,
+            f"⚠️ Task finished, but the voice copy failed ({reason}).",
+            context=egress_context,
+        )
 
     # --- Internal helpers ---
 

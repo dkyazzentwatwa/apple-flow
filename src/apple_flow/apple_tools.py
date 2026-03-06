@@ -24,7 +24,6 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 logger = logging.getLogger("apple_flow.apple_tools")
 PAGES_APP_IDS = ("com.apple.Pages", "com.apple.iWork.Pages")
@@ -83,10 +82,7 @@ REMINDERS: reminders_list_lists  |  reminders_list [--list X] [--filter incomple
 CALENDAR:  calendar_list_calendars  |  calendar_list_events [--cal X] [--days N]
            calendar_search "q" [--cal X]  |  calendar_create "Title" "YYYY-MM-DD HH:MM" [--cal X]
 MESSAGES:  messages_list_recent_chats [--limit N]  |  messages_search "q" [--limit N]
-PHONE:  phone_call "<number>" [--call-app phone|facetime]
-        phone_tts_say "<text>" [--voice X] [--speech-rate N]
-        phone_tts_in_call "<text>" [--call-delay N] [--voice X] [--speech-rate N] [--deterministic-audio true|false]
-        phone_call_me "<number>" [--preflight "<text>"] [--in-call "<text>"] [--call-app phone|facetime]\
+           messages_send_voice "<text>" "<number>" [--voice X] [--speech-rate N] [--tts-engine auto|say|piper]
 """
 
 # ---------------------------------------------------------------------------
@@ -2994,7 +2990,7 @@ def numbers_style_apply(
 
 
 # ---------------------------------------------------------------------------
-# Phone / TTS
+# TTS + Audio Messages
 # ---------------------------------------------------------------------------
 
 def _normalize_phone_number(raw: str) -> str | None:
@@ -3017,15 +3013,6 @@ def _normalize_phone_number(raw: str) -> str | None:
     if not value.isdigit():
         return None
     return value
-
-
-def _esc_applescript_text(value: str) -> str:
-    return (
-        value.replace("\\", "\\\\")
-        .replace('"', '\\"')
-        .replace("\n", "\\n")
-        .replace("\r", "")
-    )
 
 
 def _resolve_binary(command: str) -> str | None:
@@ -3071,56 +3058,6 @@ def _run_command(
         "stderr": (result.stderr or "").strip(),
         "returncode": result.returncode,
     }
-
-
-def _switch_audio_source_list(command: str, source_type: str) -> dict[str, Any]:
-    binary = _resolve_binary(command)
-    if not binary:
-        return {"ok": False, "error": f"{command} not found", "devices": []}
-    result = _run_command([binary, "-a", "-t", source_type], timeout=10.0)
-    if not result["ok"]:
-        return {
-            "ok": False,
-            "error": result.get("stderr") or result.get("error") or "failed to list audio devices",
-            "devices": [],
-        }
-    devices = [line.strip() for line in str(result.get("stdout") or "").splitlines() if line.strip()]
-    return {"ok": True, "devices": devices}
-
-
-def _switch_audio_source_current(command: str, source_type: str) -> dict[str, Any]:
-    binary = _resolve_binary(command)
-    if not binary:
-        return {"ok": False, "error": f"{command} not found", "device": ""}
-    result = _run_command([binary, "-c", "-t", source_type], timeout=10.0)
-    if not result["ok"]:
-        return {
-            "ok": False,
-            "error": result.get("stderr") or result.get("error") or "failed to read current audio device",
-            "device": "",
-        }
-    return {"ok": True, "device": str(result.get("stdout") or "").strip()}
-
-
-def _switch_audio_source_set(command: str, source_type: str, device_name: str) -> dict[str, Any]:
-    binary = _resolve_binary(command)
-    if not binary:
-        return {"ok": False, "error": f"{command} not found"}
-    result = _run_command([binary, "-t", source_type, "-s", device_name], timeout=10.0)
-    if not result["ok"]:
-        return {
-            "ok": False,
-            "error": result.get("stderr") or result.get("error") or f"failed to set {source_type} device",
-        }
-    return {"ok": True}
-
-
-def _match_device_name(target: str, candidates: list[str]) -> str | None:
-    target_key = _normalize_text_key(target)
-    for candidate in candidates:
-        if _normalize_text_key(candidate) == target_key:
-            return candidate
-    return None
 
 
 def _build_temp_audio_path(suffix: str) -> str:
@@ -3206,215 +3143,25 @@ def _synthesize_tts_to_audio_file(
     return {"ok": False, "error": " ; ".join(errors) if errors else "speech synthesis failed"}
 
 
-def _route_audio_file_to_call_input(
-    *,
-    audio_path: str,
-    virtual_input_device: str,
-    virtual_output_device: str,
-    switch_audio_source_command: str,
-    audio_play_command: str,
-    settle_seconds: float,
-) -> dict[str, Any]:
-    path = Path(audio_path)
-    if not path.exists():
-        return {"ok": False, "error": f"audio file not found: {audio_path}"}
-
-    switch_binary = _resolve_binary(switch_audio_source_command)
-    if not switch_binary:
-        return {"ok": False, "error": f"{switch_audio_source_command} not found"}
-
-    playback_binary = _resolve_binary(audio_play_command)
-    if not playback_binary:
-        return {"ok": False, "error": f"{audio_play_command} not found"}
-
-    input_devices_result = _switch_audio_source_list(switch_binary, "input")
-    if not input_devices_result["ok"]:
-        return {"ok": False, "error": f"input device probe failed: {input_devices_result.get('error')}"}
-    output_devices_result = _switch_audio_source_list(switch_binary, "output")
-    if not output_devices_result["ok"]:
-        return {"ok": False, "error": f"output device probe failed: {output_devices_result.get('error')}"}
-
-    input_devices = list(input_devices_result.get("devices") or [])
-    output_devices = list(output_devices_result.get("devices") or [])
-    resolved_input = _match_device_name(virtual_input_device, input_devices)
-    resolved_output = _match_device_name(virtual_output_device, output_devices)
-    if not resolved_input:
-        return {
-            "ok": False,
-            "error": (
-                f"virtual input device not found: {virtual_input_device}. "
-                f"Available inputs: {', '.join(input_devices) or '(none)'}"
-            ),
-        }
-    if not resolved_output:
-        return {
-            "ok": False,
-            "error": (
-                f"virtual output device not found: {virtual_output_device}. "
-                f"Available outputs: {', '.join(output_devices) or '(none)'}"
-            ),
-        }
-
-    previous_input = ""
-    previous_output = ""
-    input_changed = False
-    output_changed = False
-    restore_errors: list[str] = []
-    try:
-        current_input_result = _switch_audio_source_current(switch_binary, "input")
-        if not current_input_result["ok"]:
-            return {"ok": False, "error": f"failed to get current input device: {current_input_result.get('error')}"}
-        previous_input = str(current_input_result.get("device") or "")
-
-        current_output_result = _switch_audio_source_current(switch_binary, "output")
-        if not current_output_result["ok"]:
-            return {"ok": False, "error": f"failed to get current output device: {current_output_result.get('error')}"}
-        previous_output = str(current_output_result.get("device") or "")
-
-        if _normalize_text_key(previous_input) != _normalize_text_key(resolved_input):
-            set_input_result = _switch_audio_source_set(switch_binary, "input", resolved_input)
-            if not set_input_result["ok"]:
-                return {"ok": False, "error": f"failed to set input device: {set_input_result.get('error')}"}
-            input_changed = True
-
-        if _normalize_text_key(previous_output) != _normalize_text_key(resolved_output):
-            set_output_result = _switch_audio_source_set(switch_binary, "output", resolved_output)
-            if not set_output_result["ok"]:
-                return {"ok": False, "error": f"failed to set output device: {set_output_result.get('error')}"}
-            output_changed = True
-
-        settle = max(0.0, float(settle_seconds))
-        if settle > 0:
-            time.sleep(settle)
-
-        playback_timeout = max(30.0, min(300.0, 30.0 + (path.stat().st_size / 32000.0)))
-        playback_result = _run_command([playback_binary, str(path)], timeout=playback_timeout)
-        if not playback_result["ok"]:
-            return {"ok": False, "error": f"playback failed: {playback_result.get('stderr') or playback_result.get('error')}"}
-
-        return {
-            "ok": True,
-            "virtual_input_device": resolved_input,
-            "virtual_output_device": resolved_output,
-            "previous_input_device": previous_input,
-            "previous_output_device": previous_output,
-            "restored": True,
-        }
-    finally:
-        if output_changed and previous_output:
-            restore_output = _switch_audio_source_set(switch_binary, "output", previous_output)
-            if not restore_output["ok"]:
-                restore_errors.append(f"output restore failed: {restore_output.get('error')}")
-        if input_changed and previous_input:
-            restore_input = _switch_audio_source_set(switch_binary, "input", previous_input)
-            if not restore_input["ok"]:
-                restore_errors.append(f"input restore failed: {restore_input.get('error')}")
-        if restore_errors:
-            logger.warning("Audio device restore issue: %s", " ; ".join(restore_errors))
-
-
-def phone_call(number: str, app: str = "phone") -> dict[str, Any]:
-    """Open a phone call intent on macOS via tel:/facetime-audio:// URL schemes."""
-    normalized = _normalize_phone_number(number)
-    if not normalized:
-        return {"ok": False, "error": "invalid phone number"}
-
-    app_key = (app or "phone").strip().lower()
-    if app_key not in {"phone", "facetime"}:
-        return {"ok": False, "error": "app must be 'phone' or 'facetime'"}
-
-    encoded = quote(normalized, safe="+")
-    tel_uri = f"tel:{encoded}"
-    facetime_audio_uri = f"facetime-audio://{encoded}"
-    uri_candidates = [facetime_audio_uri] if app_key == "facetime" else [tel_uri, facetime_audio_uri]
-
-    errors: list[str] = []
-    for idx, uri in enumerate(uri_candidates):
-        try:
-            result = subprocess.run(
-                ["open", uri],
-                capture_output=True,
-                text=True,
-                timeout=10.0,
-            )
-        except subprocess.TimeoutExpired:
-            errors.append(f"{uri}: timed out")
-            continue
-        except Exception as exc:  # pragma: no cover - runtime safety
-            errors.append(f"{uri}: {type(exc).__name__}: {exc}")
-            continue
-
-        if result.returncode == 0:
-            resolved_app = "phone" if uri.startswith("tel:") else "facetime"
-            return {
-                "ok": True,
-                "number": normalized,
-                "uri": uri,
-                "app": resolved_app,
-                "fallback_used": idx > 0,
-            }
-        stderr = (result.stderr or "").strip()
-        errors.append(f"{uri}: rc={result.returncode} {stderr}".strip())
-
-    return {"ok": False, "error": " ; ".join(errors) if errors else "failed to open call URL"}
-
-
-def phone_tts_say(text: str, voice: str = "", rate: float = 180.0) -> dict[str, Any]:
-    """Speak text via AppleScript `say`."""
-    payload = (text or "").strip()
-    if not payload:
-        return {"ok": False, "error": "text is required"}
-    if rate <= 0:
-        return {"ok": False, "error": "speech rate must be > 0"}
-
-    esc_text = _esc_applescript_text(payload)
-    esc_voice = _esc_applescript_text((voice or "").strip())
-    voice_clause = f' using "{esc_voice}"' if esc_voice else ""
-    script = f'say "{esc_text}"{voice_clause} speaking rate {int(rate)}'
-    timeout = max(15.0, min(120.0, 10.0 + (len(payload) / 9.0)))
-    result = _run_script(script, timeout=timeout)
-    if result is None:
-        return {"ok": False, "error": "speech synthesis failed"}
-    return {"ok": True, "voice": esc_voice or None, "rate": float(rate)}
-
-
-def phone_tts_in_call(
+def messages_send_voice(
     text: str,
-    delay_seconds: float = 4.0,
+    recipient: str,
     voice: str = "",
     rate: float = 180.0,
-    *,
-    deterministic_audio: bool = False,
-    virtual_audio_input_device: str = "BlackHole 2ch",
-    virtual_audio_output_device: str = "BlackHole 2ch",
     tts_engine: str = "auto",
     piper_command: str = "piper",
     piper_model_path: str = "",
-    audio_switch_command: str = "SwitchAudioSource",
-    audio_play_command: str = "afplay",
-    audio_route_settle_seconds: float = 0.8,
 ) -> dict[str, Any]:
-    """Delayed in-call speech with optional deterministic virtual-audio routing."""
-    delay = max(0.0, float(delay_seconds))
-    if delay > 0:
-        time.sleep(delay)
-
-    if not deterministic_audio:
-        result = phone_tts_say(text=text, voice=voice, rate=rate)
-        result["delay_seconds"] = delay
-        result["deterministic_audio"] = False
-        return result
-
+    """Send a synthesized voice message as an iMessage attachment."""
     payload = (text or "").strip()
     if not payload:
-        return {"ok": False, "error": "text is required", "delay_seconds": delay, "deterministic_audio": True}
-    if not virtual_audio_input_device.strip() or not virtual_audio_output_device.strip():
-        return {
-            "ok": False,
-            "error": "virtual input/output devices are required when deterministic audio is enabled",
-            "delay_seconds": delay,
-            "deterministic_audio": True,
-        }
+        return {"ok": False, "error": "text is required"}
+
+    normalized = _normalize_phone_number(recipient)
+    if not normalized:
+        return {"ok": False, "error": "invalid recipient phone number", "stage": "validation"}
+
+    logger.info("Creating voice message for %s (%d chars)", normalized, len(payload))
 
     synth = _synthesize_tts_to_audio_file(
         payload,
@@ -3424,116 +3171,74 @@ def phone_tts_in_call(
         piper_command=piper_command,
         piper_model_path=piper_model_path,
     )
+
     if not synth.get("ok"):
         return {
             "ok": False,
-            "error": synth.get("error", "speech synthesis failed"),
-            "delay_seconds": delay,
-            "deterministic_audio": True,
+            "error": synth.get("error", "TTS synthesis failed"),
+            "stage": "synthesis",
         }
 
-    audio_path = str(synth.get("path") or "").strip()
-    route_result: dict[str, Any]
-    try:
-        route_result = _route_audio_file_to_call_input(
-            audio_path=audio_path,
-            virtual_input_device=virtual_audio_input_device,
-            virtual_output_device=virtual_audio_output_device,
-            switch_audio_source_command=audio_switch_command,
-            audio_play_command=audio_play_command,
-            settle_seconds=audio_route_settle_seconds,
-        )
-    finally:
-        if audio_path:
-            try:
-                Path(audio_path).unlink(missing_ok=True)
-            except Exception:
-                logger.debug("Unable to clean up temp TTS file: %s", audio_path)
+    audio_path = synth.get("path", "")
+    if not audio_path:
+        return {"ok": False, "error": "no audio path returned", "stage": "synthesis"}
 
-    response: dict[str, Any] = {
-        "ok": bool(route_result.get("ok")),
-        "delay_seconds": delay,
-        "deterministic_audio": True,
+    logger.info("Sending iMessage voice attachment: %s", audio_path)
+    try:
+        send_result = _send_imessage_attachment(normalized, audio_path)
+    finally:
+        try:
+            Path(audio_path).unlink(missing_ok=True)
+        except Exception:
+            logger.debug("Could not clean up temp audio file: %s", audio_path)
+
+    if not send_result.get("ok"):
+        return {
+            "ok": False,
+            "error": send_result.get("error", "failed to send iMessage"),
+            "stage": "send",
+        }
+
+    return {
+        "ok": True,
+        "recipient": normalized,
+        "text_length": len(payload),
         "tts_engine": synth.get("engine"),
     }
-    if route_result.get("ok"):
-        response["audio_route"] = route_result
-        return response
-
-    response["error"] = route_result.get("error", "virtual audio routing failed")
-    return response
 
 
-def phone_call_me(
-    owner_number: str,
-    preflight_text: str = "",
-    in_call_text: str = "",
-    preferred_app: str = "phone",
-    voice: str = "",
-    rate: float = 180.0,
-    tts_engine: str = "auto",
-    piper_command: str = "piper",
-    piper_model_path: str = "",
-    in_call_delay_seconds: float = 4.0,
-    enable_in_call_tts: bool = True,
-    deterministic_audio: bool = False,
-    virtual_audio_input_device: str = "BlackHole 2ch",
-    virtual_audio_output_device: str = "BlackHole 2ch",
-    audio_switch_command: str = "SwitchAudioSource",
-    audio_play_command: str = "afplay",
-    audio_route_settle_seconds: float = 0.8,
-) -> dict[str, Any]:
-    """High-level call flow for owner callback with optional TTS stages."""
-    response: dict[str, Any] = {"ok": False}
-    preflight = (preflight_text or "").strip()
-    in_call = (in_call_text or "").strip()
+def _send_imessage_attachment(recipient: str, file_path: str) -> dict[str, Any]:
+    """Send an iMessage with a file attachment to a recipient."""
+    normalized = _normalize_phone_number(recipient)
+    if not normalized:
+        return {"ok": False, "error": "invalid phone number"}
 
-    if preflight:
-        response["preflight_tts"] = phone_tts_say(text=preflight, voice=voice, rate=rate)
+    path = Path(file_path).expanduser()
+    if not path.exists():
+        return {"ok": False, "error": "file not found"}
 
-    call_result = phone_call(number=owner_number, app=preferred_app)
-    response["call"] = call_result
-    if not call_result.get("ok"):
-        response["error"] = call_result.get("error", "failed to launch call")
-        return response
+    if not path.is_file():
+        return {"ok": False, "error": "not a file"}
 
-    if enable_in_call_tts and in_call:
-        response["in_call_tts"] = phone_tts_in_call(
-            text=in_call,
-            delay_seconds=in_call_delay_seconds,
-            voice=voice,
-            rate=rate,
-            deterministic_audio=deterministic_audio,
-            virtual_audio_input_device=virtual_audio_input_device,
-            virtual_audio_output_device=virtual_audio_output_device,
-            tts_engine=tts_engine,
-            piper_command=piper_command,
-            piper_model_path=piper_model_path,
-            audio_switch_command=audio_switch_command,
-            audio_play_command=audio_play_command,
-            audio_route_settle_seconds=audio_route_settle_seconds,
-        )
+    esc_number = normalized
+    esc_path = str(path).replace("\\", "\\\\").replace('"', '\\"')
 
-    warnings: list[str] = []
-    preflight_result = response.get("preflight_tts")
-    if isinstance(preflight_result, dict) and preflight and not preflight_result.get("ok"):
-        warnings.append("preflight_tts_failed")
-    in_call_result = response.get("in_call_tts")
-    if isinstance(in_call_result, dict) and in_call and not in_call_result.get("ok"):
-        warnings.append("in_call_tts_failed")
-        if deterministic_audio:
-            response["error"] = in_call_result.get("error", "deterministic in-call audio failed")
-            response["deterministic_audio"] = True
-            response["warnings"] = warnings
-            response["number"] = _normalize_phone_number(owner_number)
-            return response
-    if warnings:
-        response["warnings"] = warnings
+    script = f'''
+    tell application "Messages"
+        set targetService to 1st service whose service type = iMessage
+        set targetBuddy to buddy "{esc_number}" of targetService
+        set audioFile to POSIX file "{esc_path}"
+        send audioFile to targetBuddy
+    end tell
+    '''
 
-    response["ok"] = True
-    response["deterministic_audio"] = deterministic_audio
-    response["number"] = _normalize_phone_number(owner_number)
-    return response
+    try:
+        result = _run_command(["osascript", "-e", script], timeout=60.0)
+        if result["ok"]:
+            return {"ok": True}
+        return {"ok": False, "error": result.get("stderr") or result.get("error") or "AppleScript failed"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 # ---------------------------------------------------------------------------

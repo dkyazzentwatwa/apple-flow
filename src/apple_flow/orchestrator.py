@@ -81,20 +81,11 @@ class RelayOrchestrator:
         log_file_path: str | None = None,
         approval_sender_override: str = "",
         phone_owner_number: str = "",
-        phone_preferred_app: str = "phone",
         phone_tts_voice: str = "",
         phone_tts_rate: float = 180.0,
         phone_tts_engine: str = "auto",
         phone_piper_command: str = "piper",
         phone_piper_model_path: str = "",
-        phone_in_call_tts_delay_seconds: float = 4.0,
-        phone_enable_in_call_tts: bool = True,
-        phone_deterministic_in_call_audio: bool = False,
-        phone_virtual_audio_input_device: str = "BlackHole 2ch",
-        phone_virtual_audio_output_device: str = "BlackHole 2ch",
-        phone_audio_switch_command: str = "SwitchAudioSource",
-        phone_audio_play_command: str = "afplay",
-        phone_audio_route_settle_seconds: float = 0.8,
         healer_repo_path: str = "",
         healer_scan_enable_issue_creation: bool = True,
         healer_scan_max_issues_per_run: int = 5,
@@ -157,20 +148,11 @@ class RelayOrchestrator:
             notes_log_folder_name=notes_log_folder_name,
             approval_sender_override=approval_sender_override,
             phone_owner_number=phone_owner_number,
-            phone_preferred_app=phone_preferred_app,
             phone_tts_voice=phone_tts_voice,
             phone_tts_rate=phone_tts_rate,
             phone_tts_engine=phone_tts_engine,
             phone_piper_command=phone_piper_command,
             phone_piper_model_path=phone_piper_model_path,
-            phone_in_call_tts_delay_seconds=phone_in_call_tts_delay_seconds,
-            phone_enable_in_call_tts=phone_enable_in_call_tts,
-            phone_deterministic_in_call_audio=phone_deterministic_in_call_audio,
-            phone_virtual_audio_input_device=phone_virtual_audio_input_device,
-            phone_virtual_audio_output_device=phone_virtual_audio_output_device,
-            phone_audio_switch_command=phone_audio_switch_command,
-            phone_audio_play_command=phone_audio_play_command,
-            phone_audio_route_settle_seconds=phone_audio_route_settle_seconds,
         )
 
     def set_run_executor(self, run_executor: Any) -> None:
@@ -236,7 +218,7 @@ class RelayOrchestrator:
             if not command.payload:
                 hint = (
                     f"Use `{self.chat_prefix} <message>` for general chat.\n"
-                    "Or use `help`, `idea:`, `plan:`, `task:`, `project:`, `health`, `history:`, or `usage`."
+                    "Or use `help`, `idea:`, `plan:`, `task:`, `project:`, `voice:`, `voice-task:`, `health`, `history:`, or `usage`."
                 )
                 self._send(message.sender, hint, context=message.context)
                 return OrchestrationResult(kind=CommandKind.CHAT, response=hint)
@@ -309,7 +291,7 @@ class RelayOrchestrator:
 
         active_team = self._get_active_team(message.sender)
         team_context = None
-        if command.kind in {CommandKind.IDEA, CommandKind.PLAN, CommandKind.TASK, CommandKind.PROJECT}:
+        if command.kind in {CommandKind.IDEA, CommandKind.PLAN, CommandKind.TASK, CommandKind.PROJECT, CommandKind.VOICE_TASK}:
             team_context = self._build_turn_team_context(active_team)
 
         workspace = self._resolve_workspace(command.workspace)
@@ -317,7 +299,7 @@ class RelayOrchestrator:
         thread_id = self.connector.get_or_create_thread(message.sender)
         self.store.upsert_session(message.sender, thread_id, command.kind.value)
 
-        if command.kind in {CommandKind.TASK, CommandKind.PROJECT}:
+        if command.kind in {CommandKind.TASK, CommandKind.PROJECT, CommandKind.VOICE, CommandKind.VOICE_TASK}:
             result = self._approval.handle_approval_required(
                 message, command.kind, thread_id, command.payload, workspace,
                 default_workspace=self.default_workspace,
@@ -385,6 +367,8 @@ class RelayOrchestrator:
             "- 📋 plan: <request> — implementation planning",
             "- ⚡ task: <request> — execute a concrete task (approval required)",
             "- 🚀 project: <request> — multi-step work (approval required)",
+            "- 🎙️ voice: <text> — send a voice-message iMessage attachment (approval required)",
+            "- 🔊 voice-task: <request> — run a task, then send both text and voice results (approval required)",
             "",
             "🏥 Diagnostics:",
             "- 🏥 health — daemon + companion status",
@@ -403,6 +387,8 @@ class RelayOrchestrator:
             "- Use `status` first when something seems stuck.",
             "- Use `approve <id> <extra instructions>` to resume with guidance.",
             "- Use `@alias` right after `idea:/plan:/task:/project:` to target a workspace.",
+            "- Use `voice:` when you want a polished audio iMessage instead of a text reply.",
+            "- Use `voice-task:` when you want Apple Flow to do the work first, then send both a text result and spoken version.",
         ]
         response = "\n".join(lines)
         self._send(sender, response, context=context)
@@ -1670,7 +1656,7 @@ class RelayOrchestrator:
         )
         loaded_msg = (
             f"Loaded team `{team.slug}` ({team.title}). {mode_note} "
-            "It will auto-reset after your next `idea`, `plan`, `task`, or `project` request."
+            "It will auto-reset after your next `idea`, `plan`, `task`, `project`, or `voice-task` request."
         )
         self._send(sender, loaded_msg, context=message.context)
 
@@ -1682,7 +1668,7 @@ class RelayOrchestrator:
 
     def _run_follow_on_after_team_load(self, message: InboundMessage, remainder: str) -> str:
         parsed = parse_command(remainder)
-        if parsed.kind in {CommandKind.IDEA, CommandKind.PLAN, CommandKind.TASK, CommandKind.PROJECT}:
+        if parsed.kind in {CommandKind.IDEA, CommandKind.PLAN, CommandKind.TASK, CommandKind.PROJECT, CommandKind.VOICE_TASK}:
             follow_text = remainder
         else:
             follow_text = f"plan: {remainder}"
