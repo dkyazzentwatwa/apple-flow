@@ -228,6 +228,10 @@ class RelaySettings(BaseSettings):
     attachment_max_text_chars_per_file: int = 6000
     attachment_max_total_text_chars: int = 24000
     attachment_enable_image_ocr: bool = True
+    attachment_enable_audio_transcription: bool = True
+    attachment_audio_transcription_command: str = "whisper"
+    attachment_audio_transcription_model: str = "turbo"
+    attachment_audio_transcription_language: str = ""
 
     # --- Companion Layer (autonomous proactive assistant) ---
 
@@ -341,6 +345,9 @@ class RelaySettings(BaseSettings):
         "phone_tts_engine",
         "phone_piper_command",
         "phone_piper_model_path",
+        "attachment_audio_transcription_command",
+        "attachment_audio_transcription_model",
+        "attachment_audio_transcription_language",
         mode="before",
     )
     @classmethod

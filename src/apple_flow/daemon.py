@@ -144,6 +144,11 @@ class RelayDaemon:
             max_text_chars_per_file=settings.attachment_max_text_chars_per_file,
             max_total_text_chars=settings.attachment_max_total_text_chars,
             enable_image_ocr=settings.attachment_enable_image_ocr,
+            enable_audio_transcription=settings.attachment_enable_audio_transcription,
+            audio_transcription_command=settings.attachment_audio_transcription_command,
+            audio_transcription_model=settings.attachment_audio_transcription_model,
+            audio_transcription_language=settings.attachment_audio_transcription_language,
+            audio_transcription_temp_dir=settings.attachment_temp_dir,
         )
 
         # Choose connector based on configuration
@@ -1049,11 +1054,7 @@ class RelayDaemon:
                         logger.info("Ignoring empty inbound rowid=%s sender=%s", msg.id, msg.sender)
                         continue
                     if not msg.text.strip() and has_attachments:
-                        msg.text = "analyze attached files"
-                        if getattr(self.settings, "require_chat_prefix", False):
-                            chat_prefix = (getattr(self.settings, "chat_prefix", "relay:") or "relay:").strip()
-                            msg.text = f"{chat_prefix} {msg.text}"
-                        msg.context["synthetic_text_reason"] = "attachment_only"
+                        msg.text = self._synthesize_attachment_only_text(msg)
                         logger.info(
                             "Synthesized text for attachment-only inbound rowid=%s sender=%s text=%r",
                             msg.id,
@@ -1187,6 +1188,31 @@ class RelayDaemon:
 
             await asyncio.sleep(self.settings.poll_interval_seconds)
         await self._flush_inflight_on_shutdown(timeout=2.0)
+
+    def _synthesize_attachment_only_text(self, msg: InboundMessage) -> str:
+        attachments = list((msg.context or {}).get("attachments") or [])
+        synthetic = ""
+        if attachments and getattr(self, "attachment_processor", None) is not None:
+            analysis = self.attachment_processor.analyze_attachments(msg.id, attachments)
+            if analysis.prompt_block:
+                msg.context["attachment_prompt_block"] = analysis.prompt_block
+            if analysis.metadata:
+                msg.context["attachment_processing"] = analysis.metadata
+            if analysis.voice_transcript:
+                msg.context["voice_transcript"] = analysis.voice_transcript
+            if analysis.suggested_text:
+                msg.context["attachment_suggested_text"] = analysis.suggested_text
+                synthetic = analysis.suggested_text
+            if analysis.suggested_reason:
+                msg.context["synthetic_text_reason"] = analysis.suggested_reason
+            msg.context["attachment_analysis_ready"] = True
+        if not synthetic:
+            synthetic = "analyze attached files"
+            if getattr(self.settings, "require_chat_prefix", False):
+                chat_prefix = (getattr(self.settings, "chat_prefix", "relay:") or "relay:").strip()
+                synthetic = f"{chat_prefix} {synthetic}"
+            msg.context["synthetic_text_reason"] = "attachment_only"
+        return synthetic
 
     def _consume_restart_echo_suppress(self, sender: str, text: str) -> bool:
         """Consume one short-lived restart echo suppress marker, if present and matching."""

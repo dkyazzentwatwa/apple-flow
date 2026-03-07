@@ -324,9 +324,14 @@ apple_flow_attachment_max_files_per_message=6
 apple_flow_attachment_max_text_chars_per_file=6000
 apple_flow_attachment_max_total_text_chars=24000
 apple_flow_attachment_enable_image_ocr=true
+apple_flow_attachment_enable_audio_transcription=true
+apple_flow_attachment_audio_transcription_command=whisper
+apple_flow_attachment_audio_transcription_model=turbo
 ```
 
-When enabled, Apple Flow extracts prompt context from iMessage attachments (text/code files, PDFs, images via OCR when available, and Office files like `.docx/.pptx/.xlsx`) and includes that context in chat, planning, and approval execution flows.
+When enabled, Apple Flow extracts prompt context from iMessage attachments (text/code files, PDFs, images via OCR when available, Office files like `.docx/.pptx/.xlsx`, and audio voice notes via local Whisper CLI transcription) and includes that context in chat, planning, and approval execution flows.
+
+If an inbound iMessage is just a voice note, Apple Flow now transcribes it, turns it into a synthetic `voice-task:` request, and replies with both text plus a spoken TTS follow-up. Install a local `whisper` CLI for STT, similar to how `pdftotext` and `tesseract` are used for other attachment types.
 
 See full settings in [docs/ENV_SETUP.md](docs/ENV_SETUP.md).
 

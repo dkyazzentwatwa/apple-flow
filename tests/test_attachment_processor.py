@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import zipfile
+from pathlib import Path
 
 from apple_flow.attachments import AttachmentProcessor
 
@@ -139,3 +140,29 @@ def test_docx_pptx_xlsx_extract_text(tmp_path):
     assert "Hello DOCX" in block
     assert "Hello PPTX" in block
     assert "Hello XLSX" in block
+
+
+def test_audio_attachment_transcription_suggests_voice_task(tmp_path, monkeypatch):
+    audio_file = tmp_path / "voice-note.m4a"
+    audio_file.write_bytes(b"fake audio bytes")
+
+    def _fake_run_command(args: list[str], *, timeout: int = 30):
+        output_dir = Path(args[args.index("--output_dir") + 1])
+        (output_dir / f"{audio_file.stem}.txt").write_text("summarize the deployment plan", encoding="utf-8")
+        return "", ""
+
+    monkeypatch.setattr("apple_flow.attachments.shutil.which", lambda _name: "/opt/homebrew/bin/whisper")
+    monkeypatch.setattr(AttachmentProcessor, "_run_command", staticmethod(_fake_run_command))
+
+    processor = AttachmentProcessor()
+    analysis = processor.analyze_attachments(
+        "m-audio",
+        [{"filename": audio_file.name, "mime_type": "audio/m4a", "path": str(audio_file)}],
+    )
+
+    assert analysis.voice_transcript == "summarize the deployment plan"
+    assert analysis.suggested_text == "voice-task: summarize the deployment plan"
+    assert analysis.suggested_reason == "voice_attachment_transcript"
+    assert "kind=audio status=ok" in analysis.prompt_block
+    assert "summarize the deployment plan" in analysis.prompt_block
+    assert analysis.metadata[0]["media_kind"] == "audio"

@@ -249,3 +249,12 @@ def test_phone_defaults(monkeypatch, tmp_path):
 def test_phone_tts_engine_validation():
     with pytest.raises(ValueError, match="Invalid phone_tts_engine"):
         RelaySettings(phone_tts_engine="elevenlabs")
+
+
+def test_attachment_audio_transcription_defaults(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.attachment_enable_audio_transcription is True
+    assert settings.attachment_audio_transcription_command == "whisper"
+    assert settings.attachment_audio_transcription_model == "turbo"
+    assert settings.attachment_audio_transcription_language == ""

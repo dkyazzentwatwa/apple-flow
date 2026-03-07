@@ -199,10 +199,12 @@ class RelayOrchestrator:
             if self.enable_attachments and (
                 message.context.get("attachments") or message.context.get("attachment_prompt_block")
             ):
-                synthetic = "analyze attached files"
-                if self.require_chat_prefix:
-                    chat_prefix = self.chat_prefix or "relay:"
-                    synthetic = f"{chat_prefix} {synthetic}"
+                synthetic = str(message.context.get("attachment_suggested_text") or "").strip()
+                if not synthetic:
+                    synthetic = "analyze attached files"
+                    if self.require_chat_prefix:
+                        chat_prefix = self.chat_prefix or "relay:"
+                        synthetic = f"{chat_prefix} {synthetic}"
                 message.text = synthetic
                 raw_text = synthetic
                 logger.info("Synthesized attachment-only prompt for sender=%s message_id=%s", message.sender, message.id)
@@ -1760,11 +1762,20 @@ class RelayOrchestrator:
         attachments = message.context.get("attachments", [])
         if not attachments:
             return
-        block, metadata = self.attachment_processor.build_prompt_block(message.id, attachments)
-        if block:
-            message.context["attachment_prompt_block"] = block
-        if metadata:
-            message.context["attachment_processing"] = metadata
+        if message.context.get("attachment_analysis_ready"):
+            return
+        analysis = self.attachment_processor.analyze_attachments(message.id, attachments)
+        if analysis.prompt_block:
+            message.context["attachment_prompt_block"] = analysis.prompt_block
+        if analysis.metadata:
+            message.context["attachment_processing"] = analysis.metadata
+        if analysis.voice_transcript:
+            message.context["voice_transcript"] = analysis.voice_transcript
+        if analysis.suggested_text:
+            message.context["attachment_suggested_text"] = analysis.suggested_text
+        if analysis.suggested_reason:
+            message.context["attachment_suggested_reason"] = analysis.suggested_reason
+        message.context["attachment_analysis_ready"] = True
 
     def _inject_attachment_context(self, message: InboundMessage, prompt: str) -> str:
         if not self.enable_attachments:
