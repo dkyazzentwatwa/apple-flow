@@ -217,11 +217,7 @@ class AppleRemindersIngress:
             set maxCount to {int(limit)}
             set outputLines to {{}}
 
-            try
-                set taskList to list "{escaped_list_name}"
-            on error
-                return ""
-            end try
+            set taskList to list "{escaped_list_name}"
 
             set openItems to (every reminder of taskList whose completed is false)
 
@@ -239,7 +235,9 @@ class AppleRemindersIngress:
                 if rName is missing value then
                     set rNameStr to ""
                 else
-                    set rNameStr to my sanitise(rName as text)
+                    set rNameText to rName as text
+                    if length of rNameText > 1000 then set rNameText to text 1 thru 1000 of rNameText
+                    set rNameStr to my sanitise(rNameText)
                 end if
 
                 try
@@ -303,7 +301,8 @@ class AppleRemindersIngress:
                     result.stderr.strip(),
                 )
                 return []
-            output = result.stdout.strip()
+            # Preserve trailing tab-delimited empty fields (e.g. missing due_date).
+            output = result.stdout.rstrip("\r\n")
             if not output:
                 return []
             return self._parse_tab_delimited(output)
@@ -323,14 +322,14 @@ class AppleRemindersIngress:
         reminders: list[dict[str, str]] = []
         for line in output.splitlines():
             parts = line.split("\t")
-            if len(parts) < 5:
+            if len(parts) < 4:
                 continue
             reminders.append({
                 "id": parts[0],
                 "name": parts[1],
                 "body": parts[2],
                 "creation_date": parts[3],
-                "due_date": parts[4],
+                "due_date": parts[4] if len(parts) >= 5 else "",
             })
         return reminders
 
