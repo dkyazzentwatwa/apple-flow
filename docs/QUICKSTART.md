@@ -491,20 +491,6 @@ apple_flow_memory_v2_migrate_on_start=true
 apple_flow_memory_v2_shadow_mode=false
 ```
 
-### Agent Teams (Codex CLI only)
-
-Activate multi-agent teams for specialized workflows:
-
-```bash
-# List available teams
-list available agent teams
-
-# Load a team
-load up the codebase-exploration-team
-```
-
-Teams are defined in `agents/catalog.toml` and `agents/teams/*/TEAM.md`.
-
 ### Advanced Configuration
 
 See `.env.example` for all 60+ settings including:

@@ -95,6 +95,12 @@ class RelaySettings(BaseSettings):
     codex_turn_timeout_seconds: float = 300.0
     max_concurrent_ai_calls: int = 4
 
+    # Helper maintenance / soft recycle
+    enable_helper_maintenance: bool = False
+    helper_maintenance_interval_seconds: float = 1800.0
+    helper_recycle_idle_seconds: float = 1200.0
+    helper_recycle_max_age_seconds: float = 21600.0
+
     # Workspace aliases for multi-workspace routing
     workspace_aliases: str = ""  # JSON dict: '{"web-app":"/path/to/web-app"}'
     # File aliases for prompt references via @f:<alias>
@@ -186,40 +192,6 @@ class RelaySettings(BaseSettings):
     # Executor / verifier behaviour
     enable_verifier: bool = False  # run a verification turn after execution (adds latency)
 
-    # Autonomous healer (GitHub issue-driven remediation loop)
-    enable_autonomous_healer: bool = False
-    healer_mode: str = "guarded_pr"  # guarded_pr | auto_merge_low_risk | full_auto
-    healer_repo_path: str = ""
-    healer_poll_interval_seconds: float = 120.0
-    healer_max_concurrent_issues: int = 2
-    healer_retry_budget: int = 8
-    healer_backoff_initial_seconds: int = 60
-    healer_backoff_max_seconds: int = 3600
-    healer_circuit_breaker_failure_rate: float = 0.5
-    healer_circuit_breaker_window: int = 20
-    healer_sandbox_mode: str = "docker"  # docker (phase-1 default/supported)
-    healer_issue_required_labels: list[str] = Field(default_factory=lambda: ["healer:ready"])
-    healer_trusted_actors: list[str] = Field(default_factory=list)
-    healer_max_wall_clock_seconds_per_issue: int = 1800
-    healer_max_diff_files: int = 20
-    healer_max_diff_lines: int = 1200
-    healer_max_failed_tests_allowed: int = 0
-    healer_pr_actions_require_approval: bool = True
-    healer_pr_required_label: str = "healer:pr-approved"
-    healer_learning_enabled: bool = False
-    healer_scan_enable_issue_creation: bool = True
-    healer_scan_max_issues_per_run: int = 5
-    healer_scan_severity_threshold: str = "medium"  # low | medium | high | critical
-    healer_scan_default_labels: list[str] = Field(default_factory=lambda: ["healer:ready", "kind:scan"])
-    healer_scan_notes_log: bool = False
-    enable_healer_scheduled_scans: bool = False
-    healer_daily_scan_time: str = "06:00"
-    healer_weekly_deep_scan_day: str = "sunday"
-    healer_weekly_deep_scan_time: str = "04:00"
-    healer_scheduled_scan_owner: str = ""
-    healer_scan_artifacts_dir: str = "logs/scans"
-    healer_schedule_poll_seconds: float = 60.0
-
     # File attachment settings
     enable_attachments: bool = False
     max_attachment_size_mb: int = 10
@@ -275,12 +247,6 @@ class RelaySettings(BaseSettings):
     # Log file path (used by `logs` command to tail the daemon log)
     log_file_path: str = "logs/apple-flow.err.log"
 
-    # Agent-office → Supabase sync
-    enable_office_sync: bool = False
-    supabase_url: str = "http://localhost:54321"
-    supabase_service_key: str = ""
-    office_sync_interval_seconds: float = 3600.0
-
     # CSV audit logging (analytics-friendly mirror of structured events)
     enable_csv_audit_log: bool = True
     csv_audit_log_path: str = "agent-office/90_logs/events.csv"
@@ -299,9 +265,6 @@ class RelaySettings(BaseSettings):
         "mail_allowed_senders",
         "claude_cli_tools",
         "claude_cli_allowed_tools",
-        "healer_issue_required_labels",
-        "healer_trusted_actors",
-        "healer_scan_default_labels",
         mode="before",
     )
     @classmethod
@@ -326,18 +289,7 @@ class RelaySettings(BaseSettings):
         "memory_v2_shadow_mode",
         "memory_v2_migrate_on_start",
         "memory_v2_include_legacy_fallback",
-        "enable_autonomous_healer",
-        "healer_pr_actions_require_approval",
-        "healer_learning_enabled",
-        "healer_scan_enable_issue_creation",
-        "healer_scan_notes_log",
-        "enable_healer_scheduled_scans",
-        "healer_daily_scan_time",
-        "healer_weekly_deep_scan_day",
-        "healer_weekly_deep_scan_time",
-        "healer_scheduled_scan_owner",
-        "healer_scan_artifacts_dir",
-        "healer_schedule_poll_seconds",
+        "enable_helper_maintenance",
         "enable_csv_audit_log",
         "csv_audit_include_headers_if_missing",
         "enable_markdown_automation_log",
@@ -382,62 +334,6 @@ class RelaySettings(BaseSettings):
                 f"Invalid timezone {value!r}. Use an IANA timezone like 'America/Los_Angeles'."
             ) from exc
         return value
-
-    @field_validator("healer_mode", mode="after")
-    @classmethod
-    def _validate_healer_mode(cls, value: str) -> str:
-        allowed = {"guarded_pr", "auto_merge_low_risk", "full_auto"}
-        normalized = (value or "").strip().lower()
-        if normalized in allowed:
-            return normalized
-        raise ValueError(f"Invalid healer_mode {value!r}. Allowed: {', '.join(sorted(allowed))}")
-
-    @field_validator("healer_sandbox_mode", mode="after")
-    @classmethod
-    def _validate_healer_sandbox_mode(cls, value: str) -> str:
-        allowed = {"docker"}
-        normalized = (value or "").strip().lower()
-        if normalized in allowed:
-            return normalized
-        raise ValueError(f"Invalid healer_sandbox_mode {value!r}. Allowed: {', '.join(sorted(allowed))}")
-
-    @field_validator("healer_scan_severity_threshold", mode="after")
-    @classmethod
-    def _validate_healer_scan_severity_threshold(cls, value: str) -> str:
-        allowed = {"low", "medium", "high", "critical"}
-        normalized = (value or "").strip().lower()
-        if normalized in allowed:
-            return normalized
-        raise ValueError(
-            f"Invalid healer_scan_severity_threshold {value!r}. Allowed: {', '.join(sorted(allowed))}"
-        )
-
-    @field_validator("healer_daily_scan_time", "healer_weekly_deep_scan_time", mode="after")
-    @classmethod
-    def _validate_healer_schedule_time(cls, value: str) -> str:
-        normalized = (value or "").strip()
-        parts = normalized.split(":")
-        if len(parts) != 2:
-            raise ValueError(f"Invalid time {value!r}. Use HH:MM (24-hour), for example '06:00'.")
-        try:
-            hour = int(parts[0])
-            minute = int(parts[1])
-        except ValueError as exc:
-            raise ValueError(f"Invalid time {value!r}. Use HH:MM (24-hour), for example '06:00'.") from exc
-        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
-            raise ValueError(f"Invalid time {value!r}. Use HH:MM (24-hour), for example '06:00'.")
-        return f"{hour:02d}:{minute:02d}"
-
-    @field_validator("healer_weekly_deep_scan_day", mode="after")
-    @classmethod
-    def _validate_healer_weekly_day(cls, value: str) -> str:
-        allowed = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
-        normalized = (value or "").strip().lower()
-        if normalized in allowed:
-            return normalized
-        raise ValueError(
-            f"Invalid healer_weekly_deep_scan_day {value!r}. Allowed: {', '.join(sorted(allowed))}"
-        )
 
     @field_validator("phone_tts_engine", mode="after")
     @classmethod

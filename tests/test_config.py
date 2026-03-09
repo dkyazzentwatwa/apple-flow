@@ -117,6 +117,15 @@ def test_liveness_and_checkpoint_defaults(monkeypatch, tmp_path):
     assert settings.max_resume_attempts == 5
 
 
+def test_helper_maintenance_defaults(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.enable_helper_maintenance is False
+    assert settings.helper_maintenance_interval_seconds == 1800.0
+    assert settings.helper_recycle_idle_seconds == 1200.0
+    assert settings.helper_recycle_max_age_seconds == 21600.0
+
+
 def test_empty_admin_port_and_memory_fall_back_to_defaults(monkeypatch, tmp_path):
     dotenv = tmp_path / ".env"
     dotenv.write_text(
@@ -178,61 +187,6 @@ def test_timezone_rejects_invalid_name(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError, match="Invalid timezone"):
         RelaySettings(timezone="Not/A_Real_Zone")
-
-
-def test_healer_defaults(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    settings = RelaySettings()
-    assert settings.enable_autonomous_healer is False
-    assert settings.healer_mode == "guarded_pr"
-    assert settings.healer_sandbox_mode == "docker"
-    assert settings.healer_issue_required_labels == ["healer:ready"]
-    assert settings.healer_learning_enabled is False
-    assert settings.healer_scan_default_labels == ["healer:ready", "kind:scan"]
-    assert settings.healer_scan_severity_threshold == "medium"
-    assert settings.enable_healer_scheduled_scans is False
-    assert settings.healer_daily_scan_time == "06:00"
-    assert settings.healer_weekly_deep_scan_day == "sunday"
-    assert settings.healer_weekly_deep_scan_time == "04:00"
-    assert settings.healer_scan_artifacts_dir == "logs/scans"
-    assert settings.healer_schedule_poll_seconds == 60.0
-
-
-def test_healer_csv_list_parsing():
-    settings = RelaySettings(
-        healer_issue_required_labels="healer:ready,bug",
-        healer_trusted_actors="alice,bob",
-        healer_scan_default_labels="healer:ready,kind:scan,source:auto",
-    )
-    assert settings.healer_issue_required_labels == ["healer:ready", "bug"]
-    assert settings.healer_trusted_actors == ["alice", "bob"]
-    assert settings.healer_scan_default_labels == ["healer:ready", "kind:scan", "source:auto"]
-
-
-def test_healer_mode_validation():
-    with pytest.raises(ValueError, match="Invalid healer_mode"):
-        RelaySettings(healer_mode="bad-mode")
-
-
-def test_healer_sandbox_mode_validation():
-    with pytest.raises(ValueError, match="Invalid healer_sandbox_mode"):
-        RelaySettings(healer_sandbox_mode="local")
-
-
-def test_healer_scan_severity_threshold_validation():
-    with pytest.raises(ValueError, match="Invalid healer_scan_severity_threshold"):
-        RelaySettings(healer_scan_severity_threshold="urgent")
-
-
-def test_healer_weekly_deep_scan_day_validation():
-    with pytest.raises(ValueError, match="Invalid healer_weekly_deep_scan_day"):
-        RelaySettings(healer_weekly_deep_scan_day="funday")
-
-
-@pytest.mark.parametrize("field_name", ["healer_daily_scan_time", "healer_weekly_deep_scan_time"])
-def test_healer_schedule_time_validation(field_name):
-    with pytest.raises(ValueError, match="Invalid time"):
-        RelaySettings(**{field_name: "25:99"})
 
 
 def test_phone_defaults(monkeypatch, tmp_path):

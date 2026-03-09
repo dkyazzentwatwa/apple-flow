@@ -689,6 +689,13 @@ def _service_status(_args: Any) -> dict[str, Any]:
 
     settings = RelaySettings()
     healthy = _admin_health(settings.admin_host, settings.admin_port, settings.admin_api_token)
+    db_ok, db_reason = check_messages_db_access(Path(settings.messages_db_path))
+    allowed_sender_count = len(settings.allowed_senders or [])
+    iMessage_polling_active = bool(
+        _daemon_process_detected()
+        and db_ok
+        and (not settings.only_poll_allowed_senders or allowed_sender_count > 0)
+    )
 
     return _response_ok(
         launchd_loaded=loaded,
@@ -699,6 +706,14 @@ def _service_status(_args: Any) -> dict[str, Any]:
         admin_process_detected=_admin_process_detected(),
         plist_path=str(plist_path),
         admin_plist_path=str(admin_plist_path),
+        messages_db_path=str(settings.messages_db_path),
+        messages_db_exists=Path(settings.messages_db_path).exists(),
+        messages_db_readable=db_ok,
+        messages_db_status=db_reason or "OK",
+        only_poll_allowed_senders=settings.only_poll_allowed_senders,
+        allowed_sender_count=allowed_sender_count,
+        iMessage_polling_active=iMessage_polling_active,
+        startup_catchup_window_seconds=settings.startup_catchup_window_seconds,
         healthy=healthy,
     )
 

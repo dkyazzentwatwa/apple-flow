@@ -147,7 +147,6 @@ Only `SCAFFOLD.md`, `setup.sh`, and `SOUL.md` are tracked by git. Everything els
 | `notes_logging.py` | Logging integration for Apple Notes |
 | `calendar_ingress.py` | Polls Apple Calendar for due events via AppleScript |
 | `calendar_egress.py` | Writes results into event description/notes |
-| `office_sync.py` | Syncs agent-office state |
 | `companion.py` | CompanionLoop: proactive observation loop -- stale approvals, calendar events, overdue reminders, office inbox; synthesizes via AI, sends iMessages; daily digest, weekly review, quiet hours, rate limiting, mute/unmute |
 | `memory.py` | FileMemory: reads/writes `agent-office/MEMORY.md` and `agent-office/60_memory/*.md` topic files; injected into AI prompts before each turn |
 | `scheduler.py` | FollowUpScheduler: SQLite-backed `scheduled_actions` table for time-triggered follow-ups after task completions |
@@ -241,6 +240,10 @@ All settings use the `apple_flow_` env prefix. Configured via `.env` file.
 
 - `apple_flow_connector` -- connector to use: `"codex-cli"` (default), `"claude-cli"`, `"gemini-cli"`, `"cline"`, `"kilo-cli"`, `"ollama"`
 - `apple_flow_codex_turn_timeout_seconds` -- timeout for all connectors (default: 300s/5min)
+- `apple_flow_enable_helper_maintenance` -- periodically soft-recycle tracked connector helper subprocesses without restarting the daemon (default: false)
+- `apple_flow_helper_maintenance_interval_seconds` -- how often to run helper maintenance checks (default: 1800)
+- `apple_flow_helper_recycle_idle_seconds` -- minimum idle window before scheduled helper recycle is allowed (default: 1200)
+- `apple_flow_helper_recycle_max_age_seconds` -- recycle threshold for oldest tracked helper age (default: 21600)
 
 Connector-specific settings (CLI binary path, model, context window, etc.) are documented in `.env.example`. See also the **Connector selection** section under Development Conventions below.
 
@@ -362,8 +365,6 @@ tests/test_siri_shortcuts.py      # POST /task admin API endpoint
 tests/test_progress_streaming.py  # Incremental progress updates
 tests/test_attachments.py         # File attachment support
 tests/test_admin_api.py           # FastAPI admin endpoints
-tests/test_office_sync.py         # Agent-office sync
-
 # Autonomous Companion Layer
 tests/test_companion.py           # CompanionLoop: proactive observations, quiet hours, rate limiting, mute/unmute
 tests/test_memory.py              # FileMemory: MEMORY.md and topic file read/write, prompt injection

@@ -20,11 +20,9 @@ _SECTION_ORDER: list[tuple[str, str, bool]] = [
     ("phone", "Voice Messages", False),
     ("attachments", "Attachments", False),
     ("execution", "Progress & Execution", False),
-    ("healer", "Autonomous Healer", False),
     ("companion", "Companion", False),
     ("memory", "Memory", False),
     ("scheduler", "Scheduler & Ambient", False),
-    ("office_sync", "Office Sync", False),
 ]
 
 _REQUIRED_KEYS = {
@@ -48,18 +46,6 @@ _ENUM_OPTIONS: dict[str, list[str]] = {
     ],
     "apple_flow_gemini_cli_approval_mode": ["default", "auto_edit", "yolo", "plan"],
     "apple_flow_companion_weekly_review_day": [
-        "monday",
-        "tuesday",
-        "wednesday",
-        "thursday",
-        "friday",
-        "saturday",
-        "sunday",
-    ],
-    "apple_flow_healer_mode": ["guarded_pr", "auto_merge_low_risk", "full_auto"],
-    "apple_flow_healer_sandbox_mode": ["docker"],
-    "apple_flow_healer_scan_severity_threshold": ["low", "medium", "high", "critical"],
-    "apple_flow_healer_weekly_deep_scan_day": [
         "monday",
         "tuesday",
         "wednesday",
@@ -163,8 +149,6 @@ def _section_for_key(key: str) -> str:
         "apple_flow_codex_turn_timeout"
     ) or key.startswith("apple_flow_max_concurrent_") or key.startswith("apple_flow_enable_verifier"):
         return "execution"
-    if key.startswith("apple_flow_enable_autonomous_healer") or key.startswith("apple_flow_healer_"):
-        return "healer"
     if key.startswith("apple_flow_enable_companion") or key.startswith("apple_flow_companion_") or key.startswith(
         "apple_flow_soul_file"
     ):
@@ -175,12 +159,10 @@ def _section_for_key(key: str) -> str:
         "apple_flow_max_follow_up"
     ) or key.startswith("apple_flow_enable_ambient") or key.startswith("apple_flow_ambient_scan_"):
         return "scheduler"
-    if key.startswith("apple_flow_enable_office_sync") or key.startswith("apple_flow_supabase_") or key.startswith(
-        "apple_flow_office_sync_"
-    ) or key.startswith("apple_flow_log_file_path") or key.startswith("apple_flow_enable_csv_audit_log") or key.startswith(
+    if key.startswith("apple_flow_log_file_path") or key.startswith("apple_flow_enable_csv_audit_log") or key.startswith(
         "apple_flow_csv_audit_"
     ) or key.startswith("apple_flow_enable_markdown_automation_log"):
-        return "office_sync"
+        return "scheduler"
     return "core"
 
 

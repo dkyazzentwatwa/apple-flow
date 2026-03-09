@@ -13,11 +13,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
-from .agent_teams import AgentTeamCatalog
 from .approval import ApprovalHandler, OrchestrationResult
 from .commanding import CommandKind, ParsedCommand, is_likely_mutating, parse_command
-from .healer_scan import FlowHealerScanner
-from .healer_tracker import GitHubHealerTracker
 from .models import InboundMessage, RunState
 from .notes_logging import log_to_notes
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
@@ -29,7 +26,6 @@ if TYPE_CHECKING:
     from .attachments import AttachmentProcessor
     from .memory import FileMemory
     from .memory_v2 import MemoryService
-    from .office_sync import OfficeSyncer
     from .run_executor import RunExecutor
     from .scheduler import FollowUpScheduler
 
@@ -37,8 +33,6 @@ _SEP = "━" * 30
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 _FILE_ALIAS_RE = re.compile(r"@f:([A-Za-z0-9][\w.-]*)")
 _RESTART_CONFIRM_TTL_SECONDS = 120.0
-_HEALER_ATTEMPT_LOOKBACK_DAYS = 7
-_HEALER_FINDINGS_FRESHNESS_HOURS = 24
 
 
 class RelayOrchestrator:
@@ -71,13 +65,13 @@ class RelayOrchestrator:
         notes_archive_folder_name: str = "agent-archive",
         calendar_egress: Any = None,
         shutdown_callback: Callable[[], None] | None = None,
+        helper_recycle_callback: Callable[[bool], str] | None = None,
         log_notes_egress: Any = None,
         notes_log_folder_name: str = "agent-logs",
         memory: FileMemory | None = None,
         memory_service: MemoryService | None = None,
         scheduler: FollowUpScheduler | None = None,
         run_executor: RunExecutor | None = None,
-        office_syncer: OfficeSyncer | None = None,
         log_file_path: str | None = None,
         approval_sender_override: str = "",
         phone_owner_number: str = "",
@@ -86,12 +80,6 @@ class RelayOrchestrator:
         phone_tts_engine: str = "auto",
         phone_piper_command: str = "piper",
         phone_piper_model_path: str = "",
-        healer_repo_path: str = "",
-        healer_scan_enable_issue_creation: bool = True,
-        healer_scan_max_issues_per_run: int = 5,
-        healer_scan_severity_threshold: str = "medium",
-        healer_scan_default_labels: list[str] | None = None,
-        healer_scan_notes_log: bool = False,
     ):
         self.connector = connector
         self.egress = egress
@@ -111,19 +99,12 @@ class RelayOrchestrator:
         self.attachment_processor = attachment_processor
         self.personality_prompt = personality_prompt
         self.shutdown_callback = shutdown_callback
+        self.helper_recycle_callback = helper_recycle_callback
         self.log_notes_egress = log_notes_egress
         self.notes_log_folder_name = notes_log_folder_name
         self.memory = memory
         self.memory_service = memory_service
-        self.office_syncer = office_syncer
         self.log_file_path = log_file_path
-        self.team_catalog = AgentTeamCatalog(Path(__file__).resolve().parents[2])
-        self.healer_repo_path = (healer_repo_path or "").strip()
-        self.healer_scan_enable_issue_creation = bool(healer_scan_enable_issue_creation)
-        self.healer_scan_max_issues_per_run = max(1, int(healer_scan_max_issues_per_run))
-        self.healer_scan_severity_threshold = (healer_scan_severity_threshold or "medium").strip().lower()
-        self.healer_scan_default_labels = healer_scan_default_labels or ["healer:ready", "kind:scan"]
-        self.healer_scan_notes_log = bool(healer_scan_notes_log)
 
         self._approval = ApprovalHandler(
             connector=connector,
@@ -293,11 +274,6 @@ class RelayOrchestrator:
         ):
             command = ParsedCommand(kind=CommandKind.TASK, payload=command.payload, workspace=command.workspace)
 
-        active_team = self._get_active_team(message.sender)
-        team_context = None
-        if command.kind in {CommandKind.IDEA, CommandKind.PLAN, CommandKind.TASK, CommandKind.PROJECT, CommandKind.VOICE_TASK}:
-            team_context = self._build_turn_team_context(active_team)
-
         workspace = self._resolve_workspace(command.workspace)
 
         thread_id = self.connector.get_or_create_thread(message.sender)
@@ -308,14 +284,9 @@ class RelayOrchestrator:
                 message, command.kind, thread_id, command.payload, workspace,
                 default_workspace=self.default_workspace,
                 is_workspace_allowed=self._is_workspace_allowed,
-                team_context=team_context,
+                team_context=None,
             )
-            if result.run_id and team_context:
-                self._consume_active_team(message.sender)
             return result
-
-        if command.kind in {CommandKind.IDEA, CommandKind.PLAN} and team_context:
-            self._consume_active_team(message.sender)
 
         prompt = self._build_non_mutating_prompt(command.kind, command.payload, workspace)
         if file_alias_mappings:
@@ -326,7 +297,6 @@ class RelayOrchestrator:
             prompt = "File alias warnings:\n" + "\n".join(
                 f"- {line}" for line in file_alias_warnings
             ) + f"\n\n{prompt}"
-        prompt = self._apply_team_prompt_fallback(prompt, team_context)
         prompt = self._inject_auto_context(message.sender, prompt)
         prompt = self._inject_attachment_context(message, prompt)
         prompt = self._inject_memory_context(prompt)
@@ -336,7 +306,7 @@ class RelayOrchestrator:
             thread_id=thread_id,
             prompt=prompt,
             context=message.context,
-            team_context=team_context,
+            team_context=None,
             allow_tools=True,
         )
         self._send(message.sender, response, context=message.context)
@@ -381,11 +351,8 @@ class RelayOrchestrator:
             "- 📋 logs — tail the daemon log",
             "",
             "🔧 System controls:",
-            "- 🔧 system: stop | restart | restart confirm <token> | kill provider | cancel run <run_id>",
+            "- 🔧 system: stop | restart | restart confirm <token> | recycle helpers | maintenance | kill provider | cancel run <run_id>",
             "- 🔇 system: mute | unmute",
-            "- 🩺 system: healer | healer ops | healer pause | healer resume | healer scan [dry-run]",
-            "- 🔄 system: sync office",
-            "- 🧩 system: teams list | team load <slug> | team current | team unload",
             "",
             "🧠 Tips:",
             "- Use `status` first when something seems stuck.",
@@ -1017,10 +984,6 @@ class RelayOrchestrator:
 
     def _handle_system(self, message: InboundMessage, subcommand: str) -> OrchestrationResult:
         sender = message.sender
-        action, slug, remainder = self._parse_team_system_command(subcommand)
-        if action:
-            return self._handle_team_system(message, action, slug, remainder)
-
         sub = subcommand.strip().lower()
         if sub == "stop":
             response = "Apple Flow shutting down..."
@@ -1042,6 +1005,18 @@ class RelayOrchestrator:
             self.store.set_state("system_restart_confirm_pending", "")
             response = "Restart confirmation cleared."
             self._send(sender, response, context=message.context)
+        elif sub in {"recycle helpers", "maintenance"}:
+            if self.helper_recycle_callback is None:
+                response = "Helper maintenance is not available in this runtime."
+            else:
+                response = self.helper_recycle_callback(False)
+            self._send(sender, response, context=message.context)
+        elif sub in {"recycle helpers force", "maintenance force"}:
+            if self.helper_recycle_callback is None:
+                response = "Helper maintenance is not available in this runtime."
+            else:
+                response = self.helper_recycle_callback(True)
+            self._send(sender, response, context=message.context)
         elif sub in {"kill provider", "killswitch", "kill ai"}:
             response = self._kill_provider_processes()
             self._send(sender, response, context=message.context)
@@ -1059,46 +1034,10 @@ class RelayOrchestrator:
             self.store.set_state("companion_muted", "false")
             response = "Companion unmuted. Proactive messages re-enabled."
             self._send(sender, response, context=message.context)
-        elif sub in {"healer", "healer status", "healer dashboard"}:
-            response = self._healer_dashboard()
-            self._send(sender, response, context=message.context)
-        elif sub in {"healer ops", "ops healer", "healer queue"}:
-            response = self._healer_ops_queue()
-            self._send(sender, response, context=message.context)
-        elif sub in {"healer pause", "pause healer"}:
-            self.store.set_state("healer_paused", "true")
-            response = "Flow Healer paused. Send `system: healer resume` to continue autonomous healing."
-            self._send(sender, response, context=message.context)
-        elif sub in {"healer resume", "resume healer"}:
-            self.store.set_state("healer_paused", "false")
-            response = "Flow Healer resumed."
-            self._send(sender, response, context=message.context)
-        elif sub in {"healer scan", "scan healer"}:
-            response = self._run_healer_scan(dry_run=False)
-            self._send(sender, response, context=message.context)
-            if self.healer_scan_notes_log:
-                self._log_to_notes("system", sender, "healer scan", response)
-        elif sub in {"healer scan dry-run", "healer scan dry run", "scan healer dry-run", "scan healer dry run"}:
-            response = self._run_healer_scan(dry_run=True)
-            self._send(sender, response, context=message.context)
-            if self.healer_scan_notes_log:
-                self._log_to_notes("system", sender, "healer scan dry-run", response)
-        elif sub in ("sync office", "sync"):
-            if self.office_syncer:
-                try:
-                    result = self.office_syncer.sync_all()
-                    response = "Synced: " + ", ".join(f"{t}={n}" for t, n in result.items())
-                except Exception as exc:
-                    response = f"Office sync failed: {exc}"
-            else:
-                response = "Office sync not enabled. Set apple_flow_enable_office_sync=true and apple_flow_supabase_service_key."
-            self._send(sender, response, context=message.context)
         else:
             response = (
                 "Unknown system command. Use: "
-                "system: stop | restart | restart confirm <token> | kill provider | cancel run <run_id> | mute | unmute | "
-                "healer | healer ops | healer pause | healer resume | healer scan [dry-run] | sync office | "
-                "teams list | team load <slug> | team current | team unload"
+                "system: stop | restart | restart confirm <token> | recycle helpers | maintenance | kill provider | cancel run <run_id> | mute | unmute"
             )
             self._send(sender, response, context=message.context)
         return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
@@ -1174,519 +1113,6 @@ class RelayOrchestrator:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=UTC)
         return parsed.astimezone(UTC)
-
-    def _healer_ops_queue(self) -> str:
-        if not hasattr(self.store, "list_healer_issues"):
-            return "Flow Healer ops unavailable: this store backend does not expose healer state."
-
-        now = datetime.now(UTC)
-        attempts_cutoff = now - timedelta(days=_HEALER_ATTEMPT_LOOKBACK_DAYS)
-        findings_cutoff = now - timedelta(hours=_HEALER_FINDINGS_FRESHNESS_HOURS)
-
-        tracked_states = [
-            "queued",
-            "claimed",
-            "running",
-            "verify_pending",
-            "pr_pending_approval",
-            "pr_open",
-            "blocked",
-            "failed",
-            "resolved",
-        ]
-        def issue_ref(issue: dict[str, Any]) -> str:
-            issue_id = str(issue.get("issue_id") or "").strip()
-            return f"#{issue_id}" if issue_id else "Unknown"
-
-        def issue_state(issue: dict[str, Any]) -> str:
-            return str(issue.get("state") or "").strip().lower()
-
-        def issue_labels(issue: dict[str, Any]) -> list[str]:
-            labels = issue.get("labels")
-            if isinstance(labels, list):
-                return [str(label).strip().lower() for label in labels if str(label).strip()]
-            return []
-
-        def finding_timestamp(finding: dict[str, Any]) -> datetime:
-            return self._parse_timestamp_utc(finding.get("last_seen_at")) or datetime.min.replace(tzinfo=UTC)
-
-        def latest_scan_timestamp(runs: list[dict[str, Any]]) -> datetime | None:
-            if not runs:
-                return None
-            latest = runs[0]
-            return self._parse_timestamp_utc(latest.get("updated_at") or latest.get("created_at"))
-
-        # Retrieve the ops inputs in the requested operator order:
-        # current status, recent attempts, open ready issues, PR status,
-        # stuck/lease state, then scan freshness.
-        issues = self.store.list_healer_issues(states=tracked_states, limit=500)
-        paused = self.store.get_state("healer_paused") == "true"
-        active_states = {"queued", "claimed", "running", "verify_pending", "blocked", "pr_pending_approval", "pr_open"}
-        active_issues = [issue for issue in issues if issue_state(issue) in active_states]
-
-        attempts: list[dict[str, Any]] = []
-        if hasattr(self.store, "list_recent_healer_attempts"):
-            attempts = self.store.list_recent_healer_attempts(limit=400)
-        recent_attempts: list[dict[str, Any]] = []
-        for attempt in attempts:
-            started_at = self._parse_timestamp_utc(attempt.get("started_at"))
-            if started_at is None:
-                continue
-            if started_at >= attempts_cutoff:
-                recent_attempts.append(attempt)
-
-        success_states = {"pr_open", "resolved", "pr_pending_approval"}
-        recent_failures = [
-            attempt for attempt in recent_attempts
-            if str(attempt.get("state") or "").strip().lower() not in success_states
-        ]
-        failure_by_class: dict[str, int] = {}
-        for attempt in recent_failures:
-            failure_class = str(attempt.get("failure_class") or "").strip().lower()
-            key = failure_class or str(attempt.get("state") or "unknown").strip().lower() or "unknown"
-            failure_by_class[key] = failure_by_class.get(key, 0) + 1
-
-        open_ready = [
-            issue for issue in issues
-            if "healer:ready" in issue_labels(issue) and issue_state(issue) != "resolved"
-        ]
-        pr_pending = [issue for issue in open_ready if issue_state(issue) == "pr_pending_approval"]
-        pr_open = [issue for issue in open_ready if issue_state(issue) == "pr_open"]
-        blocked_issues = [issue for issue in issues if issue_state(issue) == "blocked"]
-
-        active_locks: list[dict[str, Any]] = []
-        if hasattr(self.store, "list_healer_locks"):
-            active_locks = self.store.list_healer_locks()
-
-        lease_conflicts: list[dict[str, Any]] = []
-        for issue in issues:
-            if issue_state(issue) not in {"claimed", "running", "verify_pending"}:
-                continue
-            lease_expires_at = self._parse_timestamp_utc(issue.get("lease_expires_at"))
-            if lease_expires_at and lease_expires_at <= now:
-                lease_conflicts.append(issue)
-
-        lock_conflict_count = int(failure_by_class.get("lock_conflict", 0) + failure_by_class.get("lock_upgrade_conflict", 0))
-        healer_state_inconsistent = bool(lease_conflicts or (blocked_issues and not active_locks))
-
-        scan_runs: list[dict[str, Any]] = []
-        if hasattr(self.store, "list_scan_runs"):
-            scan_runs = self.store.list_scan_runs(limit=20)
-        latest_scan_at = latest_scan_timestamp(scan_runs)
-        latest_scan_is_fresh = latest_scan_at is not None and latest_scan_at >= findings_cutoff
-
-        scan_findings: list[dict[str, Any]] = []
-        if hasattr(self.store, "list_scan_findings"):
-            scan_findings = self.store.list_scan_findings(limit=400)
-        fresh_findings = [
-            finding for finding in scan_findings
-            if finding_timestamp(finding) >= findings_cutoff
-        ]
-
-        findings_missing = not scan_findings
-        findings_stale = bool(scan_findings) and not fresh_findings
-        scan_state_inconsistent = bool(fresh_findings and not latest_scan_is_fresh)
-        should_refresh_scan = findings_missing or findings_stale or healer_state_inconsistent or scan_state_inconsistent
-
-        scan_refreshed = False
-        if should_refresh_scan:
-            self._run_healer_scan(dry_run=True, lightweight=True)
-            scan_refreshed = True
-            if hasattr(self.store, "list_scan_runs"):
-                scan_runs = self.store.list_scan_runs(limit=20)
-                latest_scan_at = latest_scan_timestamp(scan_runs)
-                latest_scan_is_fresh = latest_scan_at is not None and latest_scan_at >= findings_cutoff
-            if hasattr(self.store, "list_scan_findings"):
-                scan_findings = self.store.list_scan_findings(limit=400)
-                fresh_findings = [
-                    finding for finding in scan_findings
-                    if finding_timestamp(finding) >= findings_cutoff
-                ]
-            findings_missing = not scan_findings
-            findings_stale = bool(scan_findings) and not fresh_findings
-            scan_state_inconsistent = bool(fresh_findings and not latest_scan_is_fresh)
-
-        if not active_issues and not fresh_findings:
-            return "No healer action needed today"
-
-        if paused or blocked_issues or lease_conflicts or lock_conflict_count or scan_state_inconsistent:
-            state_summary = "Stuck"
-        elif active_issues:
-            state_summary = "Active"
-        else:
-            state_summary = "Idle"
-
-        queue_actions: list[str] = []
-        if pr_pending:
-            queue_actions.append(f"P0 unblock PR approval on {issue_ref(pr_pending[0])}")
-        if failure_by_class.get("tests_failed", 0) >= 2:
-            queue_actions.append("P1 triage repeated `tests_failed` attempts")
-        if failure_by_class.get("verifier_failed", 0) >= 2:
-            queue_actions.append("P1 triage repeated `verifier_failed` attempts")
-        if lock_conflict_count:
-            queue_actions.append("P2 resolve lock contention / lease conflicts")
-        queue_line = "Queue Empty" if not queue_actions else " | ".join(queue_actions[:3])
-
-        risk_parts: list[str] = []
-        if lease_conflicts:
-            risk_parts.append("stale leases can starve queue progress")
-        if pr_pending:
-            risk_parts.append("pending PR approval can drift into merge conflicts")
-        if failure_by_class.get("tests_failed", 0):
-            risk_parts.append("repeat test failures increase rework churn")
-        if scan_state_inconsistent:
-            risk_parts.append("scan freshness is inconsistent with stored findings")
-        if not risk_parts:
-            risk_parts.append("low immediate risk")
-        risk_line = "; ".join(risk_parts[:2])
-
-        blocker_parts: list[str] = []
-        if pr_pending:
-            blocker_parts.append("pr_pending_approval=" + ",".join(issue_ref(issue) for issue in pr_pending[:3]))
-        if pr_open:
-            pr_refs = []
-            for issue in pr_open[:3]:
-                pr_number = issue.get("pr_number")
-                pr_refs.append(f"PR#{pr_number}" if pr_number else issue_ref(issue))
-            blocker_parts.append("pr_open=" + ",".join(pr_refs))
-        if active_locks:
-            lock_keys = [str(lock.get("lock_key") or "Unknown") for lock in active_locks[:2]]
-            blocker_parts.append("locks=" + ",".join(lock_keys))
-        if not blocker_parts:
-            blocker_parts.append("None")
-        blockers_line = " | ".join(blocker_parts[:3])
-
-        if scan_refreshed:
-            next_step = "Review latest lightweight dry-run scan output and execute the top P0 queue item."
-        elif pr_pending:
-            next_step = f"Review {issue_ref(pr_pending[0])} and apply `healer:pr-approved` if safe."
-        elif queue_actions:
-            next_step = "Execute the first item in Cheap Scan Queue."
-        else:
-            next_step = "Monitor healer queue and re-run `system: healer ops` after next polling cycle."
-
-        confidence = 90
-        if not latest_scan_is_fresh:
-            confidence -= 10
-        if findings_missing:
-            confidence -= 10
-        if findings_stale:
-            confidence -= 10
-        if healer_state_inconsistent or scan_state_inconsistent:
-            confidence -= 10
-        confidence = max(40, min(95, confidence))
-
-        status_extra = (
-            f"active={len(active_issues)}, ready={len(open_ready)}, attempts_7d={len(recent_attempts)}, "
-            f"fresh_findings_24h={len(fresh_findings)}, recent_scan_24h={'yes' if latest_scan_is_fresh else 'no'}"
-        )
-        if scan_refreshed:
-            status_extra += ", lightweight_dry_run=triggered"
-
-        lines = [
-            "## 🩺 Healer Status",
-            f"- Current state summary: {state_summary} ({status_extra})",
-            "",
-            "## ⚡ Cheap Scan Queue (P0/P1/P2)",
-            f"- {queue_line}",
-            "",
-            "## ⚠️ Risk if Delayed",
-            f"- {risk_line}",
-            "",
-            "## 🔒 Gating / Blockers",
-            f"- {blockers_line}",
-            "",
-            "## ➡️ Next Best Action",
-            f"- {next_step} Confidence Score: {confidence}%",
-        ]
-        return "\n".join(lines)
-
-    def _healer_dashboard(self) -> str:
-        if not hasattr(self.store, "list_healer_issues"):
-            return "Flow Healer dashboard unavailable: this store backend does not expose healer state."
-
-        states = [
-            "queued",
-            "claimed",
-            "running",
-            "verify_pending",
-            "pr_pending_approval",
-            "pr_open",
-            "blocked",
-            "failed",
-            "resolved",
-        ]
-        issues = self.store.list_healer_issues(states=states, limit=500)
-        by_state: dict[str, int] = {state: 0 for state in states}
-        for issue in issues:
-            state = str(issue.get("state") or "").lower()
-            if state in by_state:
-                by_state[state] += 1
-            else:
-                by_state[state] = by_state.get(state, 0) + 1
-
-        attempts: list[dict[str, Any]] = []
-        if hasattr(self.store, "list_recent_healer_attempts"):
-            attempts = self.store.list_recent_healer_attempts(limit=20)
-        attempt_total = len(attempts)
-        failure_count = 0
-        for attempt in attempts:
-            state = str(attempt.get("state") or "").lower()
-            if state not in {"pr_open", "resolved", "pr_pending_approval"}:
-                failure_count += 1
-        failure_rate = (failure_count / attempt_total) if attempt_total else 0.0
-
-        active_locks = 0
-        if hasattr(self.store, "list_healer_locks"):
-            active_locks = len(self.store.list_healer_locks())
-
-        pending = sorted(
-            [issue for issue in issues if str(issue.get("state") or "") in {"queued", "claimed", "running"}],
-            key=lambda item: (int(item.get("priority", 100)), str(item.get("issue_id", ""))),
-        )
-
-        lines = [
-            "🩺 Flow Healer Dashboard",
-            f"Paused: {'yes' if self.store.get_state('healer_paused') == 'true' else 'no'}",
-            f"Total tracked issues: {len(issues)}",
-            (
-                "State counts: "
-                f"queued={by_state.get('queued', 0)}, "
-                f"running={by_state.get('running', 0)}, "
-                f"verify_pending={by_state.get('verify_pending', 0)}, "
-                f"pr_pending_approval={by_state.get('pr_pending_approval', 0)}, "
-                f"pr_open={by_state.get('pr_open', 0)}, "
-                f"blocked={by_state.get('blocked', 0)}, "
-                f"failed={by_state.get('failed', 0)}, "
-                f"resolved={by_state.get('resolved', 0)}"
-            ),
-            (
-                f"Recent attempts: {attempt_total} "
-                f"(failure_rate={failure_rate:.0%})"
-            ),
-            f"Active lock leases: {active_locks}",
-        ]
-
-        if hasattr(self.store, "get_healer_lesson_stats"):
-            stats = self.store.get_healer_lesson_stats()
-            total_lessons = int(stats.get("total_lessons", 0) or 0)
-            recently_used = int(stats.get("recently_used", 0) or 0)
-            lines.append(f"Learned lessons: {total_lessons} (recently_used={recently_used})")
-            top_failure_classes = stats.get("top_failure_classes") or []
-            if isinstance(top_failure_classes, list) and top_failure_classes:
-                rendered = ", ".join(
-                    f"{entry.get('failure_class', '?')}={entry.get('count', 0)}"
-                    for entry in top_failure_classes[:3]
-                    if isinstance(entry, dict)
-                )
-                if rendered:
-                    lines.append(f"Top learned failure classes: {rendered}")
-
-        if pending:
-            lines.append("Top pending:")
-            for issue in pending[:5]:
-                issue_id = issue.get("issue_id", "?")
-                title = str(issue.get("title") or "").strip().replace("\n", " ")
-                if len(title) > 80:
-                    title = f"{title[:77]}..."
-                priority = issue.get("priority", "?")
-                state = issue.get("state", "?")
-                lines.append(f"- #{issue_id} [{state}] p={priority} {title}")
-        else:
-            lines.append("Top pending: none")
-
-        lines.append("Tip: use labels `healer:ready` + `healer:pr-approved` to advance guarded PR flow.")
-        return "\n".join(lines)
-
-    def _run_healer_scan(self, *, dry_run: bool, lightweight: bool = False) -> str:
-        if not self.healer_repo_path:
-            return "Flow Healer scan unavailable: `apple_flow_healer_repo_path` is not configured."
-        repo_path = Path(self.healer_repo_path).expanduser().resolve()
-        if not repo_path.exists():
-            return f"Flow Healer scan unavailable: repo path does not exist: {repo_path}"
-
-        tracker = GitHubHealerTracker(repo_path=repo_path)
-        scanner = FlowHealerScanner(
-            repo_path=repo_path,
-            store=self.store,
-            tracker=tracker,
-            severity_threshold=self.healer_scan_severity_threshold,
-            max_issues_per_run=self.healer_scan_max_issues_per_run,
-            default_labels=self.healer_scan_default_labels,
-            enable_issue_creation=self.healer_scan_enable_issue_creation,
-            lightweight=lightweight,
-        )
-        summary = scanner.run_scan(dry_run=dry_run)
-        created = summary.get("created_issues") or []
-        created_lines = []
-        for issue in created[:5]:
-            number = issue.get("number", "?")
-            url = issue.get("html_url", "")
-            if url:
-                created_lines.append(f"- #{number}: {url}")
-            else:
-                created_lines.append(f"- #{number}")
-        lines = [
-            "🩺 Flow Healer Scan",
-            f"Mode: {'dry-run' if dry_run else 'live'}{' (lightweight)' if lightweight else ''}",
-            f"Run ID: {summary.get('run_id', '?')}",
-            f"Findings: {summary.get('findings_total', 0)} total, {summary.get('findings_over_threshold', 0)} at/above threshold",
-            f"Threshold: {summary.get('severity_threshold', self.healer_scan_severity_threshold)}",
-            (
-                f"Issues: {len(created)} created, "
-                f"{summary.get('deduped_count', 0)} deduped, "
-                f"{summary.get('skipped_budget_count', 0)} skipped (budget)"
-            ),
-        ]
-        failed_checks = summary.get("failed_checks") or []
-        if failed_checks:
-            lines.append("Failed checks: " + ", ".join(str(item) for item in failed_checks))
-        if created_lines:
-            lines.append("Created issue(s):")
-            lines.extend(created_lines)
-        elif not dry_run:
-            lines.append("Created issue(s): none")
-        return "\n".join(lines)
-
-    def _parse_team_system_command(self, subcommand: str) -> tuple[str, str, str]:
-        """Return (action, slug, remainder) for supported team system commands."""
-        sub = (subcommand or "").strip()
-        lowered = sub.lower()
-
-        if lowered in {"teams list", "team list", "list teams"}:
-            return ("list", "", "")
-        if lowered in {"team current", "current team"}:
-            return ("current", "", "")
-        if lowered in {"team unload", "unload team", "clear team", "reset team"}:
-            return ("unload", "", "")
-
-        if lowered.startswith("team load "):
-            tail = sub[10:].strip()
-        elif lowered.startswith("load team "):
-            tail = sub[10:].strip()
-        else:
-            return ("", "", "")
-
-        remainder = ""
-        split_idx = tail.lower().find(" and ")
-        if split_idx >= 0:
-            slug = tail[:split_idx].strip()
-            remainder = tail[split_idx + 5 :].strip()
-        else:
-            slug = tail.strip()
-        return ("load", slug.lower(), remainder)
-
-    def _handle_team_system(
-        self,
-        message: InboundMessage,
-        action: str,
-        slug: str,
-        remainder: str,
-    ) -> OrchestrationResult:
-        sender = message.sender
-
-        if not self.team_catalog.is_available():
-            response = "Agent teams are not available on this host (missing `agents/catalog.toml`)."
-            self._send(sender, response, context=message.context)
-            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
-
-        if action == "list":
-            teams = self.team_catalog.list_teams()
-            if not teams:
-                response = "No agent teams found."
-            else:
-                lines = ["Available agent teams:"]
-                for team in teams:
-                    summary = f" — {team.summary}" if team.summary else ""
-                    lines.append(f"- `{team.slug}` ({team.title}){summary}")
-                lines.append("")
-                lines.append("Use: `system: team load <slug>`")
-                response = "\n".join(lines)
-            self._send(sender, response, context=message.context)
-            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
-
-        if action == "current":
-            active = self._get_active_team(sender)
-            if not active:
-                response = "No active team loaded for this sender."
-            else:
-                response = (
-                    f"Active team: `{active.get('slug', '?')}` ({active.get('title', 'unknown')}). "
-                    "It will auto-reset after your next `idea`, `plan`, `task`, or `project` request."
-                )
-            self._send(sender, response, context=message.context)
-            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
-
-        if action == "unload":
-            self._clear_active_team(sender)
-            response = "Unloaded active team for this sender."
-            self._send(sender, response, context=message.context)
-            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
-
-        if action != "load":
-            response = "Unsupported team system command."
-            self._send(sender, response, context=message.context)
-            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
-
-        if not slug:
-            response = "Usage: `system: team load <slug>`"
-            self._send(sender, response, context=message.context)
-            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
-
-        team = self.team_catalog.get_team(slug)
-        if team is None:
-            suggestions = self.team_catalog.suggest(slug, limit=5)
-            lines = [f"Unknown team: `{slug}`."]
-            if suggestions:
-                lines.append("Closest matches:")
-                for item in suggestions:
-                    lines.append(f"- `{item.slug}` ({item.title})")
-            lines.append("")
-            lines.append("Use: `system: teams list`")
-            response = "\n".join(lines)
-            self._send(sender, response, context=message.context)
-            return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
-
-        self._set_active_team(
-            sender=sender,
-            team_slug=team.slug,
-            team_title=team.title,
-        )
-
-        mode_note = (
-            "Using Codex team preset."
-            if self._is_codex_cli_connector()
-            else "Using TEAM.md fallback for this connector."
-        )
-        loaded_msg = (
-            f"Loaded team `{team.slug}` ({team.title}). {mode_note} "
-            "It will auto-reset after your next `idea`, `plan`, `task`, `project`, or `voice-task` request."
-        )
-        self._send(sender, loaded_msg, context=message.context)
-
-        if not remainder:
-            return OrchestrationResult(kind=CommandKind.SYSTEM, response=loaded_msg)
-
-        response = self._run_follow_on_after_team_load(message, remainder)
-        return OrchestrationResult(kind=CommandKind.SYSTEM, response=response)
-
-    def _run_follow_on_after_team_load(self, message: InboundMessage, remainder: str) -> str:
-        parsed = parse_command(remainder)
-        if parsed.kind in {CommandKind.IDEA, CommandKind.PLAN, CommandKind.TASK, CommandKind.PROJECT, CommandKind.VOICE_TASK}:
-            follow_text = remainder
-        else:
-            follow_text = f"plan: {remainder}"
-
-        synthetic = InboundMessage(
-            id=f"{message.id}:team:{uuid4().hex[:6]}",
-            sender=message.sender,
-            text=follow_text,
-            received_at=datetime.now(UTC).isoformat(),
-            is_from_me=False,
-            context=dict(message.context or {}),
-        )
-        result = self.handle_message(synthetic)
-        return result.response or "Follow-on request executed."
 
     def _mark_restart_echo_suppress(self, sender: str, text: str) -> None:
         """Persist a short-lived marker to suppress restart-message echo after reboot."""

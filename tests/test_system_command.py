@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import json
-from datetime import UTC, datetime, timedelta
+import os
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from apple_flow.commanding import CommandKind, parse_command
@@ -12,7 +12,13 @@ from apple_flow.models import InboundMessage
 from apple_flow.orchestrator import RelayOrchestrator
 
 
-def _make_orchestrator(fake_connector, fake_egress, fake_store, shutdown_callback=None):
+def _make_orchestrator(
+    fake_connector,
+    fake_egress,
+    fake_store,
+    shutdown_callback=None,
+    helper_recycle_callback=None,
+):
     return RelayOrchestrator(
         connector=fake_connector,
         egress=fake_egress,
@@ -21,7 +27,7 @@ def _make_orchestrator(fake_connector, fake_egress, fake_store, shutdown_callbac
         default_workspace="/tmp",
         require_chat_prefix=False,
         shutdown_callback=shutdown_callback,
-        healer_repo_path="/tmp",
+        helper_recycle_callback=helper_recycle_callback,
     )
 
 
@@ -209,251 +215,36 @@ def test_system_kill_provider_invokes_killswitch(fake_connector, fake_egress, fa
     assert "killed 2 active gemini provider process(es)." in fake_egress.messages[0][1].lower()
 
 
-def test_system_healer_dashboard_basic(fake_connector, fake_egress, fake_store):
-    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
-
-    result = orchestrator.handle_message(_make_message("system: healer"))
-    assert result.kind is CommandKind.SYSTEM
-    assert "flow healer dashboard" in (result.response or "").lower()
-    assert len(fake_egress.messages) == 1
-    assert "state counts" in fake_egress.messages[0][1].lower()
-
-
-def test_system_healer_dashboard_includes_pending_items(fake_connector, fake_egress, fake_store):
-    fake_store.upsert_healer_issue(
-        issue_id="501",
-        repo="owner/repo",
-        title="Fix test timeout",
-        body="",
-        author="alice",
-        labels=["healer:ready"],
-        priority=1,
-    )
-    fake_store.upsert_healer_issue(
-        issue_id="502",
-        repo="owner/repo",
-        title="Repair parser edge case",
-        body="",
-        author="alice",
-        labels=["healer:ready"],
-        priority=2,
-    )
-    fake_store.set_healer_issue_state(issue_id="502", state="running")
-    fake_store.healer_locks.append({"lock_key": "path:src/a.py", "issue_id": "502"})
-    fake_store.create_healer_attempt(
-        attempt_id="hatt_1",
-        issue_id="501",
-        attempt_no=1,
-        state="running",
-        prediction_source="path_level",
-        predicted_lock_set=["repo:*"],
-    )
-    fake_store.finish_healer_attempt(
-        attempt_id="hatt_1",
-        state="failed",
-        actual_diff_set=[],
-        test_summary={},
-        verifier_summary={},
+def test_system_recycle_helpers_calls_callback(fake_connector, fake_egress, fake_store):
+    calls: list[bool] = []
+    orchestrator = _make_orchestrator(
+        fake_connector,
+        fake_egress,
+        fake_store,
+        helper_recycle_callback=lambda force: calls.append(force) or "Recycled 2 tracked helper process(es).",
     )
 
-    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
-    result = orchestrator.handle_message(_make_message("system: healer"))
+    result = orchestrator.handle_message(_make_message("system: recycle helpers"))
 
     assert result.kind is CommandKind.SYSTEM
-    text = (result.response or "").lower()
-    assert "top pending" in text
-    assert "#501" in text or "#502" in text
-    assert "active lock leases: 1" in text
+    assert calls == [False]
+    assert "recycled 2 tracked helper process(es)." in fake_egress.messages[0][1].lower()
 
 
-def test_system_healer_pause_and_resume(fake_connector, fake_egress, fake_store):
-    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
-
-    paused = orchestrator.handle_message(_make_message("system: healer pause"))
-    assert paused.kind is CommandKind.SYSTEM
-    assert "paused" in (paused.response or "").lower()
-    assert fake_store.get_state("healer_paused") == "true"
-
-    resumed = orchestrator.handle_message(
-        InboundMessage(
-            id="msg_002",
-            sender="+15550000001",
-            text="system: healer resume",
-            received_at=datetime.now(UTC).isoformat(),
-            is_from_me=False,
-            context={},
-        )
-    )
-    assert resumed.kind is CommandKind.SYSTEM
-    assert "resumed" in (resumed.response or "").lower()
-    assert fake_store.get_state("healer_paused") == "false"
-
-
-def test_system_healer_dashboard_shows_paused(fake_connector, fake_egress, fake_store):
-    fake_store.set_state("healer_paused", "true")
-    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
-
-    result = orchestrator.handle_message(_make_message("system: healer"))
-    assert result.kind is CommandKind.SYSTEM
-    assert "paused: yes" in (result.response or "").lower()
-
-
-def test_system_healer_dashboard_shows_learning_stats(fake_connector, fake_egress, fake_store):
-    fake_store.create_healer_lesson(
-        lesson_id="lesson_1",
-        issue_id="501",
-        attempt_id="hat_1",
-        lesson_kind="guardrail",
-        scope_key="path:src/apple_flow/store.py",
-        fingerprint="fp_1",
-        problem_summary="Fix flaky lock",
-        lesson_text="Keep changes scoped.",
-        test_hint="Run tests/test_store.py",
-        guardrail={"failure_class": "lock_conflict"},
-        confidence=65,
-        outcome="failure",
-    )
-    fake_store.mark_healer_lessons_used(["lesson_1"])
-    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
-
-    result = orchestrator.handle_message(_make_message("system: healer"))
-
-    assert result.kind is CommandKind.SYSTEM
-    text = (result.response or "").lower()
-    assert "learned lessons: 1" in text
-    assert "top learned failure classes: lock_conflict=1" in text
-
-
-def test_system_healer_ops_no_action_when_idle_and_no_fresh_findings(fake_connector, fake_egress, fake_store):
-    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
-    with patch.object(orchestrator, "_run_healer_scan", return_value="🩺 Flow Healer Scan") as mock_scan:
-        result = orchestrator.handle_message(_make_message("system: healer ops"))
-    assert result.kind is CommandKind.SYSTEM
-    assert result.response == "No healer action needed today"
-    mock_scan.assert_called_once_with(dry_run=True, lightweight=True)
-
-
-def test_system_healer_ops_outputs_sections_and_bounded_bullets(fake_connector, fake_egress, fake_store):
-    fake_store.upsert_healer_issue(
-        issue_id="501",
-        repo="owner/repo",
-        title="Fix flaky verifier run",
-        body="",
-        author="alice",
-        labels=["healer:ready"],
-        priority=1,
-    )
-    fake_store.set_healer_issue_state(issue_id="501", state="pr_pending_approval")
-    fake_store.create_scan_run(run_id="scan_fresh", dry_run=True)
-    fake_store.finish_scan_run(
-        run_id="scan_fresh",
-        status="completed",
-        summary={"findings_total": 1},
-    )
-    fake_store.upsert_scan_finding(
-        fingerprint="fp_recent",
-        scan_type="harness",
-        severity="high",
-        title="Harness failure",
-        status="detected",
-        payload={"eval_id": "approval_bypass"},
+def test_system_maintenance_force_calls_callback(fake_connector, fake_egress, fake_store):
+    calls: list[bool] = []
+    orchestrator = _make_orchestrator(
+        fake_connector,
+        fake_egress,
+        fake_store,
+        helper_recycle_callback=lambda force: calls.append(force) or "Forced helper recycle complete.",
     )
 
-    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
-    with patch.object(orchestrator, "_run_healer_scan", return_value="unused") as mock_scan:
-        result = orchestrator.handle_message(_make_message("system: healer ops"))
+    result = orchestrator.handle_message(_make_message("system: maintenance force"))
 
     assert result.kind is CommandKind.SYSTEM
-    text = result.response or ""
-    assert "## 🩺 Healer Status" in text
-    assert "## ⚡ Cheap Scan Queue (P0/P1/P2)" in text
-    assert "## ⚠️ Risk if Delayed" in text
-    assert "## 🔒 Gating / Blockers" in text
-    assert "## ➡️ Next Best Action" in text
-    assert "#501" in text
-    bullet_count = sum(1 for line in text.splitlines() if line.strip().startswith("- "))
-    assert bullet_count <= 8
-    mock_scan.assert_not_called()
-
-
-def test_system_healer_ops_triggers_scan_when_finding_is_stale(fake_connector, fake_egress, fake_store):
-    fake_store.create_scan_run(run_id="scan_old", dry_run=True)
-    fake_store.finish_scan_run(
-        run_id="scan_old",
-        status="completed",
-        summary={"findings_total": 1},
-    )
-    fake_store.upsert_scan_finding(
-        fingerprint="fp_old",
-        scan_type="pytest",
-        severity="medium",
-        title="Old pytest failure",
-        status="detected",
-        payload={"selector": "tests/test_old.py::test_case"},
-    )
-    old_ts = (datetime.now(UTC) - timedelta(hours=30)).isoformat()
-    fake_store.scan_runs["scan_old"]["updated_at"] = old_ts
-    fake_store.scan_findings["fp_old"]["last_seen_at"] = old_ts
-
-    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
-    with patch.object(orchestrator, "_run_healer_scan", return_value="🩺 Flow Healer Scan") as mock_scan:
-        result = orchestrator.handle_message(_make_message("system: healer ops"))
-
-    assert result.kind is CommandKind.SYSTEM
-    assert result.response == "No healer action needed today"
-    mock_scan.assert_called_once_with(dry_run=True, lightweight=True)
-
-
-def test_system_healer_scan_dry_run(fake_connector, fake_egress, fake_store):
-    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
-    scan_summary = {
-        "run_id": "scan_20260305",
-        "findings_total": 3,
-        "findings_over_threshold": 2,
-        "created_issues": [],
-        "deduped_count": 1,
-        "skipped_budget_count": 0,
-        "failed_checks": ["pytest"],
-        "severity_threshold": "medium",
-    }
-    with patch("apple_flow.orchestrator.FlowHealerScanner") as mock_scanner_cls:
-        mock_scanner = mock_scanner_cls.return_value
-        mock_scanner.run_scan.return_value = scan_summary
-
-        result = orchestrator.handle_message(_make_message("system: healer scan dry-run"))
-
-    assert result.kind is CommandKind.SYSTEM
-    assert "flow healer scan" in (result.response or "").lower()
-    assert "mode: dry-run" in (result.response or "").lower()
-    assert "findings: 3 total" in (result.response or "").lower()
-    mock_scanner.run_scan.assert_called_once_with(dry_run=True)
-
-
-def test_system_healer_scan_live_reports_created_issues(fake_connector, fake_egress, fake_store):
-    orchestrator = _make_orchestrator(fake_connector, fake_egress, fake_store)
-    scan_summary = {
-        "run_id": "scan_20260305",
-        "findings_total": 2,
-        "findings_over_threshold": 2,
-        "created_issues": [{"number": 101, "html_url": "https://github.com/o/r/issues/101"}],
-        "deduped_count": 0,
-        "skipped_budget_count": 0,
-        "failed_checks": ["harness_eval_pack", "pytest"],
-        "severity_threshold": "medium",
-    }
-    with patch("apple_flow.orchestrator.FlowHealerScanner") as mock_scanner_cls:
-        mock_scanner = mock_scanner_cls.return_value
-        mock_scanner.run_scan.return_value = scan_summary
-
-        result = orchestrator.handle_message(_make_message("system: healer scan"))
-
-    assert result.kind is CommandKind.SYSTEM
-    text = (result.response or "").lower()
-    assert "mode: live" in text
-    assert "issues: 1 created" in text
-    assert "#101" in text
-    assert "failed checks: harness_eval_pack, pytest" in text
-    mock_scanner.run_scan.assert_called_once_with(dry_run=False)
+    assert calls == [True]
+    assert "forced helper recycle complete." in fake_egress.messages[0][1].lower()
 
 
 def test_mark_inflight_runs_cancelled_marks_only_running_states(fake_connector, fake_egress, fake_store):

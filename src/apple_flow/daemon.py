@@ -27,7 +27,6 @@ from .csv_audit import CsvAuditLogger
 from .egress import IMessageEgress
 from .gateway_setup import ensure_gateway_resources
 from .gemini_cli_connector import GeminiCliConnector
-from .healer_loop import AutonomousHealerLoop
 from .ingress import IMessageIngress
 from .kilo_cli_connector import KiloCliConnector
 from .mail_egress import AppleMailEgress
@@ -36,16 +35,17 @@ from .memory import FileMemory
 from .memory_v2 import MemoryService
 from .notes_egress import AppleNotesEgress
 from .notes_ingress import AppleNotesIngress
-from .office_sync import OfficeSyncer
 from .ollama_connector import OllamaConnector
 from .orchestrator import RelayOrchestrator
 from .policy import PolicyEngine
+from .process_registry import ManagedProcessRegistry
 from .protocols import ConnectorProtocol
 from .reminders_egress import AppleRemindersEgress
 from .reminders_ingress import AppleRemindersIngress
 from .run_executor import RunExecutor
 from .scheduler import FollowUpScheduler
 from .store import SQLiteStore
+from .models import RunState
 from .utils import normalize_echo_text, normalize_sender
 
 logger = logging.getLogger("apple_flow.daemon")
@@ -63,8 +63,6 @@ _FASTLANE_COMMANDS = {
     CommandKind.SYSTEM,
 }
 
-_HEALER_SCHEDULE_LAST_DAILY_DATE_KEY = "healer_schedule_last_daily_date"
-_HEALER_SCHEDULE_LAST_WEEKLY_KEY = "healer_schedule_last_weekly_week"
 _ATTACHMENT_PLACEHOLDER_TEXTS = {"\uFFFC", "￼"}
 
 def migrate_legacy_db_if_needed(
@@ -319,21 +317,6 @@ class RelayDaemon:
             self.scheduler = FollowUpScheduler(self.store)
             logger.info("Follow-up scheduler enabled")
 
-        # Office syncer (agent-office → Supabase)
-        self.office_syncer: OfficeSyncer | None = None
-        if settings.enable_office_sync and settings.supabase_service_key and self._office_path:
-            self.office_syncer = OfficeSyncer(
-                office_path=self._office_path,
-                supabase_url=settings.supabase_url,
-                service_key=settings.supabase_service_key,
-            )
-            logger.info(
-                "Office sync enabled (url=%s, office=%s, interval=%.0fs)",
-                settings.supabase_url,
-                self._office_path,
-                settings.office_sync_interval_seconds,
-            )
-
         # Companion loop (proactive observations + daily digest)
         self.companion: CompanionLoop | None = None
         if settings.enable_companion:
@@ -349,24 +332,10 @@ class RelayDaemon:
                     config=settings,
                     scheduler=self.scheduler,
                     memory=self.memory,
-                    syncer=self.office_syncer,
                 )
                 logger.info("Companion loop enabled (owner=%s, poll=%.0fs)", owner, settings.companion_poll_interval_seconds)
             else:
                 logger.warning("Companion enabled but no allowed_senders configured — skipping")
-
-        self.healer: AutonomousHealerLoop | None = None
-        if settings.enable_autonomous_healer:
-            if not settings.healer_repo_path.strip():
-                logger.warning("Autonomous healer enabled but healer_repo_path is empty — skipping")
-            else:
-                self.healer = AutonomousHealerLoop(
-                    settings=settings,
-                    store=self.store,
-                    connector=self.connector,
-                )
-                if not self.healer.enabled:
-                    self.healer = None
 
         # Ambient scanner (passive context enrichment)
         self.ambient: AmbientScanner | None = None
@@ -420,13 +389,13 @@ class RelayDaemon:
             attachment_processor=self.attachment_processor,
             personality_prompt=settings.personality_prompt,
             shutdown_callback=self.request_shutdown,
+            helper_recycle_callback=self.recycle_helpers,
             log_notes_egress=notes_log_egress_obj,
             notes_log_folder_name=settings.notes_log_folder_name,
             memory=self.memory,
             memory_service=self.memory_service,
             scheduler=self.scheduler,
             run_executor=None,
-            office_syncer=self.office_syncer,
             log_file_path=settings.log_file_path,
             phone_owner_number=settings.phone_owner_number or (settings.allowed_senders[0] if settings.allowed_senders else ""),
             phone_tts_voice=settings.phone_tts_voice,
@@ -434,12 +403,6 @@ class RelayDaemon:
             phone_tts_engine=settings.phone_tts_engine,
             phone_piper_command=settings.phone_piper_command,
             phone_piper_model_path=settings.phone_piper_model_path,
-            healer_repo_path=settings.healer_repo_path,
-            healer_scan_enable_issue_creation=settings.healer_scan_enable_issue_creation,
-            healer_scan_max_issues_per_run=settings.healer_scan_max_issues_per_run,
-            healer_scan_severity_threshold=settings.healer_scan_severity_threshold,
-            healer_scan_default_labels=settings.healer_scan_default_labels,
-            healer_scan_notes_log=settings.healer_scan_notes_log,
         )
 
         self.orchestrator = RelayOrchestrator(
@@ -598,6 +561,7 @@ class RelayDaemon:
         self._last_messages_db_error_at: float = 0.0
         self._last_state_db_error_at: float = 0.0
         self._shutdown_requested = False
+        self._last_busy_at = time.monotonic()
         latest = self.ingress.latest_rowid()
         if latest is not None and not self.settings.process_historical_on_first_start:
             if self._last_rowid is None:
@@ -644,6 +608,96 @@ class RelayDaemon:
         """Request graceful shutdown of the daemon."""
         logger.info("Shutdown requested")
         self._shutdown_requested = True
+
+    def _connector_registry(self) -> Any | None:
+        registry = getattr(self.connector, "_processes", None)
+        if isinstance(registry, ManagedProcessRegistry):
+            return registry
+        if registry is not None and hasattr(registry, "active_count") and hasattr(registry, "oldest_age_seconds"):
+            return registry
+        return None
+
+    def _active_work_counts(self) -> dict[str, int]:
+        inflight_dispatch = len(getattr(self, "_inflight_dispatch_tasks", set()))
+        active_runs = 0
+        if hasattr(self.store, "list_active_runs"):
+            try:
+                runs = self.store.list_active_runs(limit=200)
+            except Exception:
+                logger.debug("Failed to list active runs for helper maintenance", exc_info=True)
+                runs = []
+            active_states = {
+                RunState.PLANNING.value,
+                RunState.QUEUED.value,
+                RunState.RUNNING.value,
+                RunState.EXECUTING.value,
+                RunState.VERIFYING.value,
+            }
+            active_runs = sum(1 for run in runs if str(run.get("state", "")) in active_states)
+        counts = {
+            "active_runs": active_runs,
+            "inflight_dispatch": inflight_dispatch,
+            "busy": 1 if (active_runs or inflight_dispatch) else 0,
+        }
+        if counts["busy"]:
+            self._last_busy_at = time.monotonic()
+        return counts
+
+    def recycle_helpers(self, force: bool = False) -> str:
+        """Soft-recycle tracked helper subprocesses without restarting the parent daemon."""
+        counts = self._active_work_counts()
+        now = time.monotonic()
+        idle_seconds = max(0.0, now - getattr(self, "_last_busy_at", now))
+        registry = self._connector_registry()
+        active_helpers = registry.active_count() if registry is not None else 0
+        oldest_age = registry.oldest_age_seconds() if registry is not None else None
+
+        if not force and counts["busy"]:
+            return (
+                "Helper recycle skipped: service is busy "
+                f"(active_runs={counts['active_runs']}, inflight_dispatch={counts['inflight_dispatch']})."
+            )
+
+        if not force and idle_seconds < float(self.settings.helper_recycle_idle_seconds):
+            return (
+                "Helper recycle skipped: idle window not reached "
+                f"({int(idle_seconds)}s < {int(self.settings.helper_recycle_idle_seconds)}s)."
+            )
+
+        if active_helpers <= 0:
+            return (
+                "Helper recycle check complete: no tracked connector helpers are running."
+                if not force
+                else "Forced helper recycle complete: no tracked connector helpers were running."
+            )
+
+        if (
+            not force
+            and oldest_age is not None
+            and oldest_age < float(self.settings.helper_recycle_max_age_seconds)
+        ):
+            return (
+                "Helper recycle skipped: oldest helper age is below threshold "
+                f"({int(oldest_age)}s < {int(self.settings.helper_recycle_max_age_seconds)}s)."
+            )
+
+        killed = 0
+        if hasattr(self.connector, "cancel_active_processes"):
+            try:
+                killed = int(self.connector.cancel_active_processes())
+            except Exception:
+                logger.exception("Helper recycle failed while cancelling tracked connector processes")
+                return "Helper recycle failed: connector process cancellation raised an error."
+
+        result = (
+            f"Recycled {killed} tracked helper process(es); "
+            f"idle={int(idle_seconds)}s, oldest_age={int(oldest_age or 0)}s."
+        )
+        logger.info("Helper recycle completed: %s", result)
+        if hasattr(self.store, "set_state"):
+            self.store.set_state("helper_maintenance_last_run_at", datetime.now(UTC).isoformat())
+            self.store.set_state("helper_maintenance_last_result", result)
+        return result
 
     def _spawn_dispatch_task(self, coro: asyncio.Future) -> None:
         """Track a fire-and-forget dispatch task so polling stays responsive."""
@@ -700,12 +754,10 @@ class RelayDaemon:
             tasks.append(asyncio.create_task(self._companion_loop()))
         if self.ambient is not None:
             tasks.append(asyncio.create_task(self._ambient_loop()))
-        if getattr(self, "healer", None) is not None:
-            tasks.append(asyncio.create_task(self._healer_loop()))
-        if getattr(getattr(self, "settings", None), "enable_healer_scheduled_scans", False):
-            tasks.append(asyncio.create_task(self._healer_scheduled_scan_loop()))
         if getattr(self, "memory_service", None) is not None:
             tasks.append(asyncio.create_task(self._memory_maintenance_loop()))
+        if getattr(getattr(self, "settings", None), "enable_helper_maintenance", False):
+            tasks.append(asyncio.create_task(self._helper_maintenance_loop()))
         try:
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
@@ -746,250 +798,6 @@ class RelayDaemon:
         except Exception as exc:
             logger.exception("Ambient scanner loop error: %s", exc)
 
-    async def _healer_loop(self) -> None:
-        """Autonomous healer loop — issue ingestion + repair attempts."""
-        assert self.healer is not None
-        logger.info("Autonomous healer loop started")
-        try:
-            await self.healer.run_forever(lambda: self._shutdown_requested)
-        except Exception as exc:
-            logger.exception("Autonomous healer loop error: %s", exc)
-
-    async def _healer_scheduled_scan_loop(self) -> None:
-        """Run daily ops + weekly deep healer scans on a schedule."""
-        logger.info(
-            "Healer scheduled scan loop started (daily=%s, weekly=%s@%s, interval=%.0fs)",
-            getattr(self.settings, "healer_daily_scan_time", "06:00"),
-            getattr(self.settings, "healer_weekly_deep_scan_day", "sunday"),
-            getattr(self.settings, "healer_weekly_deep_scan_time", "04:00"),
-            float(getattr(self.settings, "healer_schedule_poll_seconds", 60.0)),
-        )
-        while not self._shutdown_requested:
-            try:
-                await asyncio.to_thread(self._run_due_healer_scheduled_scans)
-            except Exception as exc:
-                logger.exception("Healer scheduled scan loop error: %s", exc)
-            poll_seconds = max(15.0, float(getattr(self.settings, "healer_schedule_poll_seconds", 60.0)))
-            await asyncio.sleep(poll_seconds)
-
-    def _run_due_healer_scheduled_scans(self, *, now_local: datetime | None = None) -> None:
-        now = now_local or self._scheduled_now()
-        weekly_day = str(getattr(self.settings, "healer_weekly_deep_scan_day", "sunday")).strip().lower()
-        weekly_hour, weekly_minute = self._parse_hhmm(getattr(self.settings, "healer_weekly_deep_scan_time", "04:00"))
-        daily_hour, daily_minute = self._parse_hhmm(getattr(self.settings, "healer_daily_scan_time", "06:00"))
-
-        # Run weekly first when both are due to preserve chronological order (e.g., Sunday 04:00 then 06:00).
-        if self._weekly_scan_due(
-            now,
-            scheduled_day=weekly_day,
-            scheduled_hour=weekly_hour,
-            scheduled_minute=weekly_minute,
-        ):
-            self._run_scheduled_healer_scan("weekly", now)
-        if self._daily_scan_due(
-            now,
-            scheduled_hour=daily_hour,
-            scheduled_minute=daily_minute,
-        ):
-            self._run_scheduled_healer_scan("daily", now)
-
-    def _scheduled_now(self) -> datetime:
-        timezone_name = (self.settings.timezone or "").strip()
-        if not timezone_name:
-            return datetime.now().astimezone()
-        try:
-            return datetime.now(ZoneInfo(timezone_name))
-        except ZoneInfoNotFoundError:
-            logger.warning(
-                "Invalid timezone %r for healer schedule; falling back to local timezone",
-                timezone_name,
-            )
-            return datetime.now().astimezone()
-
-    @staticmethod
-    def _parse_hhmm(value: str) -> tuple[int, int]:
-        text = str(value or "").strip()
-        parts = text.split(":")
-        if len(parts) != 2:
-            raise ValueError(f"Invalid HH:MM value: {value!r}")
-        return int(parts[0]), int(parts[1])
-
-    def _daily_scan_due(self, now: datetime, *, scheduled_hour: int, scheduled_minute: int) -> bool:
-        if (now.hour, now.minute) < (scheduled_hour, scheduled_minute):
-            return False
-        last_run = self.store.get_state(_HEALER_SCHEDULE_LAST_DAILY_DATE_KEY)
-        return last_run != now.date().isoformat()
-
-    def _weekly_scan_due(
-        self,
-        now: datetime,
-        *,
-        scheduled_day: str,
-        scheduled_hour: int,
-        scheduled_minute: int,
-    ) -> bool:
-        if now.strftime("%A").lower() != scheduled_day:
-            return False
-        if (now.hour, now.minute) < (scheduled_hour, scheduled_minute):
-            return False
-        current_week = now.strftime("%G-W%V")
-        last_run = self.store.get_state(_HEALER_SCHEDULE_LAST_WEEKLY_KEY)
-        return last_run != current_week
-
-    def _run_scheduled_healer_scan(self, schedule_kind: str, now_local: datetime) -> None:
-        if schedule_kind == "weekly":
-            request = "scheduled weekly deep healer scan"
-            try:
-                response = self.orchestrator._run_healer_scan(dry_run=False, lightweight=False)
-            except Exception as exc:
-                logger.exception("Scheduled weekly healer scan failed: %s", exc)
-                response = f"Flow Healer weekly deep scan failed: {exc}"
-            self.store.set_state(_HEALER_SCHEDULE_LAST_WEEKLY_KEY, now_local.strftime("%G-W%V"))
-            run_label = "weekly_deep"
-        else:
-            request = "scheduled daily healer ops scan"
-            try:
-                response = self.orchestrator._healer_ops_queue()
-            except Exception as exc:
-                logger.exception("Scheduled daily healer scan failed: %s", exc)
-                response = f"Flow Healer daily scan failed: {exc}"
-            self.store.set_state(_HEALER_SCHEDULE_LAST_DAILY_DATE_KEY, now_local.date().isoformat())
-            run_label = "daily_ops"
-
-        metadata = self._extract_healer_scan_metadata(response)
-        metadata["request"] = request
-        metadata["owner"] = self._scheduled_scan_owner()
-
-        artifact_paths = self._write_healer_scan_artifacts(
-            schedule_kind=run_label,
-            now_local=now_local,
-            response=response,
-            metadata=metadata,
-        )
-        message = self._build_scheduled_healer_message(
-            schedule_kind=schedule_kind,
-            now_local=now_local,
-            response=response,
-            artifact_paths=artifact_paths,
-        )
-        owner = self._scheduled_scan_owner()
-        send_error: Exception | None = None
-        if owner:
-            try:
-                self.egress.send(owner, message)
-            except Exception as exc:
-                send_error = exc
-                logger.warning(
-                    "Scheduled healer %s scan iMessage delivery failed for %s: %s",
-                    schedule_kind,
-                    owner,
-                    exc,
-                )
-        else:
-            logger.warning(
-                "Healer scheduled %s scan completed but no owner configured (set apple_flow_healer_scheduled_scan_owner or allowed_senders)",
-                schedule_kind,
-            )
-        try:
-            self.orchestrator._log_to_notes(
-                "system",
-                owner or "system:scheduler",
-                request,
-                message,
-            )
-        except Exception as exc:
-            logger.warning("Scheduled healer %s scan notes logging failed: %s", schedule_kind, exc)
-        if send_error is not None and hasattr(self.store, "create_event"):
-            self.store.create_event(
-                event_type="scheduled_scan_delivery_failed",
-                payload=json.dumps(
-                    {
-                        "schedule_kind": schedule_kind,
-                        "owner": owner,
-                        "error": str(send_error),
-                    }
-                ),
-                related_run_id=str(metadata.get("run_id", "")) or None,
-            )
-        logger.info("Scheduled healer %s scan completed", schedule_kind)
-
-    def _scheduled_scan_owner(self) -> str:
-        configured = str(getattr(self.settings, "healer_scheduled_scan_owner", "") or "").strip()
-        if configured:
-            return configured
-        allowed = getattr(self.settings, "allowed_senders", []) or []
-        if not allowed:
-            return ""
-        return str(allowed[0]).strip()
-
-    @staticmethod
-    def _extract_healer_scan_metadata(response: str) -> dict[str, Any]:
-        metadata: dict[str, Any] = {}
-        for raw_line in response.splitlines():
-            line = raw_line.strip()
-            if line.startswith("Run ID:"):
-                metadata["run_id"] = line.split(":", 1)[1].strip()
-            elif line.startswith("Mode:"):
-                metadata["mode"] = line.split(":", 1)[1].strip()
-            elif line.startswith("Threshold:"):
-                metadata["threshold"] = line.split(":", 1)[1].strip()
-        return metadata
-
-    def _write_healer_scan_artifacts(
-        self,
-        *,
-        schedule_kind: str,
-        now_local: datetime,
-        response: str,
-        metadata: dict[str, Any] | None = None,
-    ) -> tuple[Path, Path] | None:
-        base_dir = Path(getattr(self.settings, "healer_scan_artifacts_dir", "logs/scans") or "logs/scans")
-        if not base_dir.is_absolute():
-            base_dir = (Path(__file__).resolve().parents[2] / base_dir).resolve()
-        try:
-            base_dir.mkdir(parents=True, exist_ok=True)
-            stem = f"{now_local.strftime('%Y%m%d-%H%M%S')}_{schedule_kind}"
-            txt_path = base_dir / f"{stem}.txt"
-            json_path = base_dir / f"{stem}.json"
-            txt_path.write_text(f"{response.rstrip()}\n", encoding="utf-8")
-            payload = {
-                "schedule_kind": schedule_kind,
-                "timestamp_local": now_local.isoformat(),
-                "timezone": str(now_local.tzinfo or ""),
-                "response": response,
-                "metadata": metadata or {},
-            }
-            json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-            return txt_path, json_path
-        except Exception as exc:
-            logger.warning("Failed to write scheduled healer scan artifacts: %s", exc)
-            return None
-
-    @staticmethod
-    def _build_scheduled_healer_message(
-        *,
-        schedule_kind: str,
-        now_local: datetime,
-        response: str,
-        artifact_paths: tuple[Path, Path] | None,
-    ) -> str:
-        kind_label = "weekly deep" if schedule_kind == "weekly" else "daily"
-        lowered = response.lower()
-        success_prefix = "✅"
-        if "unavailable:" in lowered or "error" in lowered:
-            success_prefix = "⚠️"
-        lines = [
-            f"{success_prefix} Flow Healer scheduled {kind_label} scan completed",
-            f"Time: {now_local.strftime('%Y-%m-%d %H:%M %Z')}",
-            "",
-            response,
-        ]
-        if artifact_paths is not None:
-            txt_path, json_path = artifact_paths
-            lines.append("")
-            lines.append(f"Artifacts: {txt_path.name}, {json_path.name}")
-        return "\n".join(lines)
-
     async def _memory_maintenance_loop(self) -> None:
         """Memory maintenance loop for v2 canonical store."""
         assert self.memory_service is not None
@@ -1008,6 +816,22 @@ class RelayDaemon:
             except Exception as exc:
                 logger.exception("Memory maintenance loop error: %s", exc)
             await asyncio.sleep(self.settings.memory_v2_maintenance_interval_seconds)
+
+    async def _helper_maintenance_loop(self) -> None:
+        """Periodically recycle stale helper subprocesses when the daemon is idle."""
+        logger.info(
+            "Helper maintenance loop started (interval=%.0fs idle>=%.0fs age>=%.0fs)",
+            self.settings.helper_maintenance_interval_seconds,
+            self.settings.helper_recycle_idle_seconds,
+            self.settings.helper_recycle_max_age_seconds,
+        )
+        while not self._shutdown_requested:
+            try:
+                result = self.recycle_helpers(False)
+                logger.info("Helper maintenance check: %s", result)
+            except Exception as exc:
+                logger.exception("Helper maintenance loop error: %s", exc)
+            await asyncio.sleep(self.settings.helper_maintenance_interval_seconds)
 
     async def _poll_imessage_loop(self) -> None:
         """iMessage polling loop (original behaviour)."""
@@ -1032,6 +856,11 @@ class RelayDaemon:
                     sender_allowlist=sender_allowlist,
                     require_sender_filter=self.settings.only_poll_allowed_senders,
                 )
+                recent_attachment_outbound = getattr(
+                    self.egress,
+                    "was_recent_attachment_outbound",
+                    lambda _sender: False,
+                )
 
                 # Update in-memory cursor for all fetched messages; write to DB once after batch
                 dispatchable = []
@@ -1043,7 +872,7 @@ class RelayDaemon:
                         continue
                     has_attachments = bool((msg.context or {}).get("attachments"))
                     placeholder_only = (msg.text or "").strip() in _ATTACHMENT_PLACEHOLDER_TEXTS
-                    if placeholder_only and self.egress.was_recent_attachment_outbound(msg.sender):
+                    if placeholder_only and recent_attachment_outbound(msg.sender):
                         logger.info(
                             "Ignoring probable outbound attachment placeholder echo from %s (rowid=%s)",
                             msg.sender,
@@ -1061,7 +890,7 @@ class RelayDaemon:
                             msg.sender,
                             msg.text,
                         )
-                    if has_attachments and self.egress.was_recent_attachment_outbound(msg.sender):
+                    if has_attachments and recent_attachment_outbound(msg.sender):
                         logger.info("Ignoring probable outbound attachment echo from %s (rowid=%s)", msg.sender, msg.id)
                         continue
                     if self._consume_restart_echo_suppress(msg.sender, msg.text):
@@ -1645,7 +1474,7 @@ class RelayDaemon:
             "❓ help",
             "✅ approve <id>  |  ❌ deny <id>  |  ❌❌ deny all  |  📊 status",
             "🏥 health  |  🔍 history: [query]  |  📈 usage  |  📋 logs  |  🔄 clear context",
-            "🔧 system: stop  |  restart  |  kill provider  |  cancel run <run_id>  |  healer  |  healer pause/resume",
+            "🔧 system: stop  |  restart  |  kill provider  |  cancel run <run_id>",
             "",
             "Power users:",
             "⚡ task: <cmd>        execute  (needs ✅)",

@@ -69,7 +69,7 @@ def test_was_recent_outbound_matches_medium_fragment(monkeypatch):
     monkeypatch.setattr(egress, "_osascript_send", fake_send)
 
     full_text = (
-        "Apple Flow help: system: stop | restart | kill provider | cancel run <run_id> | mute | unmute | sync office"
+        "Apple Flow help: system: stop | restart | kill provider | cancel run <run_id> | mute | unmute"
     )
     egress.send("+15551234567", full_text)
 

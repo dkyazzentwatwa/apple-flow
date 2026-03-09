@@ -19,7 +19,7 @@ class ManagedProcessRegistry:
     def __init__(self, label: str, state_dir: str | Path | None = None) -> None:
         self.label = label
         self._lock = threading.Lock()
-        self._entries: dict[int, tuple[str, subprocess.Popen[str]]] = {}
+        self._entries: dict[int, tuple[str, subprocess.Popen[str], float]] = {}
         base_dir = Path(state_dir) if state_dir is not None else Path(gettempdir()) / "apple-flow-process-registry"
         self._registry_path = base_dir / f"{self.label}.json"
         self._registry_path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,7 +27,7 @@ class ManagedProcessRegistry:
 
     def register(self, thread_id: str, proc: subprocess.Popen[str]) -> None:
         with self._lock:
-            self._entries[int(proc.pid)] = (thread_id, proc)
+            self._entries[int(proc.pid)] = (thread_id, proc, time.time())
             self._persist_locked()
 
     def unregister(self, proc: subprocess.Popen[str]) -> None:
@@ -141,15 +141,46 @@ class ManagedProcessRegistry:
         with self._lock:
             persisted = self._read_registry_locked()
             active = {pid_str: tid for pid_str, tid in persisted.items() if self._pid_exists(int(pid_str))}
-            live = {str(pid): tid for pid, (tid, _proc) in self._entries.items()}
+            live = {str(pid): tid for pid, (tid, _proc, _started_at) in self._entries.items()}
             merged = {**active, **live}
             self._write_registry_locked(merged)
 
     def _persist_locked(self) -> None:
         persisted = self._read_registry_locked()
-        live = {str(pid): tid for pid, (tid, _proc) in self._entries.items()}
+        live = {str(pid): tid for pid, (tid, _proc, _started_at) in self._entries.items()}
         persisted.update(live)
         self._write_registry_locked(persisted)
+
+    def snapshot(self) -> list[dict[str, object]]:
+        """Return a best-effort snapshot of currently live tracked processes."""
+        with self._lock:
+            entries = list(self._entries.items())
+        now = time.time()
+        snapshot: list[dict[str, object]] = []
+        for pid, (thread_id, proc, started_at) in entries:
+            if proc.poll() is not None:
+                self._remove_pid(pid)
+                continue
+            snapshot.append(
+                {
+                    "pid": pid,
+                    "thread_id": thread_id,
+                    "started_at": started_at,
+                    "age_seconds": max(0.0, now - started_at),
+                }
+            )
+        return snapshot
+
+    def active_count(self) -> int:
+        """Return the number of live tracked processes."""
+        return len(self.snapshot())
+
+    def oldest_age_seconds(self) -> float | None:
+        """Return the age of the oldest live tracked process, if any."""
+        snapshot = self.snapshot()
+        if not snapshot:
+            return None
+        return max(float(item.get("age_seconds", 0.0)) for item in snapshot)
 
     def _read_registry_locked(self) -> dict[str, str]:
         try:

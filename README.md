@@ -63,28 +63,6 @@ Use the harness docs + eval pack when changing orchestration, approvals, executi
 - Risk eval mapping: [docs/harness/evals.md](docs/harness/evals.md)
 - Run eval pack: `python scripts/harness_eval_pack.py --json-out dist/harness-eval-pack.json`
 
-## Autonomous Healer (Experimental)
-
-Apple Flow includes an optional autonomous healer loop for GitHub-issue driven remediation. It is disabled by default and designed for guarded rollout.
-
-- Ingests only maintainer-blessed issues (`apple_flow_healer_issue_required_labels`)
-- Uses Docker sandbox execution (`apple_flow_healer_sandbox_mode=docker`)
-- Runs proposer + verifier passes before PR actions
-- Requires explicit PR-approval signal in guarded mode (`apple_flow_healer_pr_required_label`)
-- Can learn internal guardrails from prior attempts (`apple_flow_healer_learning_enabled`)
-- Enforces circuit breaker, retry budget, lock contention control, and reconciliation
-- Supports `system: healer scan` to run local checks and open deduped `healer:ready` issues
-- Optional scheduler-driven scans: daily ops queue + weekly deep scan with iMessage/Notes summary and per-run `logs/scans` artifacts (`apple_flow_enable_healer_scheduled_scans`)
-
-See `.env.example` for all `apple_flow_healer_*` settings.
-
-Guides:
-- [What and why](docs/flow-healer/01-what-and-why.md)
-- [How to use (beginner + advanced)](docs/flow-healer/02-how-to-use.md)
-- [Operations and troubleshooting](docs/flow-healer/03-operations-and-troubleshooting.md)
-- [Workshop guide](docs/flow-healer/04-workshop-guide.md)
-- [Comprehensive manual](docs/flow-healer/Flow-Healer-Manual.md)
-
 ## Start Here
 
 Choose one setup path:
@@ -242,7 +220,7 @@ python -m apple_flow service status --json
 | `usage` | Usage stats |
 | `help` | Help + practical tips |
 | `system: mute` / `system: unmute` | Companion controls |
-| `system: stop` / `system: restart` / `system: kill provider` | Runtime controls |
+| `system: stop` / `system: restart` / `system: recycle helpers` / `system: maintenance` / `system: kill provider` | Runtime controls |
 | `system: cancel run <run_id>` | Cancel one run |
 | `system: killswitch` | Kill all active provider processes |
 
@@ -333,6 +311,17 @@ When enabled, Apple Flow extracts prompt context from iMessage attachments (text
 
 If an inbound iMessage is just a voice note, Apple Flow now transcribes it, turns it into a synthetic `voice-task:` request, and replies with both text plus a spoken TTS follow-up. Install a local `whisper` CLI for STT, similar to how `pdftotext` and `tesseract` are used for other attachment types.
 
+Helper maintenance example:
+
+```env
+apple_flow_enable_helper_maintenance=true
+apple_flow_helper_maintenance_interval_seconds=1800
+apple_flow_helper_recycle_idle_seconds=1200
+apple_flow_helper_recycle_max_age_seconds=21600
+```
+
+When enabled, Apple Flow runs a lightweight maintenance check on a timer and only soft-recycles tracked connector helper subprocesses when the daemon is idle and those helpers are old enough. You can also trigger the same path manually with `system: recycle helpers` or `system: maintenance`.
+
 See full settings in [docs/ENV_SETUP.md](docs/ENV_SETUP.md).
 
 ## AI Backends
@@ -353,25 +342,13 @@ Notes:
 - `kilo-cli` is supported as a connector, but setup wizard `generate-env` currently validates `claude-cli`, `codex-cli`, `gemini-cli`, `cline`, and `ollama`. For `kilo-cli`, set connector fields via manual config write after generation.
 - `ollama` uses a native HTTP connector (`/api/chat`) with default model `qwen3.5:4b`.
 
-## Agent Teams
+## Recommended Bring-Up
 
-Apple Flow includes codex-native multi-agent presets under `agents/teams/`.
+Keep initial setup narrow so polling is easy to verify:
 
-Natural iMessage usage:
-
-- `list available agent teams`
-- `load up the codebase-exploration-team and research new features`
-- `what team is active`
-- `unload team`
-
-Explicit forms:
-
-- `system: teams list`
-- `system: team load <slug>`
-- `system: team current`
-- `system: team unload`
-
-Details: [docs/AGENT_TEAMS.md](docs/AGENT_TEAMS.md)
+1. Start with iMessage only and confirm `apple-flow service status --json` reports the daemon, Messages DB access, and active polling.
+2. Enable one Apple gateway at a time after polling is stable.
+3. Turn on Companion, memory, follow-ups, and ambient scanning last.
 
 ## Optional macOS App
 

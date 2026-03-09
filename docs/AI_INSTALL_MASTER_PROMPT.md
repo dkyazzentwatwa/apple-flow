@@ -142,10 +142,6 @@ Phase G - Post-Install Functional Checks
    - help
    - status
    - task: <something small>
-3) If user wants team workflows, show:
-   - system: teams list
-   - system: team load <slug>
-   - system: team current
 
 Phase H - Optional Swift App (Ask First)
 1) Ask whether to run the native macOS Swift onboarding/dashboard app.

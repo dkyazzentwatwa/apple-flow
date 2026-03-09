@@ -17,14 +17,11 @@ def test_schema_classifies_recent_config_families_into_expected_sections():
     expected_sections = {
         "apple_flow_enable_memory_v2": "memory",
         "apple_flow_memory_v2_shadow_mode": "memory",
-        "apple_flow_enable_autonomous_healer": "healer",
-        "apple_flow_healer_repo_path": "healer",
-        "apple_flow_healer_weekly_deep_scan_time": "healer",
         "apple_flow_enable_companion": "companion",
         "apple_flow_companion_weekly_review_day": "companion",
         "apple_flow_enable_ambient_scanning": "scheduler",
-        "apple_flow_enable_csv_audit_log": "office_sync",
-        "apple_flow_enable_markdown_automation_log": "office_sync",
+        "apple_flow_enable_csv_audit_log": "scheduler",
+        "apple_flow_enable_markdown_automation_log": "scheduler",
         "apple_flow_phone_tts_engine": "phone",
     }
 
@@ -36,12 +33,6 @@ def test_schema_exposes_validation_hints_for_dashboard_editor():
     schema = build_config_schema()
     by_key = {field["key"]: field for field in schema["fields"]}
 
-    assert by_key["apple_flow_healer_mode"]["validation_hint"] == (
-        "Allowed values: guarded_pr, auto_merge_low_risk, full_auto"
-    )
-    assert by_key["apple_flow_healer_weekly_deep_scan_day"]["validation_hint"] == (
-        "Allowed values: monday, tuesday, wednesday, thursday, friday, saturday, sunday"
-    )
     assert by_key["apple_flow_companion_weekly_review_day"]["validation_hint"] == (
         "Allowed values: monday, tuesday, wednesday, thursday, friday, saturday, sunday"
     )

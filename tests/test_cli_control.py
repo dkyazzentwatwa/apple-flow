@@ -191,7 +191,7 @@ def test_wizard_doctor_contract_fields(capsys, tmp_path, monkeypatch):
         "apple_flow_admin_api_token=test-token\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(cli_control, "check_messages_db_access", lambda: (True, "OK"))
+    monkeypatch.setattr(cli_control, "check_messages_db_access", lambda *_args, **_kwargs: (True, "OK"))
     monkeypatch.setattr(cli_control.Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.setattr(cli_control, "resolve_binary", lambda _binary: "/usr/local/bin/codex")
 
@@ -334,13 +334,24 @@ def test_config_validate_requires_token(capsys, tmp_path):
 
 
 def test_service_status_contract(capsys, monkeypatch):
+    db_path = Path("/tmp/chat.db")
     monkeypatch.setattr(cli_control, "_launchctl_service_row", lambda _label: (True, 123))
     monkeypatch.setattr(cli_control, "_daemon_process_detected", lambda: True)
     monkeypatch.setattr(cli_control, "_admin_health", lambda _host, _port, _token: True)
+    monkeypatch.setattr(cli_control, "check_messages_db_access", lambda _path: (True, "OK"))
+    monkeypatch.setattr(Path, "exists", lambda self: str(self) == str(db_path))
     monkeypatch.setattr(
         cli_control,
         "RelaySettings",
-        lambda: SimpleNamespace(admin_host="127.0.0.1", admin_port=8787, admin_api_token="token"),
+        lambda: SimpleNamespace(
+            admin_host="127.0.0.1",
+            admin_port=8787,
+            admin_api_token="token",
+            messages_db_path=str(db_path),
+            only_poll_allowed_senders=True,
+            allowed_senders=["+15551234567"],
+            startup_catchup_window_seconds=180,
+        ),
     )
     args = _args(tool_args=["status"])
     code = cli_control.run_cli_control("service", args)
@@ -351,6 +362,10 @@ def test_service_status_contract(capsys, monkeypatch):
     assert payload["launchd_pid"] == 123
     assert payload["daemon_process_detected"] is True
     assert payload["healthy"] is True
+    assert payload["messages_db_exists"] is True
+    assert payload["messages_db_readable"] is True
+    assert payload["allowed_sender_count"] == 1
+    assert payload["iMessage_polling_active"] is True
 
 
 def test_service_logs_returns_path_and_lines(capsys, tmp_path, monkeypatch):
