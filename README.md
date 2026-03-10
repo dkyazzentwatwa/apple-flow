@@ -398,12 +398,12 @@ tail -f logs/apple-flow.err.log
 
 ## Documentation
 
+- [docs/PROJECT_REFERENCE.md](docs/PROJECT_REFERENCE.md)
 - [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md)
 - [docs/AUTO_START_SETUP.md](docs/AUTO_START_SETUP.md)
 - [docs/BEGINNER_SETUP_10_MIN.md](docs/BEGINNER_SETUP_10_MIN.md)
 - [docs/QUICKSTART.md](docs/QUICKSTART.md)
 - [docs/ENV_SETUP.md](docs/ENV_SETUP.md)
-- [docs/AGENT_TEAMS.md](docs/AGENT_TEAMS.md)
 - [docs/SKILLS_AND_MCP.md](docs/SKILLS_AND_MCP.md)
 - [CHANGELOG.md](CHANGELOG.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
