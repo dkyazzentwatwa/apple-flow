@@ -164,3 +164,59 @@ def test_empty_text_with_attachments_is_auto_routed_to_chat(tmp_path):
     _, prompt = orch.connector.turns[0]
     assert "Attached files (processed):" in prompt
     assert "note.txt" in prompt
+
+
+def test_image_attachment_triggers_analysis_instruction():
+    # No AttachmentProcessor — exercises the fallback image path in _inject_attachment_context
+    orch = _make_orchestrator(enable_attachments=True)
+
+    msg = InboundMessage(
+        id="m1",
+        sender="+15551234567",
+        text="what did I eat?",
+        received_at="2026-02-17T12:00:00Z",
+        is_from_me=False,
+        context={
+            "attachments": [
+                {
+                    "filename": "IMG_1234.heic",
+                    "mime_type": "image/heic",
+                    "path": "/tmp/IMG_1234.heic",
+                    "size_bytes": "2048000",
+                }
+            ]
+        },
+    )
+    orch.handle_message(msg)
+    _, prompt = orch.connector.turns[0]
+    assert "/tmp/IMG_1234.heic" in prompt
+    assert "visually analyze" in prompt
+    assert "Attached files:" not in prompt
+
+
+def test_non_image_attachment_uses_files_section():
+    # No AttachmentProcessor — exercises the fallback non-image path
+    orch = _make_orchestrator(enable_attachments=True)
+
+    msg = InboundMessage(
+        id="m1",
+        sender="+15551234567",
+        text="idea: check this doc",
+        received_at="2026-02-17T12:00:00Z",
+        is_from_me=False,
+        context={
+            "attachments": [
+                {
+                    "filename": "report.pdf",
+                    "mime_type": "application/pdf",
+                    "path": "/tmp/report.pdf",
+                    "size_bytes": "512000",
+                }
+            ]
+        },
+    )
+    orch.handle_message(msg)
+    _, prompt = orch.connector.turns[0]
+    assert "Attached files:" in prompt
+    assert "report.pdf" in prompt
+    assert "visually analyze" not in prompt

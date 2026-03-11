@@ -1218,14 +1218,34 @@ class RelayOrchestrator:
         attachments = message.context.get("attachments", [])
         if not attachments:
             return prompt
-        attachment_lines = []
+
+        image_paths = []
+        file_lines = []
         for att in attachments:
             filename = att.get("filename", "unknown")
             mime = att.get("mime_type", "unknown")
             path = att.get("path", "")
-            attachment_lines.append(f"  - {filename} ({mime}) at {path}")
-        attachment_block = "\n".join(attachment_lines)
-        return f"{prompt}\n\nAttached files:\n{attachment_block}"
+            if mime.startswith("image/"):
+                image_paths.append(path)
+            else:
+                file_lines.append(f"  - {filename} ({mime}) at {path}")
+
+        parts = [prompt]
+        if image_paths:
+            paths_block = "\n".join(f"  {p}" for p in image_paths)
+            parts.append(
+                f"The user sent the following image(s). Please read and visually analyze each one.\n{paths_block}\n\n"
+                "If the image contains food or a meal, respond with:\n"
+                "1. What the food/meal is\n"
+                "2. Estimated calories\n"
+                "3. Macro breakdown: protein (g), carbs (g), fat (g)\n"
+                "4. Key nutritional highlights (fiber, sodium, sugar, or anything notable)\n"
+                "Be concise — a few lines per item is ideal for an iMessage reply."
+            )
+        if file_lines:
+            parts.append("Attached files:\n" + "\n".join(file_lines))
+
+        return "\n\n".join(parts)
 
     # --- Notes Logging (delegated) ---
 
