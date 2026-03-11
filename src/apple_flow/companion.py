@@ -199,7 +199,7 @@ class CompanionLoop:
         # 3. Overdue reminders — due < now, scoped to reminders_list_name, cooldown per item
         try:
             from . import apple_tools
-            reminders = apple_tools.reminders_list(filter="incomplete", limit=20)
+            reminders = apple_tools.reminders_list(list_name=self.config.reminders_list_name, filter="incomplete", limit=20)
             if isinstance(reminders, list):
                 now = datetime.now()
                 for rem in reminders:
@@ -397,7 +397,7 @@ class CompanionLoop:
         # Incomplete reminders
         try:
             from . import apple_tools
-            reminders = apple_tools.reminders_list(filter="incomplete", limit=10)
+            reminders = apple_tools.reminders_list(list_name=self.config.reminders_list_name, filter="incomplete", limit=10)
             if isinstance(reminders, list) and reminders:
                 lines = [f"Open reminders ({len(reminders)}):"]
                 for rem in reminders[:5]:
