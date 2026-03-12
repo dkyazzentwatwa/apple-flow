@@ -57,9 +57,7 @@ _ENUM_OPTIONS: dict[str, list[str]] = {
     "apple_flow_phone_tts_engine": ["auto", "say", "piper"],
 }
 
-_SKIP_KEYS = {
-    "apple_flow_use_codex_cli",
-}
+_SKIP_KEYS: set[str] = set()
 
 
 def _field_to_key(field_name: str) -> str:

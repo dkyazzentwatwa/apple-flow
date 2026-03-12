@@ -45,6 +45,7 @@ def _args(**kwargs):
         "overwrite": None,
         "message_ids": [],
         "input_file": None,
+        "template_file": None,
     }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -254,6 +255,122 @@ def test_tools_pages_template_dispatches(monkeypatch, capsys):
     assert payload["template_type"] == "research"
     assert payload["output_path"] == "/tmp/research-template.md"
     assert payload["overwrite"] is True
+
+
+def test_tools_reminders_scaffold_template_dispatches(monkeypatch, capsys):
+    monkeypatch.setattr(
+        app_main,
+        "reminders_scaffold_template",
+        lambda template_name, project_name, template_file="", account_name="iCloud": {
+            "ok": True,
+            "template": template_name,
+            "project_name": project_name,
+            "template_file": template_file,
+            "account_name": account_name,
+        },
+    )
+
+    app_main._run_tools_subcommand(
+        _args(
+            tool_args=["reminders_scaffold_template", "dev", "client-john-adams"],
+            account="iCloud",
+            template_file="/tmp/reminders-templates.json",
+        )
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["template"] == "dev"
+    assert payload["project_name"] == "client-john-adams"
+    assert payload["template_file"] == "/tmp/reminders-templates.json"
+    assert payload["account_name"] == "iCloud"
+
+
+def test_tools_reminders_scaffold_template_requires_template_and_name(capsys):
+    with pytest.raises(SystemExit) as exc:
+        app_main._run_tools_subcommand(_args(tool_args=["reminders_scaffold_template", "dev"]))
+    assert exc.value.code == 1
+    assert "Usage: apple-flow tools reminders_scaffold_template" in capsys.readouterr().err
+
+
+def test_tools_reminders_create_group_dispatches(monkeypatch, capsys):
+    monkeypatch.setattr(
+        app_main,
+        "reminders_create_group",
+        lambda group_name, account_name="iCloud": {
+            "ok": True,
+            "group_name": group_name,
+            "account_name": account_name,
+        },
+    )
+
+    app_main._run_tools_subcommand(
+        _args(
+            tool_args=["reminders_create_group", "client-tim-cook"],
+            account="iCloud",
+        )
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"ok": True, "group_name": "client-tim-cook", "account_name": "iCloud"}
+
+
+def test_tools_reminders_create_list_dispatches(monkeypatch, capsys):
+    monkeypatch.setattr(
+        app_main,
+        "reminders_create_list",
+        lambda group_name, list_name, account_name="iCloud": {
+            "ok": True,
+            "group_name": group_name,
+            "list_name": list_name,
+            "account_name": account_name,
+        },
+    )
+
+    app_main._run_tools_subcommand(
+        _args(
+            tool_args=["reminders_create_list", "client-tim-cook", "client-inbox"],
+            account="iCloud",
+        )
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "ok": True,
+        "group_name": "client-tim-cook",
+        "list_name": "client-inbox",
+        "account_name": "iCloud",
+    }
+
+
+def test_tools_reminders_create_section_dispatches(monkeypatch, capsys):
+    monkeypatch.setattr(
+        app_main,
+        "reminders_create_section",
+        lambda list_name, section_name: {
+            "ok": True,
+            "list_name": list_name,
+            "section_name": section_name,
+        },
+    )
+
+    app_main._run_tools_subcommand(
+        _args(tool_args=["reminders_create_section", "client-inbox", "new"])
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"ok": True, "list_name": "client-inbox", "section_name": "new"}
+
+
+def test_tools_reminders_create_list_requires_group_and_list(capsys):
+    with pytest.raises(SystemExit) as exc:
+        app_main._run_tools_subcommand(_args(tool_args=["reminders_create_list", "client-tim-cook"]))
+    assert exc.value.code == 1
+    assert "Usage: apple-flow tools reminders_create_list" in capsys.readouterr().err
+
+
+def test_tools_reminders_create_section_requires_list_and_section(capsys):
+    with pytest.raises(SystemExit) as exc:
+        app_main._run_tools_subcommand(_args(tool_args=["reminders_create_section", "client-inbox"]))
+    assert exc.value.code == 1
+    assert "Usage: apple-flow tools reminders_create_section" in capsys.readouterr().err
 
 
 def test_tools_numbers_create_requires_json_headers(capsys):

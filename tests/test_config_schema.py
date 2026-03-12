@@ -16,7 +16,6 @@ def test_schema_classifies_recent_config_families_into_expected_sections():
 
     expected_sections = {
         "apple_flow_enable_memory_v2": "memory",
-        "apple_flow_memory_v2_shadow_mode": "memory",
         "apple_flow_enable_companion": "companion",
         "apple_flow_companion_weekly_review_day": "companion",
         "apple_flow_enable_ambient_scanning": "scheduler",

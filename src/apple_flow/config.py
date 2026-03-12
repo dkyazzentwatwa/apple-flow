@@ -30,8 +30,6 @@ class RelaySettings(BaseSettings):
     approval_ttl_minutes: int = 20
     max_messages_per_minute: int = 30
 
-    # Legacy setting kept for migration messaging only; ignored for connector selection.
-    use_codex_cli: bool = True
     codex_cli_command: str = "codex"
     codex_cli_context_window: int = 10
     codex_cli_model: str = ""  # e.g., "gpt-5.3-codex" (empty = use codex default)
@@ -96,10 +94,14 @@ class RelaySettings(BaseSettings):
     max_concurrent_ai_calls: int = 4
 
     # Helper maintenance / soft recycle
-    enable_helper_maintenance: bool = False
-    helper_maintenance_interval_seconds: float = 1800.0
-    helper_recycle_idle_seconds: float = 1200.0
-    helper_recycle_max_age_seconds: float = 21600.0
+    enable_helper_maintenance: bool = True
+    helper_maintenance_interval_seconds: float = 900.0
+    helper_recycle_idle_seconds: float = 600.0
+    helper_recycle_max_age_seconds: float = 3600.0
+    watchdog_poll_stall_seconds: float = 60.0
+    watchdog_inflight_stall_seconds: float = 300.0
+    watchdog_event_loop_lag_seconds: float = 5.0
+    watchdog_event_loop_lag_failures: int = 3
 
     # Workspace aliases for multi-workspace routing
     workspace_aliases: str = ""  # JSON dict: '{"web-app":"/path/to/web-app"}'
@@ -227,7 +229,6 @@ class RelaySettings(BaseSettings):
     enable_memory: bool = False
     memory_max_context_chars: int = 2000
     enable_memory_v2: bool = False
-    memory_v2_shadow_mode: bool = False
     memory_v2_migrate_on_start: bool = True
     memory_v2_db_path: str = ""  # empty -> <agent-office>/.apple-flow-memory.sqlite3
     memory_v2_scope: str = "global"
@@ -286,13 +287,23 @@ class RelaySettings(BaseSettings):
         "admin_port",
         "enable_memory",
         "enable_memory_v2",
-        "memory_v2_shadow_mode",
         "memory_v2_migrate_on_start",
         "memory_v2_include_legacy_fallback",
         "enable_helper_maintenance",
+        "helper_maintenance_interval_seconds",
+        "helper_recycle_idle_seconds",
+        "helper_recycle_max_age_seconds",
+        "watchdog_poll_stall_seconds",
+        "watchdog_inflight_stall_seconds",
+        "watchdog_event_loop_lag_seconds",
+        "watchdog_event_loop_lag_failures",
         "enable_csv_audit_log",
         "csv_audit_include_headers_if_missing",
         "enable_markdown_automation_log",
+        "watchdog_poll_stall_seconds",
+        "watchdog_inflight_stall_seconds",
+        "watchdog_event_loop_lag_seconds",
+        "watchdog_event_loop_lag_failures",
         "phone_tts_rate",
         "phone_tts_engine",
         "phone_piper_command",
@@ -361,30 +372,11 @@ class RelaySettings(BaseSettings):
         )
 
     def get_connector_type(self) -> str:
-        """Return active connector type, auto-migrating deprecated values."""
+        """Return active connector type."""
         connector = (self.connector or "").strip()
-        if connector == "codex-app-server":
-            return "codex-cli"
         if connector:
             return connector
         return "codex-cli"
-
-    def get_connector_warnings(self) -> list[str]:
-        """Return one-time migration warnings for deprecated connector config."""
-        warnings: list[str] = []
-        if (self.connector or "").strip() == "codex-app-server":
-            warnings.append(
-                "Deprecated connector 'codex-app-server' detected; auto-migrating to 'codex-cli'. "
-                "Please update apple_flow_connector in .env."
-            )
-        if not (self.connector or "").strip() and self.use_codex_cli is False:
-            warnings.append(
-                "Legacy key apple_flow_use_codex_cli=false is deprecated and ignored; "
-                "defaulting connector to 'codex-cli'."
-            )
-        for warning in warnings:
-            logger.warning(warning)
-        return warnings
 
     def get_workspace_aliases(self) -> dict[str, str]:
         """Parse workspace_aliases JSON string into a dict."""

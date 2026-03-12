@@ -44,10 +44,16 @@ from apple_flow.apple_tools import (
     messages_send_voice,
     reminders_complete,
     reminders_create,
+    reminders_create_group,
+    reminders_create_list,
+    reminders_create_section,
     reminders_list,
     reminders_list_lists,
+    reminders_move_section,
+    reminders_resolve_group_selector,
     reminders_search,
 )
+import apple_flow.reminders_accessibility as reminders_ax
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1457,7 +1463,17 @@ class TestMailSend:
 
 def _rem_tab(items: list[dict]) -> str:
     return "\n".join(
-        "\t".join([i.get("id", ""), i.get("name", ""), i.get("body", ""), i.get("due_date", ""), i.get("completed", ""), i.get("list", "")])
+        "\t".join(
+            [
+                i.get("id", ""),
+                i.get("name", ""),
+                i.get("body", ""),
+                i.get("due_date", ""),
+                i.get("completed", ""),
+                i.get("list", ""),
+                i.get("list_id", ""),
+            ]
+        )
         for i in items
     )
 
@@ -1471,16 +1487,116 @@ def _make_reminders(n: int = 2) -> list[dict]:
             "due_date": "",
             "completed": "false",
             "list": "Reminders",
+            "list_id": "",
         }
         for i in range(1, n + 1)
     ]
 
 
+def _rem_catalog_tab(items: list[dict]) -> str:
+    return "\n".join(
+        "\t".join(
+            [
+                i.get("id", ""),
+                i.get("name", ""),
+                i.get("container_type", ""),
+                i.get("container_id", ""),
+                i.get("account_id", ""),
+                i.get("account_name", ""),
+            ]
+        )
+        for i in items
+    )
+
+
 class TestRemindersListLists:
-    def test_returns_list_names(self):
-        with patch("subprocess.run", return_value=_ok_result("Reminders|||Work|||Personal")):
+    def test_returns_structured_paths(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+            {
+                "id": "list_linear",
+                "name": "Linear",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+            {
+                "id": "list_dev",
+                "name": "dev-inbox",
+                "container_type": "list",
+                "container_id": "list_linear",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
             result = reminders_list_lists()
-            assert result == ["Reminders", "Work", "Personal"]
+            assert result == [
+                {
+                    "id": "list_inbox",
+                    "name": "Inbox",
+                    "path": "iCloud/Inbox",
+                    "account": "iCloud",
+                    "account_id": "acct_1",
+                    "parent_id": "acct_1",
+                    "parent_path": "",
+                    "is_top_level": True,
+                    "source": "applescript",
+                },
+                {
+                    "id": "list_linear",
+                    "name": "Linear",
+                    "path": "iCloud/Linear",
+                    "account": "iCloud",
+                    "account_id": "acct_1",
+                    "parent_id": "acct_1",
+                    "parent_path": "",
+                    "is_top_level": True,
+                    "source": "applescript",
+                },
+                {
+                    "id": "list_dev",
+                    "name": "dev-inbox",
+                    "path": "iCloud/Linear/dev-inbox",
+                    "account": "iCloud",
+                    "account_id": "acct_1",
+                    "parent_id": "list_linear",
+                    "parent_path": "iCloud/Linear",
+                    "is_top_level": False,
+                    "source": "applescript",
+                },
+            ]
+
+    def test_as_text_returns_canonical_paths(self):
+        catalog = [
+            {
+                "id": "list_linear",
+                "name": "Linear",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+            {
+                "id": "list_dev",
+                "name": "dev-inbox",
+                "container_type": "list",
+                "container_id": "list_linear",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            result = reminders_list_lists(as_text=True)
+            assert result == "iCloud/Linear\niCloud/Linear/dev-inbox"
 
     def test_returns_empty_on_failure(self):
         with patch("subprocess.run", return_value=_err_result()):
@@ -1495,13 +1611,98 @@ class TestRemindersListLists:
 
         def _capture(cmd, **_kwargs):
             captured["script"] = cmd[2]
-            return _ok_result("Reminders")
+            return _ok_result("list_1\tReminders\taccount\tacct_1\tacct_1\tiCloud")
 
         with patch("subprocess.run", side_effect=_capture):
-            reminders_list_lists()
+            with patch.object(reminders_ax, "list_catalog", return_value=[]):
+                reminders_list_lists()
 
-        assert "set reminderLists to lists" in captured["script"]
-        assert "repeat with reminderList in reminderLists" in captured["script"]
+        assert "repeat with reminderList in every list" in captured["script"]
+        assert "container of reminderList" in captured["script"]
+
+    def test_merges_accessibility_lists(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_lists = [
+            {
+                "id": "",
+                "name": "dev-waiting",
+                "path": "iCloud/linear/dev-waiting",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            },
+        ]
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch.object(reminders_ax, "list_catalog", return_value=ax_lists):
+                result = reminders_list_lists()
+
+        assert result == [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "path": "iCloud/Inbox",
+                "account": "iCloud",
+                "account_id": "acct_1",
+                "parent_id": "acct_1",
+                "parent_path": "",
+                "is_top_level": True,
+                "source": "applescript",
+            },
+            {
+                "id": "",
+                "name": "dev-waiting",
+                "path": "iCloud/linear/dev-waiting",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            },
+        ]
+
+    def test_merges_accessibility_only_lists(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_catalog = [
+            {
+                "id": "",
+                "name": "dev-waiting",
+                "path": "iCloud/linear/dev-waiting",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            }
+        ]
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=ax_catalog):
+                result = reminders_list_lists()
+
+        assert result[-1]["path"] == "iCloud/linear/dev-waiting"
+        assert result[-1]["source"] == "accessibility"
 
 
 class TestRemindersList:
@@ -1538,14 +1739,243 @@ class TestRemindersList:
     def test_named_list_fetch_uses_name_lookup_in_script(self):
         captured: dict[str, str] = {}
 
+        catalog = [
+            {
+                "id": "list_linear",
+                "name": "Linear",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+            {
+                "id": "list_dev",
+                "name": "agent-task",
+                "container_type": "list",
+                "container_id": "list_linear",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+
         def _capture(cmd, **_kwargs):
+            if "repeat with reminderList in every list" in cmd[2]:
+                return _ok_result(_rem_catalog_tab(catalog))
             captured["script"] = cmd[2]
             return _ok_result("")
 
         with patch("subprocess.run", side_effect=_capture):
-            reminders_list(list_name="agent-task")
+            with patch.object(reminders_ax, "list_catalog", return_value=[]):
+                reminders_list(list_name="iCloud/Linear/agent-task")
 
-        assert 'set targetList to list "agent-task"' in captured["script"]
+        assert 'set targetList to first list whose id is "list_dev"' in captured["script"]
+
+    def test_returns_list_path_for_resolved_selector(self):
+        catalog = [
+            {
+                "id": "list_linear",
+                "name": "Linear",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+            {
+                "id": "list_dev",
+                "name": "agent-task",
+                "container_type": "list",
+                "container_id": "list_linear",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        reminders = [
+            {
+                "id": "1",
+                "name": "Task 1",
+                "body": "Notes",
+                "due_date": "",
+                "completed": "false",
+                "list": "agent-task",
+            }
+        ]
+
+        def _capture(cmd, **_kwargs):
+            if "repeat with reminderList in every list" in cmd[2]:
+                return _ok_result(_rem_catalog_tab(catalog))
+            return _ok_result(_rem_tab(reminders))
+
+        with patch("subprocess.run", side_effect=_capture):
+            result = reminders_list(list_name="iCloud/Linear/agent-task")
+
+        assert result[0]["list_path"] == "iCloud/Linear/agent-task"
+        assert result[0]["list_id"] == "list_dev"
+
+    def test_ambiguous_bare_name_returns_empty(self):
+        catalog = [
+            {
+                "id": "list_alpha",
+                "name": "agent-task",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+            {
+                "id": "list_beta_parent",
+                "name": "Linear",
+                "container_type": "account",
+                "container_id": "acct_2",
+                "account_id": "acct_2",
+                "account_name": "Work",
+            },
+            {
+                "id": "list_beta",
+                "name": "agent-task",
+                "container_type": "list",
+                "container_id": "list_beta_parent",
+                "account_id": "acct_2",
+                "account_name": "Work",
+            },
+        ]
+
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            assert reminders_list(list_name="agent-task") == []
+
+    def test_falls_back_to_accessibility_for_nested_selector(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_lists = [
+            {
+                "id": "",
+                "name": "dev-waiting",
+                "path": "iCloud/linear/dev-waiting",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            },
+        ]
+        ax_reminders = [
+            {
+                "id": "ax://dev-waiting-1",
+                "name": "Follow up with vendor",
+                "body": "waiting on API access",
+                "due_date": "",
+                "completed": "false",
+                "list": "dev-waiting",
+                "list_path": "iCloud/linear/dev-waiting",
+                "list_id": "",
+                "source": "accessibility",
+            },
+        ]
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch.object(reminders_ax, "list_catalog", return_value=ax_lists):
+                with patch.object(reminders_ax, "list_reminders", return_value=ax_reminders):
+                    result = reminders_list(list_name="dev-waiting")
+
+        assert result == ax_reminders
+
+    def test_ax_only_list_uses_accessibility_backend(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_catalog = [
+            {
+                "id": "",
+                "name": "dev-waiting",
+                "path": "iCloud/linear/dev-waiting",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            }
+        ]
+        ax_reminders = [
+            {
+                "id": "ax://rem-1",
+                "name": "Task from AX",
+                "body": "Nested reminder",
+                "due_date": "",
+                "completed": "false",
+                "list": "dev-waiting",
+                "list_id": "",
+                "list_path": "iCloud/linear/dev-waiting",
+                "source": "accessibility",
+            }
+        ]
+
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=ax_catalog):
+                with patch("apple_flow.apple_tools.reminders_ax.list_reminders", return_value=ax_reminders):
+                    result = reminders_list(list_name="dev-waiting")
+
+        assert result == ax_reminders
+
+    def test_accessibility_list_includes_section_names(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_catalog = [
+            {
+                "id": "",
+                "name": "dev-backlog",
+                "path": "iCloud/linear/dev-backlog",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            }
+        ]
+        ax_reminders = [
+            {
+                "id": "ax://rem-1",
+                "name": "[area] action",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "dev-backlog",
+                "list_id": "",
+                "list_path": "iCloud/linear/dev-backlog",
+                "section_name": "started",
+                "source": "accessibility",
+            }
+        ]
+
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=ax_catalog):
+                with patch("apple_flow.apple_tools.reminders_ax.list_reminders", return_value=ax_reminders):
+                    result = reminders_list(list_name="dev-backlog")
+
+        assert result[0]["section_name"] == "started"
 
 
 class TestRemindersSearch:
@@ -1578,6 +2008,37 @@ class TestRemindersSearch:
         with patch("subprocess.run", return_value=_err_result()):
             assert reminders_search("q") == []
 
+    def test_filters_accessibility_results_by_section(self):
+        reminders = [
+            {
+                "id": "ax://1",
+                "name": "[area] action",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "dev-backlog",
+                "list_path": "iCloud/linear/dev-backlog",
+                "section_name": "started",
+                "source": "accessibility",
+            },
+            {
+                "id": "ax://2",
+                "name": "[docs] new arch.md",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "dev-backlog",
+                "list_path": "iCloud/linear/dev-backlog",
+                "section_name": "issue-ready",
+                "source": "accessibility",
+            },
+        ]
+        with patch("apple_flow.apple_tools._reminders_fetch_raw", return_value=reminders):
+            result = reminders_search("action", list_name="dev-backlog", section_name="started")
+
+        assert len(result) == 1
+        assert result[0]["section_name"] == "started"
+
 
 class TestRemindersCreate:
     def test_returns_id_on_success(self):
@@ -1596,6 +2057,265 @@ class TestRemindersCreate:
     def test_returns_none_on_file_not_found(self):
         with patch("subprocess.run", side_effect=FileNotFoundError):
             assert reminders_create("Task") is None
+
+    def test_uses_resolved_list_id_for_nested_selector(self):
+        captured: dict[str, str] = {}
+        catalog = [
+            {
+                "id": "list_linear",
+                "name": "Linear",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+            {
+                "id": "list_dev",
+                "name": "Shopping",
+                "container_type": "list",
+                "container_id": "list_linear",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+
+        def _capture(cmd, **_kwargs):
+            if "repeat with reminderList in every list" in cmd[2]:
+                return _ok_result(_rem_catalog_tab(catalog))
+            captured["script"] = cmd[2]
+            return _ok_result("x-apple-id://rem-123")
+
+        with patch("subprocess.run", side_effect=_capture):
+            result = reminders_create("Buy milk", list_name="iCloud/Linear/Shopping")
+
+        assert result == "x-apple-id://rem-123"
+        assert 'set targetList to first list whose id is "list_dev"' in captured["script"]
+
+    def test_falls_back_to_accessibility_for_accessibility_only_list(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_lists = [
+            {
+                "id": "",
+                "name": "dev-waiting",
+                "path": "iCloud/linear/dev-waiting",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            },
+        ]
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch.object(reminders_ax, "list_catalog", return_value=ax_lists):
+                with patch.object(reminders_ax, "create_reminder", return_value="ax://created-1") as create_mock:
+                    result = reminders_create("Buy milk", list_name="dev-waiting", notes="2%")
+
+        assert result == "ax://created-1"
+        create_mock.assert_called_once_with(
+            "iCloud/linear/dev-waiting",
+            "Buy milk",
+            notes="2%",
+            due_date="",
+        )
+
+    def test_ax_only_list_uses_accessibility_backend(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_catalog = [
+            {
+                "id": "",
+                "name": "dev-waiting",
+                "path": "iCloud/linear/dev-waiting",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            }
+        ]
+
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=ax_catalog):
+                with patch("apple_flow.apple_tools.reminders_ax.create_reminder", return_value="ax://rem-1") as create_mock:
+                    result = reminders_create("Buy milk", list_name="dev-waiting")
+
+        assert result == "ax://rem-1"
+        create_mock.assert_called_once()
+
+    def test_accessibility_create_passes_section_name(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_catalog = [
+            {
+                "id": "",
+                "name": "dev-backlog",
+                "path": "iCloud/linear/dev-backlog",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            }
+        ]
+
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=ax_catalog):
+                with patch("apple_flow.apple_tools.reminders_ax.create_reminder", return_value="ax://rem-1") as create_mock:
+                    result = reminders_create("Buy milk", list_name="dev-backlog", section_name="started")
+
+        assert result == "ax://rem-1"
+        create_mock.assert_called_once_with(
+            "iCloud/linear/dev-backlog",
+            "Buy milk",
+            notes="",
+            due_date="",
+            section_name="started",
+        )
+
+    def test_flat_list_section_create_uses_applescript_then_moves_with_ax(self):
+        captured: dict[str, str] = {}
+        catalog = [
+            {
+                "id": "list_flat",
+                "name": "client-flat",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        applescript_items = [
+            {
+                "id": "x-apple-reminder://created-1",
+                "name": "[seed] kickoff",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "client-flat",
+                "list_id": "list_flat",
+                "list_path": "iCloud/client-flat",
+                "source": "applescript",
+            }
+        ]
+        ax_items = [
+            {
+                "id": "ax://created-1",
+                "name": "[seed] kickoff",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "client-flat",
+                "list_path": "iCloud/client-flat",
+                "section_name": "done",
+                "source": "accessibility",
+            }
+        ]
+
+        def _capture(cmd, **_kwargs):
+            script = cmd[2]
+            if "repeat with reminderList in every list" in script:
+                return _ok_result(_rem_catalog_tab(catalog))
+            captured["script"] = script
+            return _ok_result("x-apple-reminder://created-1")
+
+        with patch("subprocess.run", side_effect=_capture):
+            with patch("apple_flow.apple_tools._reminders_fetch_raw", return_value=applescript_items):
+                with patch("apple_flow.apple_tools.reminders_ax.list_reminders", return_value=ax_items):
+                    with patch("apple_flow.apple_tools.reminders_ax.move_to_section", return_value=True) as move_mock:
+                        result = reminders_create("[seed] kickoff", list_name="client-flat", section_name="queued")
+
+        assert result == "ax://created-1"
+        assert 'make new reminder at targetList' in captured["script"]
+        move_mock.assert_called_once_with(
+            list_path="iCloud/client-flat",
+            reminder_id="ax://created-1",
+            target_section_name="queued",
+        )
+
+    def test_flat_list_section_create_returns_applescript_id_when_move_fails(self):
+        catalog = [
+            {
+                "id": "list_flat",
+                "name": "client-flat",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        applescript_items = [
+            {
+                "id": "x-apple-reminder://created-1",
+                "name": "[seed] kickoff",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "client-flat",
+                "list_id": "list_flat",
+                "list_path": "iCloud/client-flat",
+                "source": "applescript",
+            }
+        ]
+        ax_items = [
+            {
+                "id": "ax://created-1",
+                "name": "[seed] kickoff",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "client-flat",
+                "list_path": "iCloud/client-flat",
+                "section_name": "done",
+                "source": "accessibility",
+            }
+        ]
+
+        with patch("subprocess.run", return_value=_ok_result("x-apple-reminder://created-1")):
+            with patch("apple_flow.apple_tools._reminders_catalog_with_accessibility", return_value=[{
+                "id": "list_flat",
+                "name": "client-flat",
+                "path": "iCloud/client-flat",
+                "account": "iCloud",
+                "account_id": "acct_1",
+                "parent_id": "acct_1",
+                "parent_path": "",
+                "is_top_level": True,
+                "source": "applescript",
+            }]):
+                with patch("apple_flow.apple_tools._reminders_fetch_raw", return_value=applescript_items):
+                    with patch("apple_flow.apple_tools.reminders_ax.list_reminders", return_value=ax_items):
+                        with patch("apple_flow.apple_tools.reminders_ax.move_to_section", return_value=False):
+                            result = reminders_create("[seed] kickoff", list_name="client-flat", section_name="queued")
+
+        assert result == "x-apple-reminder://created-1"
 
 
 class TestRemindersComplete:
@@ -1618,6 +2338,305 @@ class TestRemindersComplete:
     def test_returns_false_on_file_not_found(self):
         with patch("subprocess.run", side_effect=FileNotFoundError):
             assert reminders_complete("rem-id-1", "Reminders") is False
+
+    def test_uses_resolved_list_id_for_nested_selector(self):
+        captured: dict[str, str] = {}
+        catalog = [
+            {
+                "id": "list_linear",
+                "name": "Linear",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+            {
+                "id": "list_dev",
+                "name": "Reminders",
+                "container_type": "list",
+                "container_id": "list_linear",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+
+        def _capture(cmd, **_kwargs):
+            if "repeat with reminderList in every list" in cmd[2]:
+                return _ok_result(_rem_catalog_tab(catalog))
+            captured["script"] = cmd[2]
+            return _ok_result("ok")
+
+        with patch("subprocess.run", side_effect=_capture):
+            assert reminders_complete("rem-id-1", "iCloud/Linear/Reminders") is True
+
+        assert 'set targetList to first list whose id is "list_dev"' in captured["script"]
+
+    def test_falls_back_to_accessibility_for_accessibility_id(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_lists = [
+            {
+                "id": "",
+                "name": "dev-waiting",
+                "path": "iCloud/linear/dev-waiting",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            },
+        ]
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch.object(reminders_ax, "list_catalog", return_value=ax_lists):
+                with patch.object(reminders_ax, "complete_reminder", return_value=True) as complete_mock:
+                    assert reminders_complete("ax://dev-waiting-1", "dev-waiting") is True
+
+        complete_mock.assert_called_once_with(
+            list_path="iCloud/linear/dev-waiting",
+            reminder_id="ax://dev-waiting-1",
+            note="",
+        )
+
+    def test_ax_id_uses_accessibility_backend(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_catalog = [
+            {
+                "id": "",
+                "name": "dev-waiting",
+                "path": "iCloud/linear/dev-waiting",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            }
+        ]
+
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=ax_catalog):
+                with patch("apple_flow.apple_tools.reminders_ax.complete_reminder", return_value=True) as complete_mock:
+                    assert reminders_complete("ax://rem-1", "dev-waiting") is True
+
+        complete_mock.assert_called_once_with(
+            list_path="iCloud/linear/dev-waiting",
+            reminder_id="ax://rem-1",
+            note="",
+        )
+
+    def test_accessibility_complete_passes_section_name(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_catalog = [
+            {
+                "id": "",
+                "name": "dev-backlog",
+                "path": "iCloud/linear/dev-backlog",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            }
+        ]
+
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=ax_catalog):
+                with patch("apple_flow.apple_tools.reminders_ax.complete_reminder", return_value=True) as complete_mock:
+                    assert reminders_complete("ax://rem-1", "dev-backlog", section_name="started") is True
+
+        complete_mock.assert_called_once_with(
+            list_path="iCloud/linear/dev-backlog",
+            reminder_id="ax://rem-1",
+            note="",
+            section_name="started",
+        )
+
+
+class TestRemindersMoveSection:
+    def test_accessibility_move_section_routes_to_helper(self):
+        catalog = [
+            {
+                "id": "list_inbox",
+                "name": "Inbox",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        ax_catalog = [
+            {
+                "id": "",
+                "name": "dev-backlog",
+                "path": "iCloud/linear/dev-backlog",
+                "account": "iCloud",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "iCloud/linear",
+                "is_top_level": False,
+                "source": "accessibility",
+            }
+        ]
+
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=ax_catalog):
+                with patch("apple_flow.apple_tools.reminders_ax.move_to_section", return_value=True) as move_mock:
+                    assert reminders_move_section("ax://rem-1", list_name="dev-backlog", section_name="issue-ready") is True
+
+        move_mock.assert_called_once_with(
+            list_path="iCloud/linear/dev-backlog",
+            reminder_id="ax://rem-1",
+            target_section_name="issue-ready",
+        )
+
+    def test_applescript_id_move_section_resolves_to_ax_helper(self):
+        catalog = [
+            {
+                "id": "list_flat",
+                "name": "client-flat",
+                "container_type": "account",
+                "container_id": "acct_1",
+                "account_id": "acct_1",
+                "account_name": "iCloud",
+            },
+        ]
+        applescript_items = [
+            {
+                "id": "x-apple-reminder://created-1",
+                "name": "[seed] kickoff",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "client-flat",
+                "list_id": "list_flat",
+                "list_path": "iCloud/client-flat",
+                "source": "applescript",
+            }
+        ]
+        ax_items = [
+            {
+                "id": "ax://created-1",
+                "name": "[seed] kickoff",
+                "body": "",
+                "due_date": "",
+                "completed": "false",
+                "list": "client-flat",
+                "list_path": "iCloud/client-flat",
+                "section_name": "delivered",
+                "source": "accessibility",
+            }
+        ]
+
+        with patch("subprocess.run", return_value=_ok_result(_rem_catalog_tab(catalog))):
+            with patch("apple_flow.apple_tools._reminders_fetch_raw", return_value=applescript_items):
+                with patch("apple_flow.apple_tools.reminders_ax.list_reminders", return_value=ax_items):
+                    with patch("apple_flow.apple_tools.reminders_ax.move_to_section", return_value=True) as move_mock:
+                        assert reminders_move_section("x-apple-reminder://created-1", list_name="client-flat", section_name="queued") is True
+
+        move_mock.assert_called_once_with(
+            list_path="iCloud/client-flat",
+            reminder_id="ax://created-1",
+            target_section_name="queued",
+        )
+
+
+class TestRemindersScaffoldPrimitives:
+    def test_resolve_group_selector_exact_path(self):
+        group_entry = {
+            "id": "",
+            "name": "client-tim-cook",
+            "path": "iCloud/client-tim-cook",
+            "account": "iCloud",
+            "kind": "group",
+        }
+        with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=[group_entry]):
+            assert reminders_resolve_group_selector("iCloud/client-tim-cook", account_name="iCloud") == group_entry
+
+    def test_create_group_delegates_to_accessibility(self):
+        with patch(
+            "apple_flow.apple_tools.reminders_ax.create_group",
+            return_value={"ok": True, "status": "created", "path": "iCloud/client-tim-cook"},
+        ) as create_group_mock:
+            result = reminders_create_group("client-tim-cook", account_name="iCloud")
+
+        assert result == {"ok": True, "status": "created", "path": "iCloud/client-tim-cook"}
+        create_group_mock.assert_called_once_with("client-tim-cook", default_account="iCloud")
+
+    def test_create_list_resolves_group_then_delegates(self):
+        group_entry = {
+            "id": "",
+            "name": "client-tim-cook",
+            "path": "iCloud/client-tim-cook",
+            "account": "iCloud",
+            "kind": "group",
+        }
+        with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=[group_entry]):
+            with patch(
+                "apple_flow.apple_tools.reminders_ax.create_list",
+                return_value={"ok": True, "status": "created", "path": "iCloud/client-tim-cook/client-inbox"},
+            ) as create_list_mock:
+                result = reminders_create_list("client-tim-cook", "client-inbox", account_name="iCloud")
+
+        assert result == {"ok": True, "status": "created", "path": "iCloud/client-tim-cook/client-inbox"}
+        create_list_mock.assert_called_once_with("iCloud/client-tim-cook", "client-inbox")
+
+    def test_create_list_uses_account_fallback_path_when_group_not_in_catalog(self):
+        with patch("apple_flow.apple_tools.reminders_ax.list_catalog", return_value=[]):
+            with patch(
+                "apple_flow.apple_tools.reminders_ax.create_list",
+                return_value={"ok": False, "error": "parent group not found"},
+            ) as create_list_mock:
+                reminders_create_list("client-tim-cook", "client-inbox", account_name="iCloud")
+
+        create_list_mock.assert_called_once_with("iCloud/client-tim-cook", "client-inbox")
+
+    def test_create_section_resolves_list_selector_and_delegates(self):
+        with patch(
+            "apple_flow.apple_tools.reminders_resolve_list_selector",
+            return_value={"path": "iCloud/linear/dev-backlog"},
+        ):
+            with patch(
+                "apple_flow.apple_tools.reminders_ax.create_section",
+                return_value={"ok": True, "status": "created", "section_name": "Inactive"},
+            ) as create_section_mock:
+                result = reminders_create_section("dev-backlog", "Inactive")
+
+        assert result == {"ok": True, "status": "created", "section_name": "Inactive"}
+        create_section_mock.assert_called_once_with("iCloud/linear/dev-backlog", "Inactive")
+
+    def test_create_section_returns_error_when_list_selector_missing(self):
+        with patch("apple_flow.apple_tools.reminders_resolve_list_selector", return_value=None):
+            result = reminders_create_section("missing-list", "Inactive")
+
+        assert result == {"ok": False, "error": "list not found"}
 
 
 # ---------------------------------------------------------------------------

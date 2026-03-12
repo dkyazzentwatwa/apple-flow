@@ -1,3 +1,5 @@
 """Apple Flow package."""
 
-__version__ = "0.5.0"
+from . import reminders_scaffold
+
+__version__ = "0.6.0"

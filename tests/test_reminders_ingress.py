@@ -257,6 +257,109 @@ def test_context_carries_list_name(monkeypatch):
     assert messages[0].context["list_name"] == "My Custom List"
 
 
+def test_context_carries_canonical_list_path(monkeypatch):
+    store = FakeStore()
+    ingress = AppleRemindersIngress(
+        list_name="iCloud/Linear/agent-task",
+        owner_sender="+15551234567",
+        store=store,
+    )
+    monkeypatch.setattr(
+        ingress,
+        "_resolve_list_selector",
+        lambda: {
+            "id": "list_dev",
+            "name": "agent-task",
+            "path": "iCloud/Linear/agent-task",
+        },
+    )
+    raw = [
+        {"id": "rem_ctx_path", "name": "Test context", "body": "", "creation_date": "", "due_date": ""},
+    ]
+    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
+
+    messages = ingress.fetch_new()
+    assert messages[0].context["list_name"] == "iCloud/Linear/agent-task"
+    assert messages[0].context["list_path"] == "iCloud/Linear/agent-task"
+    assert messages[0].context["list_id"] == "list_dev"
+
+
+def test_ax_only_list_uses_accessibility_backed_fetch(monkeypatch):
+    store = FakeStore()
+    ingress = AppleRemindersIngress(
+        list_name="dev-waiting",
+        owner_sender="+15551234567",
+        store=store,
+    )
+    monkeypatch.setattr(
+        ingress,
+        "_resolve_list_selector",
+        lambda: {
+            "id": "",
+            "name": "dev-waiting",
+            "path": "iCloud/linear/dev-waiting",
+            "source": "accessibility",
+        },
+    )
+    monkeypatch.setattr(
+        "apple_flow.reminders_ingress.apple_tools.reminders_list",
+        lambda **kwargs: [
+            {
+                "id": "ax://rem-1",
+                "name": "Nested task",
+                "body": "From AX",
+                "creation_date": "",
+                "due_date": "",
+                "list_path": "iCloud/linear/dev-waiting",
+                "source": "accessibility",
+            }
+        ],
+    )
+
+    messages = ingress.fetch_new()
+    assert len(messages) == 1
+    assert messages[0].context["list_path"] == "iCloud/linear/dev-waiting"
+    assert messages[0].context["reminder_id"] == "ax://rem-1"
+
+
+def test_ax_only_list_carries_section_name_in_context(monkeypatch):
+    store = FakeStore()
+    ingress = AppleRemindersIngress(
+        list_name="dev-backlog",
+        owner_sender="+15551234567",
+        store=store,
+    )
+    monkeypatch.setattr(
+        ingress,
+        "_resolve_list_selector",
+        lambda: {
+            "id": "",
+            "name": "dev-backlog",
+            "path": "iCloud/linear/dev-backlog",
+            "source": "accessibility",
+        },
+    )
+    monkeypatch.setattr(
+        "apple_flow.reminders_ingress.apple_tools.reminders_list",
+        lambda **kwargs: [
+            {
+                "id": "ax://rem-2",
+                "name": "Section task",
+                "body": "",
+                "creation_date": "",
+                "due_date": "",
+                "list_path": "iCloud/linear/dev-backlog",
+                "section_name": "started",
+                "source": "accessibility",
+            }
+        ],
+    )
+
+    messages = ingress.fetch_new()
+
+    assert messages[0].context["section_name"] == "started"
+
+
 def test_due_date_future_waits(monkeypatch):
     ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent", due_delay_seconds=60)
     raw = [

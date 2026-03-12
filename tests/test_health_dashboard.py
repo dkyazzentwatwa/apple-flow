@@ -153,3 +153,31 @@ def test_health_shows_gateway_degradation():
     assert "Notes: DEGRADED" in result.response
     assert "Connection invalid" in result.response
     assert "Reminders: OK" in result.response
+
+
+def test_health_shows_runtime_watchdog_and_loop_status():
+    store = FakeStore()
+    store.set_state(
+        "daemon_loop_health_imessage",
+        '{"healthy": true, "last_success_at": "2026-03-11T12:05:00+00:00", "restart_count": 2}',
+    )
+    store.set_state(
+        "daemon_watchdog",
+        (
+            '{"healthy": false, "degraded_reasons": ["poll_stalled", "event_loop_lag"], '
+            '"oldest_inflight_dispatch_seconds": 301.0, "active_helper_count": 1, '
+            '"oldest_helper_age_seconds": 4200.0, "event_loop_lag_seconds": 5.4}'
+        ),
+    )
+    orch = _make_orchestrator(store=store)
+
+    msg = InboundMessage(
+        id="m1", sender="+15551234567", text="health",
+        received_at="2026-02-17T12:00:00Z", is_from_me=False,
+    )
+    result = orch.handle_message(msg)
+
+    assert "Runtime:" in result.response
+    assert "DEGRADED" in result.response
+    assert "poll_stalled" in result.response
+    assert "Loop imessage: OK" in result.response

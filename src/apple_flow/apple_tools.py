@@ -25,6 +25,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from . import reminders_accessibility as reminders_ax
+
 logger = logging.getLogger("apple_flow.apple_tools")
 MAIL_APP_TARGET = 'application id "com.apple.mail"'
 REMINDERS_APP_TARGET = 'application id "com.apple.reminders"'
@@ -78,9 +80,17 @@ NUMBERS: numbers_create "/abs/path/file.numbers" '["H1","H2"]' [--sheet X] [--ta
 MAIL:   mail_list_unread [--limit N]  |  mail_search "q" [--days N]  |  mail_get_content "id"
         mail_send "to@x.com" "Subject" "Body"  |  mail_list_mailboxes [--account X] [--include-system true|false]
         mail_move_to_label --message-id <id> [--message-id <id> ...] --label <name> [--account X] [--mailbox X]
-REMINDERS: reminders_list_lists  |  reminders_list [--list X] [--filter incomplete|complete|all]
-           reminders_search "q" [--list X]  |  reminders_create "name" [--list X] [--due YYYY-MM-DD]
-           reminders_complete "id" --list "List"
+REMINDERS: reminders_list_lists [--text prints canonical paths like iCloud/Linear/dev-inbox]
+           reminders_create_group "<group-name>" [--account X]
+           reminders_create_list "<group-selector>" "<list-name>" [--account X]
+           reminders_create_section "<list-selector>" "<section-name>"
+           reminders_list [--list <selector>] [--section <name>] [--filter incomplete|complete|all]
+           reminders_search "q" [--list <selector>] [--section <name>]
+           reminders_create "name" [--list <selector>] [--section <name>] [--due YYYY-MM-DD]
+           reminders_complete "id" --list "<selector>" [--section <name>]
+           reminders_move_section "id" --list "<selector>" --section "<target-section>"
+           reminders_scaffold_template <template> <project-name> [--account X] [--template-file /abs/path/templates.json]
+           selector = canonical path (account/parent/child) or a unique leaf list name
 CALENDAR:  calendar_list_calendars  |  calendar_list_events [--cal X] [--days N]
            calendar_search "q" [--cal X]  |  calendar_create "Title" "YYYY-MM-DD HH:MM" [--cal X]
 MESSAGES:  messages_list_recent_chats [--limit N]  |  messages_search "q" [--limit N]
@@ -3911,26 +3921,353 @@ def mail_move_to_label(
 # Apple Reminders
 # ---------------------------------------------------------------------------
 
-def reminders_list_lists() -> list[str]:
-    """Return a list of all Reminders list names."""
-    script = f'''
-    tell {REMINDERS_APP_TARGET}
-        set listNames to {{}}
-        set reminderLists to lists
-        repeat with reminderList in reminderLists
-            set end of listNames to (name of reminderList as text)
-        end repeat
-        set AppleScript's text item delimiters to "|||"
-        return listNames as text
-    end tell
-    '''
-    raw = _run_script(script)
+def _reminders_escape_path_segment(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("/", "\\/")
+
+
+def reminders_split_selector(selector: str) -> list[str]:
+    raw = (selector or "").strip()
     if not raw:
         return []
-    return [name.strip() for name in raw.split("|||") if name.strip()]
+    segments: list[str] = []
+    current: list[str] = []
+    escape = False
+    for char in raw:
+        if escape:
+            current.append(char)
+            escape = False
+            continue
+        if char == "\\":
+            escape = True
+            continue
+        if char == "/":
+            segment = "".join(current).strip()
+            if segment:
+                segments.append(segment)
+            current = []
+            continue
+        current.append(char)
+    if escape:
+        current.append("\\")
+    segment = "".join(current).strip()
+    if segment:
+        segments.append(segment)
+    return segments
 
 
-def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplete", limit: int = 100) -> list[dict]:
+def _reminders_join_path(segments: list[str]) -> str:
+    return "/".join(_reminders_escape_path_segment(segment) for segment in segments if segment)
+
+
+def _reminders_fetch_catalog_raw() -> list[dict[str, str]]:
+    script = f'''
+    on sanitise(txt)
+        set AppleScript's text item delimiters to character id 9
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to character id 10
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to character id 13
+        set parts to text items of txt
+        set AppleScript's text item delimiters to " "
+        set txt to parts as text
+        set AppleScript's text item delimiters to ""
+        return txt
+    end sanitise
+
+    on accountForListId(listId)
+        tell {REMINDERS_APP_TARGET}
+            set currentList to first list whose id is listId
+            repeat
+                try
+                    set parentId to id of container of currentList as text
+                    try
+                        set currentList to first list whose id is parentId
+                    on error
+                        return first account whose id is parentId
+                    end try
+                on error errMsg
+                    error errMsg
+                end try
+            end repeat
+        end tell
+    end accountForListId
+
+    tell {REMINDERS_APP_TARGET}
+        set outputLines to {{}}
+        repeat with reminderList in every list
+            set listId to my sanitise(id of reminderList as text)
+            set listName to my sanitise(name of reminderList as text)
+
+            set containerId to my sanitise(id of container of reminderList as text)
+            set owningAccount to my accountForListId(listId)
+            set accountId to my sanitise(id of owningAccount as text)
+            set accountName to my sanitise(name of owningAccount as text)
+            set containerType to "list"
+            if containerId is accountId then set containerType to "account"
+
+            set end of outputLines to listId & character id 9 & listName & character id 9 & containerType & character id 9 & containerId & character id 9 & accountId & character id 9 & accountName
+        end repeat
+
+        set AppleScript's text item delimiters to character id 10
+        return outputLines as text
+    end tell
+    '''
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=60.0,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("AppleScript timed out after 60.0s")
+        return []
+    except FileNotFoundError:
+        logger.warning("osascript not found — apple_tools requires macOS")
+        return []
+    except Exception as exc:
+        logger.warning("Unexpected error running AppleScript: %s", exc)
+        return []
+
+    if result.returncode != 0:
+        logger.warning("AppleScript failed (rc=%s): %s", result.returncode, (result.stderr or "").strip())
+        return []
+    return _parse_delimited_output(
+        result.stdout.strip("\r\n"),
+        ["id", "name", "container_type", "container_id", "account_id", "account_name"],
+    )
+
+
+def _reminders_catalog() -> list[dict[str, Any]]:
+    raw_entries = _reminders_fetch_catalog_raw()
+    if not raw_entries:
+        return []
+
+    by_id = {entry["id"]: entry for entry in raw_entries if entry.get("id")}
+    path_cache: dict[str, str] = {}
+
+    def build_path(list_id: str, stack: set[str] | None = None) -> str:
+        entry = by_id.get(list_id)
+        if not entry:
+            return ""
+        cached = path_cache.get(list_id)
+        if cached is not None:
+            return cached
+        if stack is None:
+            stack = set()
+        if list_id in stack:
+            fallback = _reminders_join_path([
+                entry.get("account_name") or entry.get("account_id") or "",
+                entry.get("name") or "",
+            ])
+            path_cache[list_id] = fallback
+            return fallback
+
+        next_stack = set(stack)
+        next_stack.add(list_id)
+        account_segment = entry.get("account_name") or entry.get("account_id") or ""
+        if entry.get("container_type") == "list":
+            parent_path = build_path(entry.get("container_id", ""), next_stack)
+            if parent_path:
+                path = _reminders_join_path(reminders_split_selector(parent_path) + [entry.get("name", "")])
+            else:
+                path = _reminders_join_path([account_segment, entry.get("name", "")])
+        else:
+            path = _reminders_join_path([account_segment, entry.get("name", "")])
+        path_cache[list_id] = path
+        return path
+
+    catalog: list[dict[str, Any]] = []
+    for entry in raw_entries:
+        path = build_path(entry.get("id", ""))
+        parent_path = ""
+        if entry.get("container_type") == "list":
+            parent_path = build_path(entry.get("container_id", ""))
+        catalog.append(
+            {
+                "id": entry.get("id", ""),
+                "name": entry.get("name", ""),
+                "path": path,
+                "account": entry.get("account_name", ""),
+                "account_id": entry.get("account_id", ""),
+                "parent_id": entry.get("container_id", ""),
+                "parent_path": parent_path,
+                "is_top_level": entry.get("container_type") != "list",
+                "source": "applescript",
+            }
+        )
+    return catalog
+
+
+def _reminders_accessibility_catalog(default_account: str = "") -> list[dict[str, Any]]:
+    catalog: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    for entry in reminders_ax.list_catalog(default_account=default_account):
+        path = str(entry.get("path", "") or "")
+        if not path or path in seen_paths:
+            continue
+        item = dict(entry)
+        item.setdefault("id", "")
+        item.setdefault("name", "")
+        item.setdefault("account", "")
+        item.setdefault("account_id", "")
+        item.setdefault("parent_id", "")
+        item.setdefault("parent_path", "")
+        item.setdefault("is_top_level", False)
+        item.setdefault("source", "accessibility")
+        catalog.append(item)
+        seen_paths.add(path)
+    return catalog
+
+
+def _reminders_catalog_with_accessibility() -> list[dict[str, Any]]:
+    catalog = [dict(entry) for entry in _reminders_catalog()]
+    account_names = sorted({
+        entry.get("account", "")
+        for entry in catalog
+        if entry.get("account")
+    })
+    default_account = account_names[0] if len(account_names) == 1 else ""
+    seen_paths = {entry.get("path", "") for entry in catalog if entry.get("path")}
+    for entry in _reminders_accessibility_catalog(default_account=default_account):
+        path = str(entry.get("path", "") or "")
+        if path and path not in seen_paths:
+            catalog.append(entry)
+            seen_paths.add(path)
+    return catalog
+
+
+def reminders_list_lists(as_text: bool = False) -> list[dict[str, Any]] | str:
+    """Return Reminders lists with canonical account/path metadata."""
+    data = _reminders_catalog_with_accessibility()
+    return _format_output(data, as_text=as_text, format_fn=lambda item: item.get("path", ""))
+
+
+def reminders_resolve_list_selector(selector: str) -> dict[str, Any] | None:
+    raw_selector = (selector or "").strip()
+    if not raw_selector:
+        return None
+
+    catalog = _reminders_catalog_with_accessibility()
+    selector_parts = reminders_split_selector(raw_selector)
+    if not selector_parts:
+        return None
+    if not catalog:
+        if len(selector_parts) == 1:
+            return {
+                "id": "",
+                "name": selector_parts[0],
+                "path": selector_parts[0],
+                "account": "",
+                "account_id": "",
+                "parent_id": "",
+                "parent_path": "",
+                "is_top_level": True,
+            }
+        return None
+
+    catalog_with_parts = [(entry, reminders_split_selector(entry.get("path", ""))) for entry in catalog]
+
+    exact_matches = [entry for entry, parts in catalog_with_parts if parts == selector_parts]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        logger.warning(
+            "Reminders selector %r matched multiple exact paths: %s",
+            selector,
+            ", ".join(match.get("path", "") for match in exact_matches),
+        )
+        return None
+
+    if len(selector_parts) > 1:
+        suffix_matches = [
+            entry for entry, parts in catalog_with_parts if len(parts) >= len(selector_parts) and parts[-len(selector_parts):] == selector_parts
+        ]
+        if len(suffix_matches) == 1:
+            return suffix_matches[0]
+        if len(suffix_matches) > 1:
+            logger.warning(
+                "Reminders selector %r was ambiguous across paths: %s",
+                selector,
+                ", ".join(match.get("path", "") for match in suffix_matches),
+            )
+            return None
+
+    leaf_matches = [entry for entry in catalog if entry.get("name") == selector_parts[-1]]
+    if len(leaf_matches) == 1:
+        return leaf_matches[0]
+    if len(leaf_matches) > 1:
+        logger.warning(
+            "Reminders selector %r was ambiguous across list names: %s",
+            selector,
+            ", ".join(match.get("path", "") for match in leaf_matches),
+        )
+    ax_catalog = _reminders_catalog_with_accessibility()
+    if ax_catalog and ax_catalog != catalog:
+        catalog_with_parts = [(entry, reminders_split_selector(entry.get("path", ""))) for entry in ax_catalog]
+        exact_matches = [entry for entry, parts in catalog_with_parts if parts == selector_parts]
+        if len(exact_matches) == 1:
+            return exact_matches[0]
+        if len(selector_parts) > 1:
+            suffix_matches = [
+                entry for entry, parts in catalog_with_parts if len(parts) >= len(selector_parts) and parts[-len(selector_parts):] == selector_parts
+            ]
+            if len(suffix_matches) == 1:
+                return suffix_matches[0]
+            if len(suffix_matches) > 1:
+                logger.warning(
+                    "Reminders selector %r was ambiguous across paths: %s",
+                    selector,
+                    ", ".join(match.get("path", "") for match in suffix_matches),
+                )
+                return None
+        leaf_matches = [entry for entry in ax_catalog if entry.get("name") == selector_parts[-1]]
+        if len(leaf_matches) == 1:
+            return leaf_matches[0]
+        if len(leaf_matches) > 1:
+            logger.warning(
+                "Reminders selector %r was ambiguous across list names: %s",
+                selector,
+                ", ".join(match.get("path", "") for match in leaf_matches),
+            )
+    return None
+
+
+def _reminders_apply_catalog_metadata(
+    reminders: list[dict[str, Any]],
+    *,
+    resolved_list: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    catalog = _reminders_catalog_with_accessibility()
+    catalog_by_id = {entry.get("id", ""): entry for entry in catalog if entry.get("id")}
+
+    enriched: list[dict[str, Any]] = []
+    for reminder in reminders:
+        item = dict(reminder)
+        list_id = item.get("list_id", "")
+        catalog_entry = catalog_by_id.get(list_id)
+        if catalog_entry is None and resolved_list is not None:
+            catalog_entry = resolved_list
+            item["list_id"] = resolved_list.get("id", "")
+        if catalog_entry is not None:
+            item["list"] = item.get("list") or catalog_entry.get("name", "")
+            item["list_id"] = item.get("list_id") or catalog_entry.get("id", "")
+            item["list_path"] = catalog_entry.get("path", "")
+            item["source"] = item.get("source") or catalog_entry.get("source", "")
+        enriched.append(item)
+    return enriched
+
+
+def _reminders_fetch_raw(
+    list_name: str = "",
+    filter_completed: str = "incomplete",
+    limit: int = 100,
+    section_name: str = "",
+) -> list[dict]:
     """Internal: fetch reminders via AppleScript."""
     if filter_completed == "incomplete":
         completion_clause = "whose completed is false"
@@ -3939,16 +4276,39 @@ def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplet
     else:
         completion_clause = ""
 
+    resolved_list: dict[str, Any] | None = None
     if list_name:
-        esc_list = list_name.replace('"', '\\"')
-        fetch_block = f'''
-            try
-                set targetList to list "{esc_list}"
-            on error
-                return ""
-            end try
-            set allReminders to (every reminder of targetList {completion_clause})
-        '''
+        resolved_list = reminders_resolve_list_selector(list_name)
+        if resolved_list is None:
+            return []
+        if (resolved_list.get("source") == "accessibility" or section_name) and resolved_list.get("path"):
+            data = reminders_ax.list_reminders(
+                str(resolved_list.get("path", "")),
+                filter_completed=filter_completed,
+                limit=limit,
+                section_name=section_name,
+            )
+            return _reminders_apply_catalog_metadata(data, resolved_list=resolved_list)
+        if resolved_list.get("id"):
+            esc_list_id = resolved_list["id"].replace('"', '\\"')
+            fetch_block = f'''
+                try
+                    set targetList to first list whose id is "{esc_list_id}"
+                on error
+                    return ""
+                end try
+                set allReminders to (every reminder of targetList {completion_clause})
+            '''
+        else:
+            esc_list = resolved_list["name"].replace('"', '\\"')
+            fetch_block = f'''
+                try
+                    set targetList to list "{esc_list}"
+                on error
+                    return ""
+                end try
+                set allReminders to (every reminder of targetList {completion_clause})
+            '''
     else:
         # Iterate all lists
         fetch_block = f'''
@@ -4007,19 +4367,55 @@ def _reminders_fetch_raw(list_name: str = "", filter_completed: str = "incomplet
             on error
                 set remList to ""
             end try
+            try
+                set remListId to my sanitise(id of container of rem as text)
+            on error
+                set remListId to ""
+            end try
 
-            set end of outputLines to remId & character id 9 & remName & character id 9 & remBody & character id 9 & remDue & character id 9 & remCompletedStr & character id 9 & remList
+            set end of outputLines to remId & character id 9 & remName & character id 9 & remBody & character id 9 & remDue & character id 9 & remCompletedStr & character id 9 & remList & character id 9 & remListId
         end repeat
 
         set AppleScript's text item delimiters to character id 10
         return (outputLines as text)
     end tell
     '''
-    return _parse_delimited_output(_run_script(script, timeout=60.0), ["id", "name", "body", "due_date", "completed", "list"])
+    data = _parse_delimited_output(
+        _run_script(script, timeout=60.0),
+        ["id", "name", "body", "due_date", "completed", "list", "list_id"],
+    )
+    data = _reminders_apply_catalog_metadata(data, resolved_list=resolved_list)
+    if section_name:
+        normalized_section = section_name.strip().lower()
+        data = [
+            item for item in data
+            if str(item.get("section_name", "")).strip().lower() == normalized_section
+        ]
+    if list_name:
+        return data
+
+    remaining = max(0, limit - len(data))
+    if remaining <= 0:
+        return data[:limit]
+    for entry in _reminders_catalog_with_accessibility():
+        if entry.get("source") != "accessibility" or not entry.get("path"):
+            continue
+        ax_items = reminders_ax.list_reminders(
+            str(entry.get("path", "")),
+            filter_completed=filter_completed,
+            limit=remaining,
+            section_name=section_name,
+        )
+        data.extend(ax_items)
+        remaining = max(0, limit - len(data))
+        if remaining <= 0:
+            break
+    return data[:limit]
 
 
 def reminders_list(
     list_name: str = "",
+    section_name: str = "",
     filter: str = "incomplete",
     limit: int = 50,
     as_text: bool = False,
@@ -4027,7 +4423,7 @@ def reminders_list(
     """List reminders with id, name, body, due_date, completed, list.
 
     Args:
-        list_name: Reminders list name (empty = all lists)
+        list_name: Reminders list selector (canonical path or unique leaf name)
         filter: 'incomplete' | 'complete' | 'all'
         limit: Maximum reminders to return
         as_text: Return human-readable string
@@ -4035,12 +4431,18 @@ def reminders_list(
     Returns:
         List of reminder dicts or formatted string
     """
-    data = _reminders_fetch_raw(list_name=list_name, filter_completed=filter, limit=limit)
+    data = _reminders_fetch_raw(
+        list_name=list_name,
+        filter_completed=filter,
+        limit=limit,
+        section_name=section_name,
+    )
     return _format_output(
         data,
         as_text=as_text,
-        format_fn=lambda x: "{name}{due}".format(
+        format_fn=lambda x: "{name}{section}{due}".format(
             name=x.get("name", ""),
+            section=f"  [section: {x['section_name']}]" if x.get("section_name") else "",
             due=f"  [due: {x['due_date']}]" if x.get("due_date") else "",
         ),
     )
@@ -4049,6 +4451,7 @@ def reminders_list(
 def reminders_search(
     query: str,
     list_name: str = "",
+    section_name: str = "",
     limit: int = 20,
     as_text: bool = False,
 ) -> list | str:
@@ -4056,7 +4459,12 @@ def reminders_search(
 
     Fetches up to 200 reminders then filters in Python.
     """
-    all_reminders = _reminders_fetch_raw(list_name=list_name, filter_completed="all", limit=200)
+    all_reminders = _reminders_fetch_raw(
+        list_name=list_name,
+        filter_completed="all",
+        limit=200,
+        section_name=section_name,
+    )
     q = query.lower()
     matches = [
         r for r in all_reminders
@@ -4065,16 +4473,73 @@ def reminders_search(
     return _format_output(
         matches,
         as_text=as_text,
-        format_fn=lambda x: "{name}{due}".format(
+        format_fn=lambda x: "{name}{section}{due}".format(
             name=x.get("name", ""),
+            section=f"  [section: {x['section_name']}]" if x.get("section_name") else "",
             due=f"  [due: {x['due_date']}]" if x.get("due_date") else "",
         ),
     )
 
 
+def _reminders_normalize_body_for_match(value: str) -> str:
+    text = (value or "").strip()
+    if text == "missing value":
+        return ""
+    return text
+
+
+def _reminders_resolve_ax_reminder_id(
+    resolved_list: dict[str, Any],
+    reminder_id: str,
+    *,
+    limit: int = 200,
+) -> str | None:
+    if reminders_ax.is_ax_reminder_id(reminder_id):
+        return reminder_id
+
+    list_path = str(resolved_list.get("path", "") or "").strip()
+    if not list_path:
+        return None
+
+    applescript_items = _reminders_fetch_raw(
+        list_name=list_path,
+        filter_completed="all",
+        limit=limit,
+    )
+    source_item = next((item for item in applescript_items if str(item.get("id", "")) == reminder_id), None)
+    if source_item is None:
+        return None
+
+    target_name = str(source_item.get("name", "") or "")
+    target_body = _reminders_normalize_body_for_match(str(source_item.get("body", "") or ""))
+    target_completed = str(source_item.get("completed", "") or "")
+
+    ax_items = reminders_ax.list_reminders(
+        list_path,
+        filter_completed="all",
+        limit=limit,
+    )
+    candidates = [
+        item for item in ax_items
+        if str(item.get("name", "") or "") == target_name
+        and _reminders_normalize_body_for_match(str(item.get("body", "") or "")) == target_body
+        and str(item.get("completed", "") or "") == target_completed
+    ]
+    if len(candidates) == 1:
+        return str(candidates[0].get("id", "") or "")
+
+    if not candidates:
+        candidates = [item for item in ax_items if str(item.get("name", "") or "") == target_name]
+        if len(candidates) == 1:
+            return str(candidates[0].get("id", "") or "")
+
+    return None
+
+
 def reminders_create(
     name: str,
     list_name: str = "Reminders",
+    section_name: str = "",
     notes: str = "",
     due_date: str = "",
 ) -> str | None:
@@ -4092,8 +4557,21 @@ def reminders_create(
     def _esc(s: str) -> str:
         return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
+    resolved_list = reminders_resolve_list_selector(list_name)
+    if resolved_list is None:
+        logger.warning("reminders_create failed: selector %r not found", list_name)
+        return None
+    if resolved_list.get("source") == "accessibility" and resolved_list.get("path"):
+        kwargs = {"notes": notes, "due_date": due_date}
+        if section_name:
+            kwargs["section_name"] = section_name
+        return reminders_ax.create_reminder(
+            str(resolved_list.get("path", "")),
+            name,
+            **kwargs,
+        )
+
     esc_name = _esc(name)
-    esc_list = _esc(list_name)
     esc_notes = _esc(notes)
 
     props_parts = [f'name:"{esc_name}"']
@@ -4107,11 +4585,15 @@ def reminders_create(
         due_clause = f'set due date of newRem to date "{esc_due}"'
     else:
         due_clause = ""
+    if resolved_list.get("id"):
+        target_list_clause = f'set targetList to first list whose id is "{_esc(resolved_list["id"])}"'
+    else:
+        target_list_clause = f'set targetList to list "{_esc(resolved_list["name"])}"'
 
     script = f'''
     tell {REMINDERS_APP_TARGET}
         try
-            set targetList to list "{esc_list}"
+            {target_list_clause}
         on error
             return "error: list not found"
         end try
@@ -4128,18 +4610,55 @@ def reminders_create(
     if not result or result.startswith("error:"):
         logger.warning("reminders_create failed: %s", result)
         return None
+    if section_name and resolved_list.get("path"):
+        ax_reminder_id = _reminders_resolve_ax_reminder_id(resolved_list, result)
+        if ax_reminder_id and reminders_ax.move_to_section(
+            list_path=str(resolved_list.get("path", "")),
+            reminder_id=ax_reminder_id,
+            target_section_name=section_name,
+        ):
+            return ax_reminder_id
+        logger.warning(
+            "reminders_create created reminder %r in %r but could not move it to section %r",
+            result,
+            resolved_list.get("path", ""),
+            section_name,
+        )
     return result
 
 
-def reminders_complete(reminder_id: str, list_name: str) -> bool:
+def reminders_complete(reminder_id: str, list_name: str, section_name: str = "") -> bool:
     """Mark a reminder as completed. Returns True on success."""
+    resolved_list = reminders_resolve_list_selector(list_name)
+    if resolved_list is None:
+        logger.warning("reminders_complete failed: selector %r not found", list_name)
+        return False
+    if (
+        reminders_ax.is_ax_reminder_id(reminder_id)
+        or resolved_list.get("source") == "accessibility"
+        or section_name
+    ):
+        kwargs = {
+            "list_path": str(resolved_list.get("path", "")),
+            "reminder_id": reminder_id,
+            "note": "",
+        }
+        if section_name:
+            kwargs["section_name"] = section_name
+        return reminders_ax.complete_reminder(**kwargs)
+
     esc_id = reminder_id.replace('"', '\\"')
-    esc_list = list_name.replace('"', '\\"')
+    if resolved_list.get("id"):
+        esc_list_id = resolved_list["id"].replace('"', '\\"')
+        target_list_clause = f'set targetList to first list whose id is "{esc_list_id}"'
+    else:
+        esc_list_name = resolved_list["name"].replace('"', '\\"')
+        target_list_clause = f'set targetList to list "{esc_list_name}"'
 
     script = f'''
     tell {REMINDERS_APP_TARGET}
         try
-            set targetList to list "{esc_list}"
+            {target_list_clause}
             set matchedRem to first reminder of targetList whose id as text is "{esc_id}"
             set completed of matchedRem to true
             return "ok"
@@ -4153,6 +4672,128 @@ def reminders_complete(reminder_id: str, list_name: str) -> bool:
         return True
     logger.warning("reminders_complete failed: %s", result)
     return False
+
+
+def reminders_resolve_group_selector(selector: str, account_name: str = "") -> dict[str, Any] | None:
+    raw_selector = (selector or "").strip()
+    if not raw_selector:
+        return None
+    selector_parts = reminders_split_selector(raw_selector)
+    if not selector_parts:
+        return None
+
+    default_account = (account_name or "").strip()
+    catalog = [
+        entry
+        for entry in reminders_ax.list_catalog(default_account=default_account, include_groups=True)
+        if str(entry.get("kind", "")).strip().lower() == "group"
+    ]
+    catalog_with_parts = [(entry, reminders_split_selector(str(entry.get("path", "")))) for entry in catalog]
+
+    exact_matches = [entry for entry, parts in catalog_with_parts if parts == selector_parts]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        logger.warning(
+            "Reminders group selector %r matched multiple exact paths: %s",
+            selector,
+            ", ".join(match.get("path", "") for match in exact_matches),
+        )
+        return None
+
+    if len(selector_parts) > 1:
+        suffix_matches = [
+            entry
+            for entry, parts in catalog_with_parts
+            if len(parts) >= len(selector_parts) and parts[-len(selector_parts):] == selector_parts
+        ]
+        if len(suffix_matches) == 1:
+            return suffix_matches[0]
+        if len(suffix_matches) > 1:
+            logger.warning(
+                "Reminders group selector %r was ambiguous across paths: %s",
+                selector,
+                ", ".join(match.get("path", "") for match in suffix_matches),
+            )
+            return None
+
+    leaf_matches = [entry for entry in catalog if str(entry.get("name", "")) == selector_parts[-1]]
+    if len(leaf_matches) == 1:
+        return leaf_matches[0]
+    if len(leaf_matches) > 1:
+        logger.warning(
+            "Reminders group selector %r was ambiguous across names: %s",
+            selector,
+            ", ".join(match.get("path", "") for match in leaf_matches),
+        )
+        return None
+    return None
+
+
+def reminders_create_group(group_name: str, account_name: str = "iCloud") -> dict[str, Any]:
+    clean_group_name = (group_name or "").strip()
+    if not clean_group_name:
+        return {"ok": False, "error": "group name is required"}
+    clean_account_name = (account_name or "iCloud").strip() or "iCloud"
+    return reminders_ax.create_group(clean_group_name, default_account=clean_account_name)
+
+
+def reminders_create_list(group_name: str, list_name: str, account_name: str = "iCloud") -> dict[str, Any]:
+    clean_list_name = (list_name or "").strip()
+    if not clean_list_name:
+        return {"ok": False, "error": "list name is required"}
+
+    clean_account_name = (account_name or "iCloud").strip() or "iCloud"
+    resolved_group = reminders_resolve_group_selector(group_name, account_name=clean_account_name)
+
+    if resolved_group is not None:
+        parent_path = str(resolved_group.get("path", "")).strip()
+    else:
+        selector_parts = reminders_split_selector(group_name)
+        if not selector_parts:
+            return {"ok": False, "error": "group selector is required"}
+        if len(selector_parts) == 1:
+            parent_path = _reminders_join_path([clean_account_name, selector_parts[0]])
+        else:
+            parent_path = _reminders_join_path(selector_parts)
+    if not parent_path:
+        return {"ok": False, "error": "unable to resolve group path"}
+    return reminders_ax.create_list(parent_path, clean_list_name)
+
+
+def reminders_create_section(list_name: str, section_name: str) -> dict[str, Any]:
+    resolved_list = reminders_resolve_list_selector(list_name)
+    if resolved_list is None:
+        logger.warning("reminders_create_section failed: selector %r not found", list_name)
+        return {"ok": False, "error": "list not found"}
+    list_path = str(resolved_list.get("path", "")).strip()
+    if not list_path:
+        return {"ok": False, "error": "list path unavailable"}
+    return reminders_ax.create_section(list_path, section_name)
+
+
+def reminders_move_section(reminder_id: str, list_name: str, section_name: str) -> bool:
+    """Move a reminder to another section in the same list."""
+    resolved_list = reminders_resolve_list_selector(list_name)
+    if resolved_list is None:
+        logger.warning("reminders_move_section failed: selector %r not found", list_name)
+        return False
+    if not section_name.strip():
+        logger.warning("reminders_move_section failed: target section missing")
+        return False
+    ax_reminder_id = _reminders_resolve_ax_reminder_id(resolved_list, reminder_id)
+    if not ax_reminder_id:
+        logger.warning(
+            "reminders_move_section failed: unable to resolve %r to AX reminder in %r",
+            reminder_id,
+            resolved_list.get("path", ""),
+        )
+        return False
+    return reminders_ax.move_to_section(
+        list_path=str(resolved_list.get("path", "")),
+        reminder_id=ax_reminder_id,
+        target_section_name=section_name,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -248,14 +248,7 @@ class CanonicalMemoryStore:
 
 
 class MemoryService:
-    """Memory service with safe rollout semantics.
-
-    Active mode:
-      - Use canonical DB context for prompt injection.
-    Shadow mode:
-      - Compute canonical context but keep legacy prompt injection unchanged.
-      - Logs divergence metrics for rollout validation.
-    """
+    """SQLite-backed canonical memory service."""
 
     def __init__(
         self,
@@ -264,7 +257,6 @@ class MemoryService:
         db_path: Path,
         max_context_chars: int = 2000,
         enabled: bool = False,
-        shadow_mode: bool = False,
         max_storage_mb: int = 256,
         include_legacy_fallback: bool = True,
         default_scope: str = "global",
@@ -273,7 +265,6 @@ class MemoryService:
         self.project_id = resolve_or_create_project_id(self.office_path)
         self.max_context_chars = max(256, int(max_context_chars))
         self.enabled = bool(enabled)
-        self.shadow_mode = bool(shadow_mode)
         self.max_storage_mb = max(16, int(max_storage_mb))
         self.include_legacy_fallback = bool(include_legacy_fallback)
         self.default_scope = (default_scope or "global").strip() or "global"
@@ -378,15 +369,6 @@ class MemoryService:
             "expired_deleted": expired_deleted,
             "cap_deleted": cap_deleted,
         }
-
-    def log_shadow_diff(self, *, legacy_context: str, canonical_context: str) -> None:
-        # Keep shadow mode signal lightweight to avoid log spam and PII leakage.
-        logger.info(
-            "memory-shadow: legacy_chars=%d canonical_chars=%d canonical_nonempty=%s",
-            len(legacy_context),
-            len(canonical_context),
-            bool(canonical_context.strip()),
-        )
 
 
 def resolve_or_create_project_id(office_path: Path) -> str:

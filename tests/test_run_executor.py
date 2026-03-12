@@ -80,3 +80,35 @@ async def test_run_forever_cancellation_drains_workers():
     await task
     assert task.done()
     assert not task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_supervised_worker_restarts_after_failure():
+    store = _StoreStub()
+    executor = RunExecutor(store=store, approval_handler=_ApprovalStub(), worker_count=1)
+    executor._restart_backoff_seconds = lambda _attempt: 0.0
+    calls = {"count": 0}
+
+    async def fake_worker(worker_id, is_shutdown):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("boom")
+        return
+
+    executor._worker_loop = fake_worker
+
+    shutdown = {"value": False}
+
+    def is_shutdown():
+        return shutdown["value"]
+
+    async def stop_soon():
+        while calls["count"] < 2:
+            await asyncio.sleep(0)
+        shutdown["value"] = True
+
+    stopper = asyncio.create_task(stop_soon())
+    await executor._supervise_worker("worker_0", is_shutdown)
+    await stopper
+
+    assert calls["count"] == 2

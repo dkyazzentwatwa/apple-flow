@@ -1,4 +1,4 @@
-"""Tests for canonical memory v2 rollout components."""
+"""Tests for canonical memory v2 components."""
 
 from __future__ import annotations
 
@@ -91,7 +91,6 @@ def test_memory_service_backfills_from_legacy(tmp_path):
         office_path=office,
         db_path=tmp_path / "memory.sqlite3",
         enabled=True,
-        shadow_mode=False,
         max_context_chars=2000,
     )
     svc.backfill_from_legacy()
@@ -112,7 +111,6 @@ def test_memory_service_legacy_fallback_when_canonical_empty(tmp_path):
         office_path=office,
         db_path=tmp_path / "memory.sqlite3",
         enabled=True,
-        shadow_mode=False,
         include_legacy_fallback=True,
         max_context_chars=2000,
     )

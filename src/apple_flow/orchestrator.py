@@ -19,6 +19,7 @@ from .gateway_health import summarize_gateway_health_lines
 from .models import InboundMessage, RunState
 from .notes_logging import log_to_notes
 from .protocols import ConnectorProtocol, EgressProtocol, StoreProtocol
+from .runtime_health import summarize_runtime_health_lines
 from .utils import normalize_sender
 
 logger = logging.getLogger("apple_flow.orchestrator")
@@ -544,6 +545,10 @@ class RelayOrchestrator:
         if gateway_lines:
             parts.append("Gateways:")
             parts.extend(gateway_lines)
+
+        runtime_lines = summarize_runtime_health_lines(self.store)
+        if runtime_lines:
+            parts.extend(runtime_lines)
 
         response = "\n".join(parts)
         self._send(sender, response, context=context)
@@ -1156,21 +1161,6 @@ class RelayOrchestrator:
     def _inject_memory_context(self, prompt: str) -> str:
         if self.memory_service is not None:
             try:
-                canonical_context = self.memory_service.get_canonical_context()
-                if self.memory_service.shadow_mode:
-                    legacy_context = ""
-                    if self.memory is not None:
-                        legacy_context = self.memory.get_context_for_prompt()
-                    self.memory_service.log_shadow_diff(
-                        legacy_context=legacy_context,
-                        canonical_context=canonical_context,
-                    )
-                    if legacy_context:
-                        return f"Persistent memory context:\n{legacy_context}\n\n{prompt}"
-                    if canonical_context:
-                        return f"Persistent memory context:\n{canonical_context}\n\n{prompt}"
-                    return prompt
-
                 context = self.memory_service.get_context_for_prompt()
                 if context:
                     return f"Persistent memory context:\n{context}\n\n{prompt}"

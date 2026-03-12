@@ -429,7 +429,6 @@ def test_relaydaemon_initializes_memory_v2(monkeypatch, tmp_path):
         soul_file=str(soul),
         enable_memory=True,
         enable_memory_v2=True,
-        memory_v2_shadow_mode=False,
         memory_v2_migrate_on_start=True,
     )
 
@@ -595,6 +594,59 @@ async def test_reminders_poll_loop_marks_processed_only_after_success():
     await daemon._poll_reminders_loop()
 
     assert marked == []
+
+
+@pytest.mark.asyncio
+async def test_reminders_poll_loop_skips_fetch_while_live_gate_active(monkeypatch):
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    daemon._shutdown_requested = False
+    daemon._concurrency_sem = asyncio.Semaphore(2)
+    daemon.settings = SimpleNamespace(
+        reminders_list_name="agent-task",
+        reminders_archive_list_name="agent-archive",
+        reminders_poll_interval_seconds=0,
+    )
+    daemon._inflight_dispatch_tasks = set()
+    daemon.store = FakeStore()
+    daemon._record_gateway_success = lambda gateway: None
+    daemon._record_gateway_failure = lambda gateway, error: None
+    daemon._record_loop_success = lambda name: None
+    daemon._record_loop_failure = lambda name, reason: None
+    daemon._publish_watchdog_state = lambda: None
+
+    fetch_called = False
+
+    def _fetch_new():
+        nonlocal fetch_called
+        fetch_called = True
+        daemon._shutdown_requested = True
+        return []
+
+    pause_checks = 0
+
+    def _paused():
+        nonlocal pause_checks
+        pause_checks += 1
+        daemon._shutdown_requested = True
+        return True
+
+    monkeypatch.setattr(daemon_module.reminders_runtime_gate, "is_reminders_polling_paused", _paused)
+
+    daemon.reminders_ingress = SimpleNamespace(
+        fetch_new=_fetch_new,
+        mark_processed_occurrence=lambda key: None,
+        last_fetch_error="",
+    )
+    daemon.reminders_egress = SimpleNamespace(
+        annotate_reminder=lambda *args, **kwargs: None,
+        move_to_archive=lambda *args, **kwargs: None,
+    )
+    daemon.reminders_orchestrator = SimpleNamespace(handle_message=lambda msg: None)
+
+    await daemon._poll_reminders_loop()
+
+    assert pause_checks >= 1
+    assert fetch_called is False
 
 
 @pytest.mark.asyncio
@@ -1009,6 +1061,98 @@ async def test_run_forever_shutdown_does_not_raise_cancellederror():
 
     assert task.done()
     assert not task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_supervise_loop_restarts_after_unexpected_return():
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    daemon._shutdown_requested = False
+    daemon._supervisor_backoff_seconds = lambda _attempt: 0.0
+    state: dict[str, str] = {}
+    daemon.store = SimpleNamespace(
+        set_state=lambda key, value: state.__setitem__(key, value),
+        get_state=lambda key: state.get(key),
+    )
+
+    calls = {"count": 0}
+
+    async def _loop():
+        calls["count"] += 1
+        if calls["count"] >= 2:
+            daemon._shutdown_requested = True
+        return
+
+    await asyncio.wait_for(daemon._supervise_loop("imessage", _loop), timeout=1.0)
+
+    assert calls["count"] == 2
+    assert '"restart_count": 1' in state["daemon_loop_health_imessage"]
+
+
+@pytest.mark.asyncio
+async def test_poll_imessage_loop_fetches_messages_off_event_loop(tmp_path):
+    daemon = RelayDaemon.__new__(RelayDaemon)
+    daemon._shutdown_requested = False
+    chat_db = tmp_path / "chat.db"
+    chat_db.write_text("", encoding="utf-8")
+    daemon.settings = SimpleNamespace(
+        allowed_senders=["+15551234567"],
+        only_poll_allowed_senders=True,
+        messages_db_path=chat_db,
+        poll_interval_seconds=0,
+        startup_catchup_window_seconds=0,
+        notify_blocked_senders=False,
+        notify_rate_limited_senders=False,
+    )
+    daemon._last_rowid = None
+    daemon.egress = SimpleNamespace(
+        was_recent_attachment_outbound=lambda _sender: False,
+        was_recent_outbound=lambda _sender, _text: False,
+        send=lambda *_args, **_kwargs: None,
+    )
+    daemon.policy = SimpleNamespace(
+        is_sender_allowed=lambda _sender: True,
+        is_under_rate_limit=lambda _sender, _now: True,
+    )
+    daemon.store = SimpleNamespace(set_state=lambda *_args, **_kwargs: None)
+    daemon._synthesize_attachment_only_text = lambda msg: msg.text
+    daemon._consume_restart_echo_suppress = lambda *_args, **_kwargs: False
+    daemon._consume_companion_echo_suppress = lambda *_args, **_kwargs: False
+    daemon._spawn_dispatch_task = lambda _coro: None
+    daemon._flush_inflight_on_shutdown = lambda timeout=5.0: asyncio.sleep(0)
+    daemon._record_loop_success = lambda *_args, **_kwargs: None
+    daemon._throttled_messages_db_warning = lambda *_args, **_kwargs: None
+    daemon._throttled_state_db_warning = lambda *_args, **_kwargs: None
+    daemon._startup_time = datetime.now(UTC)
+    daemon.ingress = SimpleNamespace(
+        fetch_new=lambda **_kwargs: [
+            InboundMessage(
+                id="1",
+                sender="+15551234567",
+                text="relay: hi",
+                received_at=datetime.now(UTC).isoformat(),
+                is_from_me=False,
+                context={},
+            )
+        ]
+    )
+
+    called = {"fn": None}
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        called["fn"] = fn
+        daemon._shutdown_requested = True
+        return fn(*args, **kwargs)
+
+    import apple_flow.daemon as daemon_module_local
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(daemon_module_local.asyncio, "to_thread", fake_to_thread)
+    try:
+        await daemon._poll_imessage_loop()
+    finally:
+        monkeypatch.undo()
+
+    assert called["fn"] is daemon.ingress.fetch_new
 
 
 @pytest.mark.asyncio

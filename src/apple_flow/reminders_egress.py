@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 import subprocess
 
+from . import reminders_accessibility as reminders_ax
+
 logger = logging.getLogger("apple_flow.reminders_egress")
 REMINDERS_APP_TARGET = 'application id "com.apple.reminders"'
 
@@ -20,12 +22,40 @@ class AppleRemindersEgress:
     def __init__(self, list_name: str = "agent-task"):
         self.list_name = list_name
 
+    def _resolve_list_selector(self, selector: str) -> dict[str, str] | None:
+        from . import apple_tools
+
+        resolved = apple_tools.reminders_resolve_list_selector(selector)
+        if resolved is None:
+            logger.warning("Unable to resolve Reminders selector %r", selector)
+            return None
+        return {
+            "id": str(resolved.get("id", "")),
+            "name": str(resolved.get("name", "")),
+            "path": str(resolved.get("path", "")),
+            "source": str(resolved.get("source", "")),
+        }
+
     def complete_reminder(self, reminder_id: str, result_text: str) -> bool:
         """Write ``result_text`` into the reminder's notes and mark it complete.
 
         Returns True on success, False on failure.
         """
-        escaped_list = self.list_name.replace('"', '\\"')
+        resolved_list = self._resolve_list_selector(self.list_name)
+        if resolved_list is None:
+            return False
+        if reminders_ax.is_ax_reminder_id(reminder_id) or resolved_list.get("source") == "accessibility":
+            return reminders_ax.complete_reminder(
+                list_path=str(resolved_list.get("path", "")),
+                reminder_id=reminder_id,
+                note=result_text,
+            )
+        if resolved_list.get("id"):
+            escaped_list_id = resolved_list["id"].replace('"', '\\"')
+            target_list_clause = f'set taskList to first list whose id is "{escaped_list_id}"'
+        else:
+            escaped_list_name = resolved_list["name"].replace('"', '\\"')
+            target_list_clause = f'set taskList to list "{escaped_list_name}"'
         escaped_text = (
             result_text
             .replace("\\", "\\\\")
@@ -37,7 +67,7 @@ class AppleRemindersEgress:
         script = f'''
         tell {REMINDERS_APP_TARGET}
             try
-                set taskList to list "{escaped_list}"
+                {target_list_clause}
                 set matchedReminder to (first reminder of taskList whose id is "{escaped_id}")
                 set body of matchedReminder to "{escaped_text}"
                 set completed of matchedReminder to true
@@ -82,7 +112,21 @@ class AppleRemindersEgress:
 
         Useful for writing the plan while awaiting approval.
         """
-        escaped_list = self.list_name.replace('"', '\\"')
+        resolved_list = self._resolve_list_selector(self.list_name)
+        if resolved_list is None:
+            return False
+        if reminders_ax.is_ax_reminder_id(reminder_id) or resolved_list.get("source") == "accessibility":
+            return reminders_ax.annotate_reminder(
+                list_path=str(resolved_list.get("path", "")),
+                reminder_id=reminder_id,
+                note=note,
+            )
+        if resolved_list.get("id"):
+            escaped_list_id = resolved_list["id"].replace('"', '\\"')
+            target_list_clause = f'set taskList to first list whose id is "{escaped_list_id}"'
+        else:
+            escaped_list_name = resolved_list["name"].replace('"', '\\"')
+            target_list_clause = f'set taskList to list "{escaped_list_name}"'
         escaped_note = (
             note
             .replace("\\", "\\\\")
@@ -94,7 +138,7 @@ class AppleRemindersEgress:
         script = f'''
         tell {REMINDERS_APP_TARGET}
             try
-                set taskList to list "{escaped_list}"
+                {target_list_clause}
                 set matchedReminder to (first reminder of taskList whose id is "{escaped_id}")
                 set existingBody to body of matchedReminder
                 if existingBody is missing value then
@@ -148,8 +192,29 @@ class AppleRemindersEgress:
         Returns:
             True on success, False on failure
         """
-        escaped_source_list = source_list_name.replace('"', '\\"')
-        escaped_archive_list = archive_list_name.replace('"', '\\"')
+        resolved_source_list = self._resolve_list_selector(source_list_name)
+        resolved_archive_list = self._resolve_list_selector(archive_list_name)
+        if resolved_source_list is None or resolved_archive_list is None:
+            return False
+        if reminders_ax.is_ax_reminder_id(reminder_id) or resolved_source_list.get("source") == "accessibility":
+            return reminders_ax.move_to_archive(
+                reminder_id=reminder_id,
+                source_list_path=str(resolved_source_list.get("path", "")),
+                archive_list_path=str(resolved_archive_list.get("path", "")),
+                result_text=result_text,
+            )
+        if resolved_source_list.get("id"):
+            escaped_source_id = resolved_source_list["id"].replace('"', '\\"')
+            source_list_clause = f'set sourceList to first list whose id is "{escaped_source_id}"'
+        else:
+            escaped_source_name = resolved_source_list["name"].replace('"', '\\"')
+            source_list_clause = f'set sourceList to list "{escaped_source_name}"'
+        if resolved_archive_list.get("id"):
+            escaped_archive_id = resolved_archive_list["id"].replace('"', '\\"')
+            archive_list_clause = f'set archiveList to first list whose id is "{escaped_archive_id}"'
+        else:
+            escaped_archive_name = resolved_archive_list["name"].replace('"', '\\"')
+            archive_list_clause = f'set archiveList to list "{escaped_archive_name}"'
         escaped_text = (
             result_text
             .replace("\\", "\\\\")
@@ -161,8 +226,8 @@ class AppleRemindersEgress:
         script = f'''
         tell {REMINDERS_APP_TARGET}
             try
-                set sourceList to list "{escaped_source_list}"
-                set archiveList to list "{escaped_archive_list}"
+                {source_list_clause}
+                {archive_list_clause}
                 set matchedReminder to (first reminder of sourceList whose id is "{escaped_id}")
                 set body of matchedReminder to "{escaped_text}"
                 set completed of matchedReminder to true

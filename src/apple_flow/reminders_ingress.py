@@ -14,6 +14,7 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from . import apple_tools
 from .models import InboundMessage
 from .osascript_utils import run_osascript_with_recovery
 from .protocols import StoreProtocol
@@ -49,6 +50,7 @@ class AppleRemindersIngress:
         self._tzinfo = self._load_timezone(self.timezone_name)
         self._store = store
         self._processed_occurrences: set[str] = set()
+        self._resolved_list_cache: dict[str, str] | None = None
         self.last_fetch_error: str = ""
         # Hydrate processed occurrence keys from persistent store on startup.
         if store is not None:
@@ -82,6 +84,9 @@ class AppleRemindersIngress:
         ``since_rowid`` and ``sender_allowlist`` are unused (Reminders is local-only).
         """
         raw_reminders = self._fetch_incomplete_via_applescript(limit)
+        resolved_list = self._resolved_list_cache
+        if resolved_list is None and ("/" in self.list_name or "\\" in self.list_name):
+            resolved_list = self._resolve_list_selector()
         messages: list[InboundMessage] = []
 
         for raw in raw_reminders:
@@ -94,6 +99,8 @@ class AppleRemindersIngress:
             creation_date = raw.get("creation_date", "")
             due_date = raw.get("due_date", "")
             occurrence_key = self._occurrence_key(reminder_id, due_date)
+            raw_list_path = str(raw.get("list_path", "") or "")
+            raw_list_id = str(raw.get("list_id", "") or "")
 
             # Skip already-processed occurrences.
             if occurrence_key in self._processed_occurrences:
@@ -145,7 +152,10 @@ class AppleRemindersIngress:
                         "reminder_id": reminder_id,
                         "occurrence_key": occurrence_key,
                         "reminder_name": name,
-                        "list_name": self.list_name,
+                        "list_name": (resolved_list or {}).get("path") or raw_list_path or self.list_name,
+                        "list_path": (resolved_list or {}).get("path") or raw_list_path,
+                        "list_id": (resolved_list or {}).get("id") or raw_list_id,
+                        "section_name": str(raw.get("section_name", "") or ""),
                     },
                 )
             )
@@ -172,13 +182,62 @@ class AppleRemindersIngress:
         if self._store is not None:
             self._store.set_state(_PROCESSED_OCCURRENCES_KEY, json.dumps(sorted(self._processed_occurrences)))
 
+    def _resolve_list_selector(self) -> dict[str, str] | None:
+        if not self.list_name:
+            return None
+        if self._resolved_list_cache is not None:
+            return self._resolved_list_cache
+
+        resolved = apple_tools.reminders_resolve_list_selector(self.list_name)
+        if resolved is None:
+            logger.warning("Unable to resolve Reminders selector %r", self.list_name)
+            return None
+        self._resolved_list_cache = {
+            "id": str(resolved.get("id", "")),
+            "name": str(resolved.get("name", "")),
+            "path": str(resolved.get("path", "")),
+            "source": str(resolved.get("source", "")),
+        }
+        return self._resolved_list_cache
+
     def _fetch_incomplete_via_applescript(self, limit: int) -> list[dict[str, str]]:
         """Run AppleScript to get incomplete reminders as tab-delimited records.
 
         Performance: O(N) where N is the total text size, using bulk string
         replacements instead of character-by-character loops.
         """
-        escaped_list_name = self.list_name.replace('"', '\\"')
+        resolved_list = self._resolve_list_selector()
+        if self.list_name and resolved_list is None:
+            self.last_fetch_error = f"list selector not found: {self.list_name}"
+            return []
+        if resolved_list and resolved_list.get("source") == "accessibility":
+            reminders = apple_tools.reminders_list(
+                list_name=str(resolved_list.get("path", "")),
+                filter="incomplete",
+                limit=limit,
+                as_text=False,
+            )
+            if isinstance(reminders, list):
+                return [
+                    {
+                        "id": str(item.get("id", "")),
+                        "name": str(item.get("name", "")),
+                        "body": str(item.get("body", "")),
+                        "creation_date": str(item.get("creation_date", "")),
+                        "due_date": str(item.get("due_date", "")),
+                        "list_path": str(item.get("list_path", "")),
+                        "section_name": str(item.get("section_name", "")),
+                        "source": str(item.get("source", "")),
+                    }
+                    for item in reminders
+                ]
+            return []
+        if resolved_list and resolved_list.get("id"):
+            escaped_list_id = resolved_list["id"].replace('"', '\\"')
+            target_list_clause = f'set taskList to first list whose id is "{escaped_list_id}"'
+        else:
+            escaped_list_name = self.list_name.replace('"', '\\"')
+            target_list_clause = f'set taskList to list "{escaped_list_name}"'
 
         script = f'''
         on pad2(n)
@@ -220,7 +279,7 @@ class AppleRemindersIngress:
             set maxCount to {int(limit)}
             set outputLines to {{}}
 
-            set taskList to list "{escaped_list_name}"
+            {target_list_clause}
 
             set openItems to (every reminder of taskList whose completed is false)
 

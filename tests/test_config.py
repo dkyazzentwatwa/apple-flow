@@ -31,16 +31,6 @@ def test_parse_json_lists_from_settings_init():
     assert settings.get_connector_type() == "codex-cli"
 
 
-def test_connector_auto_migrates_deprecated_app_server():
-    settings = RelaySettings(connector="codex-app-server")
-    assert settings.get_connector_type() == "codex-cli"
-
-
-def test_use_codex_cli_false_is_ignored_when_connector_unset():
-    settings = RelaySettings(use_codex_cli=False)
-    assert settings.get_connector_type() == "codex-cli"
-
-
 def test_parse_claude_tool_lists_from_settings_init():
     settings = RelaySettings(
         claude_cli_tools="default,WebSearch",
@@ -120,10 +110,14 @@ def test_liveness_and_checkpoint_defaults(monkeypatch, tmp_path):
 def test_helper_maintenance_defaults(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = RelaySettings()
-    assert settings.enable_helper_maintenance is False
-    assert settings.helper_maintenance_interval_seconds == 1800.0
-    assert settings.helper_recycle_idle_seconds == 1200.0
-    assert settings.helper_recycle_max_age_seconds == 21600.0
+    assert settings.enable_helper_maintenance is True
+    assert settings.helper_maintenance_interval_seconds == 900.0
+    assert settings.helper_recycle_idle_seconds == 600.0
+    assert settings.helper_recycle_max_age_seconds == 3600.0
+    assert settings.watchdog_poll_stall_seconds == 60.0
+    assert settings.watchdog_inflight_stall_seconds == 300.0
+    assert settings.watchdog_event_loop_lag_seconds == 5.0
+    assert settings.watchdog_event_loop_lag_failures == 3
 
 
 def test_empty_admin_port_and_memory_fall_back_to_defaults(monkeypatch, tmp_path):
@@ -134,7 +128,6 @@ def test_empty_admin_port_and_memory_fall_back_to_defaults(monkeypatch, tmp_path
                 "apple_flow_admin_port=",
                 "apple_flow_enable_memory=",
                 "apple_flow_enable_memory_v2=",
-                "apple_flow_memory_v2_shadow_mode=",
                 "apple_flow_memory_v2_migrate_on_start=",
                 "apple_flow_memory_v2_include_legacy_fallback=",
             ]
@@ -148,7 +141,6 @@ def test_empty_admin_port_and_memory_fall_back_to_defaults(monkeypatch, tmp_path
     assert settings.admin_port == 8787
     assert settings.enable_memory is False
     assert settings.enable_memory_v2 is False
-    assert settings.memory_v2_shadow_mode is False
     assert settings.memory_v2_migrate_on_start is True
     assert settings.memory_v2_include_legacy_fallback is True
 

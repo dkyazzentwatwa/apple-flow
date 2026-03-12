@@ -230,7 +230,7 @@ A global tag that gates processing across all Apple app channels (Reminders, Not
 
 ## Multi-Workspace Routing
 
-Route commands to different directories using `@alias` syntax (e.g. `task: @web-app deploy`).
+Route commands to different directories using `@alias` syntax (e.g. `task: @healer run the test suite`).
 
 | Variable | Default | Description |
 |---|---|---|
@@ -238,10 +238,10 @@ Route commands to different directories using `@alias` syntax (e.g. `task: @web-
 
 **Example:**
 ```bash
-apple_flow_workspace_aliases={"web-app":"/Users/yourname/Projects/web-app","api":"/Users/yourname/Projects/api"}
+apple_flow_workspace_aliases={"healer":"/Users/yourname/code/flow-healer","web-app":"/Users/yourname/Projects/web-app","api":"/Users/yourname/Projects/api"}
 ```
 
-Then send: `task: @web-app run the test suite`
+Then send: `task: @healer run the test suite`
 
 ### File Alias References
 
@@ -352,8 +352,7 @@ Inject durable memory from `agent-office/MEMORY.md` and topic files in `agent-of
 |---|---|---|
 | `apple_flow_enable_memory` | `false` | Inject FileMemory into AI prompts before each turn. |
 | `apple_flow_memory_max_context_chars` | `2000` | Maximum characters of memory content to inject per turn. Oldest entries are trimmed first. |
-| `apple_flow_enable_memory_v2` | `false` | Use canonical SQLite memory retrieval for prompt injection (active mode). |
-| `apple_flow_memory_v2_shadow_mode` | `false` | Compute canonical retrieval but keep legacy prompt injection; logs rollout diff metrics. |
+| `apple_flow_enable_memory_v2` | `false` | Use canonical SQLite memory retrieval for prompt injection. |
 | `apple_flow_memory_v2_migrate_on_start` | `true` | Backfill canonical memory from legacy files on daemon startup. |
 | `apple_flow_memory_v2_db_path` | `` | Canonical memory DB path; empty uses `<agent-office>/.apple-flow-memory.sqlite3`. |
 | `apple_flow_memory_v2_scope` | `global` | Retrieval scope selector for canonical memory entries. |

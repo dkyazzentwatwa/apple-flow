@@ -14,6 +14,7 @@ from .config import RelaySettings
 from .csv_audit import CsvAuditLogger
 from .gateway_health import read_all_gateway_health
 from .models import InboundMessage
+from .runtime_health import read_all_daemon_loop_health, read_daemon_watchdog
 from .store import SQLiteStore
 
 logger = logging.getLogger("apple_flow.main")
@@ -75,14 +76,33 @@ def build_app(store: Any | None = None) -> FastAPI:
 
     verify_token = _make_auth_dependency(settings.admin_api_token)
 
-    app = FastAPI(title="Apple Flow Admin API", version="0.5.0")
+    app = FastAPI(title="Apple Flow Admin API", version="0.6.0")
     app.state.store = active_store
     # orchestrator is injected by daemon at startup (if running alongside polling)
     app.state.orchestrator = None
 
+    def _runtime_payload() -> dict[str, Any]:
+        loops = read_all_daemon_loop_health(app.state.store)
+        watchdog = read_daemon_watchdog(app.state.store) or {
+            "healthy": True,
+            "degraded_reasons": [],
+            "last_connector_completion_at": "",
+            "oldest_inflight_dispatch_seconds": 0.0,
+            "active_helper_count": 0,
+            "oldest_helper_age_seconds": 0.0,
+            "event_loop_lag_seconds": 0.0,
+            "event_loop_lag_failures": 0,
+        }
+        status = "degraded" if not watchdog.get("healthy", True) else "healthy"
+        return {"status": status, "loops": loops, "watchdog": watchdog}
+
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"status": "ok", "gateways": read_all_gateway_health(app.state.store)}
+        gateways = read_all_gateway_health(app.state.store)
+        runtime = _runtime_payload()
+        gateway_healthy = all(state.get("healthy", True) for state in gateways.values())
+        status = "ok" if gateway_healthy and runtime["status"] == "healthy" else "degraded"
+        return {"status": status, "gateways": gateways, "runtime": runtime}
 
     @app.get("/sessions", dependencies=[Depends(verify_token)])
     def sessions() -> list[dict[str, Any]]:
@@ -107,12 +127,18 @@ def build_app(store: Any | None = None) -> FastAPI:
         return {"request_id": request_id, "status": body.status}
 
     @app.get("/metrics", dependencies=[Depends(verify_token)])
-    def metrics() -> dict[str, int]:
+    def metrics() -> dict[str, Any]:
         events_count = len(app.state.store.list_events()) if hasattr(app.state.store, "list_events") else 0
+        runtime = _runtime_payload()["watchdog"]
         return {
             "active_sessions": len(app.state.store.list_sessions()),
             "pending_approvals": len(app.state.store.list_pending_approvals()),
             "recent_events": events_count,
+            "active_helpers": int(runtime.get("active_helper_count", 0)),
+            "oldest_helper_age_seconds": float(runtime.get("oldest_helper_age_seconds", 0.0)),
+            "oldest_inflight_dispatch_seconds": float(runtime.get("oldest_inflight_dispatch_seconds", 0.0)),
+            "busy": 1 if runtime.get("busy") else 0,
+            "event_loop_lag_seconds": float(runtime.get("event_loop_lag_seconds", 0.0)),
         }
 
     @app.get("/audit/events", dependencies=[Depends(verify_token)])

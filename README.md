@@ -196,6 +196,8 @@ apple_flow_connector=claude-cli
 apple_flow_admin_api_token=<long-random-secret>
 ```
 
+For Reminders-backed workflows, `apple_flow_reminders_list_name` and `apple_flow_reminders_archive_list_name` accept either a unique leaf list name such as `agent-task` or a canonical nested path such as `iCloud/Linear/dev-inbox`.
+
 Then validate and restart:
 
 ```bash
@@ -229,6 +231,7 @@ python -m apple_flow service status --json
 Prefix with `@alias`:
 
 ```text
+task: @healer run the test suite
 task: @web-app deploy to staging
 @api show recent errors
 ```
@@ -287,9 +290,8 @@ Companion + memory examples:
 apple_flow_enable_companion=true
 apple_flow_enable_memory=true
 
-# Canonical memory v2 rollout (safe defaults)
+# Canonical memory v2
 apple_flow_enable_memory_v2=false
-apple_flow_memory_v2_shadow_mode=true
 apple_flow_memory_v2_migrate_on_start=true
 ```
 
@@ -315,12 +317,16 @@ Helper maintenance example:
 
 ```env
 apple_flow_enable_helper_maintenance=true
-apple_flow_helper_maintenance_interval_seconds=1800
-apple_flow_helper_recycle_idle_seconds=1200
-apple_flow_helper_recycle_max_age_seconds=21600
+apple_flow_helper_maintenance_interval_seconds=900
+apple_flow_helper_recycle_idle_seconds=600
+apple_flow_helper_recycle_max_age_seconds=3600
+apple_flow_watchdog_poll_stall_seconds=60
+apple_flow_watchdog_inflight_stall_seconds=300
+apple_flow_watchdog_event_loop_lag_seconds=5
+apple_flow_watchdog_event_loop_lag_failures=3
 ```
 
-When enabled, Apple Flow runs a lightweight maintenance check on a timer and only soft-recycles tracked connector helper subprocesses when the daemon is idle and those helpers are old enough. You can also trigger the same path manually with `system: recycle helpers` or `system: maintenance`.
+When enabled, Apple Flow runs a lightweight maintenance check on a timer, soft-recycles stale helpers when the daemon is idle, and exposes forward-progress watchdog telemetry through `health` and the admin API. You can also trigger the same path manually with `system: recycle helpers` or `system: maintenance`.
 
 See full settings in [docs/ENV_SETUP.md](docs/ENV_SETUP.md).
 

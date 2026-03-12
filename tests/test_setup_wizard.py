@@ -53,6 +53,24 @@ def test_ensure_via_applescript_handles_created_exists_and_failed(monkeypatch):
     assert "permission denied" in failed.detail
 
 
+def test_ensure_reminders_list_uses_nested_account_path_when_requested(monkeypatch):
+    captured: dict[str, str] = {}
+
+    def fake_ensure(script: str):
+        captured["script"] = script
+        return gateway_setup.EnsureResult(status="created")
+
+    monkeypatch.setattr(gateway_setup, "_ensure_via_applescript", fake_ensure)
+    monkeypatch.setattr(gateway_setup.apple_tools, "reminders_resolve_list_selector", lambda selector: None)
+
+    result = gateway_setup.ensure_reminders_list("iCloud/Linear/dev-inbox")
+
+    assert result.status == "created"
+    assert 'first account whose name is "iCloud"' in captured["script"]
+    assert 'set pathParts to {"Linear", "dev-inbox"}' in captured["script"]
+    assert 'make new list at parentList with properties {name:partName}' in captured["script"]
+
+
 def test_generate_env_uses_standardized_gateway_names_and_pinned_connector():
     env = setup_wizard.generate_env(
         phone="+15551234567",

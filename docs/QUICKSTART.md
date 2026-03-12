@@ -292,10 +292,11 @@ Route tasks to specific project directories using `@alias` prefixes:
 
 ```bash
 # Configure aliases in .env:
-apple_flow_workspace_aliases={"web-app":"/Users/me/code/web-app","api":"/Users/me/code/api"}
+apple_flow_workspace_aliases={"healer":"/Users/me/code/flow-healer","web-app":"/Users/me/code/web-app","api":"/Users/me/code/api"}
 ```
 
 ```
+task: @healer run the test suite
 task: @web-app deploy the latest changes
 task: @api add a health check endpoint
 ```
@@ -488,7 +489,6 @@ Enable SQLite-backed canonical memory for more reliable context retrieval:
 ```bash
 apple_flow_enable_memory_v2=true
 apple_flow_memory_v2_migrate_on_start=true
-apple_flow_memory_v2_shadow_mode=false
 ```
 
 ### Advanced Configuration

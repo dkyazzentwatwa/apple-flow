@@ -69,7 +69,10 @@ class RunExecutor:
         return job_id
 
     async def run_forever(self, is_shutdown: Any) -> None:
-        tasks = [asyncio.create_task(self._worker_loop(worker_id, is_shutdown)) for worker_id in self._worker_ids]
+        tasks = [
+            asyncio.create_task(self._supervise_worker(worker_id, is_shutdown))
+            for worker_id in self._worker_ids
+        ]
         try:
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
@@ -77,6 +80,32 @@ class RunExecutor:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             return
+
+    def _restart_backoff_seconds(self, attempt: int) -> float:
+        if attempt <= 1:
+            return 1.0
+        if attempt == 2:
+            return 5.0
+        if attempt == 3:
+            return 15.0
+        return 60.0
+
+    async def _supervise_worker(self, worker_id: str, is_shutdown: Any) -> None:
+        attempt = 0
+        while not is_shutdown():
+            try:
+                await self._worker_loop(worker_id, is_shutdown)
+                if is_shutdown():
+                    return
+                logger.warning("Worker loop exited unexpectedly worker_id=%s", worker_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.exception("Worker loop crashed worker_id=%s: %s", worker_id, exc)
+            attempt += 1
+            if is_shutdown():
+                return
+            await asyncio.sleep(self._restart_backoff_seconds(attempt))
 
     async def _worker_loop(self, worker_id: str, is_shutdown: Any) -> None:
         try:

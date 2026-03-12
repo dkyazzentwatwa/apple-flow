@@ -26,7 +26,7 @@ class IMessageIngress:
             return self._conn
         # Use read-only URI mode so we never mutate Messages DB.
         uri = f"file:{self.db_path}?mode=ro"
-        conn = sqlite3.connect(uri, uri=True, timeout=2.0)
+        conn = sqlite3.connect(uri, uri=True, timeout=2.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA query_only=ON")
         self._conn = conn

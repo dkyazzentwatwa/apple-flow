@@ -10,6 +10,15 @@ class InMemoryStore:
         self._runs = {"run1": {"run_id": "run1", "state": "running"}}
         self._state = {
             "gateway_health_notes": '{"healthy": false, "last_failure_reason": "Connection invalid"}',
+            "daemon_loop_health_imessage": (
+                '{"healthy": true, "last_success_at": "2026-03-11T12:00:00+00:00", "restart_count": 1}'
+            ),
+            "daemon_watchdog": (
+                '{"healthy": false, "degraded_reasons": ["poll_stalled"], '
+                '"last_connector_completion_at": "2026-03-11T12:01:00+00:00", '
+                '"oldest_inflight_dispatch_seconds": 12.0, "active_helper_count": 2, '
+                '"oldest_helper_age_seconds": 140.0, "event_loop_lag_seconds": 0.25}'
+            ),
         }
 
     def list_sessions(self):
@@ -62,9 +71,12 @@ def test_admin_health_includes_gateway_status():
         response = client.get("/health")
         assert response.status_code == 200
         payload = response.json()
-        assert payload["status"] == "ok"
+        assert payload["status"] == "degraded"
         assert payload["gateways"]["notes"]["healthy"] is False
         assert payload["gateways"]["notes"]["last_failure_reason"] == "Connection invalid"
+        assert payload["runtime"]["watchdog"]["healthy"] is False
+        assert payload["runtime"]["loops"]["imessage"]["restart_count"] == 1
+        assert payload["runtime"]["watchdog"]["active_helper_count"] == 2
     finally:
         if old_token is not None:
             os.environ["apple_flow_admin_api_token"] = old_token

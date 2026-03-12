@@ -384,15 +384,6 @@ def _wizard_doctor(args: Any) -> dict[str, Any]:
     warnings: list[str] = []
     raw_connector = env.get("apple_flow_connector", "").strip()
     connector = raw_connector or "codex-cli"
-    if connector == "codex-app-server":
-        warnings.append(
-            "Deprecated connector 'codex-app-server' detected in .env; auto-migrating to codex-cli."
-        )
-        connector = "codex-cli"
-    if not raw_connector and env.get("apple_flow_use_codex_cli", "").strip().lower() == "false":
-        warnings.append(
-            "Legacy key apple_flow_use_codex_cli=false is ignored; defaulting to codex-cli."
-        )
     connector_key = _connector_command_key(connector)
     connector_command = env.get(connector_key, "").strip() if connector_key else ""
     if not connector_command:
@@ -470,8 +461,6 @@ def _wizard_generate_env(args: Any) -> dict[str, Any]:
         validation_errors.append("phone must be E.164 format, e.g. +15551234567")
 
     connector = (args.connector or "").strip()
-    if connector == "codex-app-server":
-        connector = "codex-cli"
     if connector not in {"claude-cli", "codex-cli", "gemini-cli", "cline", "ollama"}:
         validation_errors.append(
             "connector must be one of: claude-cli, codex-cli, gemini-cli, cline, ollama"

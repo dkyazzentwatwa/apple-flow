@@ -256,6 +256,17 @@ class TestObservations:
             obs = comp._gather_observations()
         assert any("Buy milk" in o for o in obs)
 
+    def test_gather_reminders_matches_nested_list_path(self):
+        comp = _make_companion(config=_make_config(reminders_list_name="iCloud/Linear/agent-task"))
+        overdue = (datetime.now() - timedelta(hours=2)).isoformat()
+        with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
+             patch("apple_flow.apple_tools.reminders_resolve_list_selector", return_value={"path": "iCloud/Linear/agent-task"}), \
+             patch("apple_flow.apple_tools.reminders_list", return_value=[
+                 {"name": "Buy milk", "due_date": overdue, "list": "agent-task", "list_path": "iCloud/Linear/agent-task"}
+             ]):
+            obs = comp._gather_observations()
+        assert any("Buy milk" in o for o in obs)
+
     def test_gather_office_inbox(self, tmp_path):
         inbox_dir = tmp_path / "00_inbox"
         inbox_dir.mkdir()
@@ -765,6 +776,20 @@ class TestRunForever:
 
         await asyncio.wait_for(comp.run_forever(is_shutdown), timeout=5.0)
         assert call_count >= 1
+
+    async def test_run_forever_restarts_failed_child_loop(self):
+        comp = _make_companion()
+        comp._restart_backoff_seconds = lambda _attempt: 0.0
+        calls = {"count": 0}
+
+        async def flaky_child(_is_shutdown):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise RuntimeError("boom")
+            return
+
+        await comp._supervise_child_loop("observation", flaky_child, lambda: calls["count"] >= 2)
+        assert calls["count"] == 2
 
 
 # ------------------------------------------------------------------

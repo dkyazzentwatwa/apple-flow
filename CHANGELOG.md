@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-12
+
+### Added
+- **Section-aware Reminders automation**: Added list-section discovery, section-targeted reminder creation/moves, Accessibility-backed nested-list resolution, and scaffold helpers for richer Reminders workflows.
+- **Reminders runtime guardrails**: Added runtime gate and health plumbing for safer Reminders automation plus live diagnostics coverage in app tools and daemon/runtime surfaces.
+- **Prompt-pack expansion**: Added dedicated agent-office and Codex Flow developer prompt-pack docs.
+- **Direct Notion helper coverage**: Added `scripts/notion_direct.py` support and regression tests for direct API workflows when MCP is unavailable.
+
+### Changed
+- **Repo-wide config cleanup**: Removed deprecated connector migration shims and memory v2 shadow-rollout config paths, simplifying the supported config surface to current behavior only.
+- **Setup/install docs refresh**: Rewrote the AI install master prompt and updated README, quickstart, and env docs to match the current connector, memory, and gateway setup flow.
+- **Daemon and admin observability**: Expanded runtime/watchdog visibility and related health reporting across daemon/admin surfaces.
+
+### Fixed
+- **Reminders targeting reliability**: Improved list resolution, ingress/egress behavior, and section-aware reminder operations for grouped and nested Reminders setups.
+- **Gateway/setup regressions**: Tightened config schema, wizard/setup, and runtime tests to keep newer gateway/runtime behavior consistent.
+
 ## [0.5.0] - 2026-03-05
 
 ### Added
@@ -200,6 +217,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.6.0 | 2026-03-12 | Section-aware Reminders automation, runtime health/guardrails, direct Notion helper coverage, and repo-wide config/docs cleanup |
 | 0.5.0 | 2026-03-05 | Autonomous Flow Healer, scan-to-issue pipeline, healer learning layer, and dedicated healer docs/manuals |
 | 0.4.1 | 2026-03-03 | iMessage image multimodal fallback via attachment source paths; no Tesseract requirement for multimodal providers |
 | 0.4.0 | 2026-03-02 | Native Ollama connector, local Qwen support, and inbound attachment processing with safety limits/tests |
@@ -211,7 +229,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.3.1...v0.4.0

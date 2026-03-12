@@ -5,6 +5,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import apple_tools
 from .osascript_utils import run_osascript_with_recovery
 
 
@@ -67,16 +68,61 @@ def _ensure_via_applescript(script: str) -> EnsureResult:
 
 
 def ensure_reminders_list(list_name: str) -> EnsureResult:
-    safe_name = _escape_applescript(list_name)
+    selector = (list_name or "").strip()
+    path_parts = apple_tools.reminders_split_selector(selector)
+
+    if len(path_parts) <= 1:
+        safe_name = _escape_applescript(selector)
+        script = (
+            'tell application "Reminders"\n'
+            f'  if not (exists list "{safe_name}") then\n'
+            f'    make new list with properties {{name:"{safe_name}"}}\n'
+            '    return "created"\n'
+            "  else\n"
+            '    return "exists"\n'
+            "  end if\n"
+            "end tell"
+        )
+        return _ensure_via_applescript(script)
+
+    resolved = apple_tools.reminders_resolve_list_selector(selector)
+    if resolved is not None:
+        return EnsureResult(status="exists")
+
+    account_name = _escape_applescript(path_parts[0])
+    list_literals = ", ".join(f'"{_escape_applescript(part)}"' for part in path_parts[1:])
     script = (
         'tell application "Reminders"\n'
-        f'  if not (exists list "{safe_name}") then\n'
-        f'    make new list with properties {{name:"{safe_name}"}}\n'
+        f'  set targetAccount to first account whose name is "{account_name}"\n'
+        '  set pathParts to {' + list_literals + '}\n'
+        '  set parentList to missing value\n'
+        '  set createdAny to false\n'
+        '  repeat with rawPart in pathParts\n'
+        '    set partName to rawPart as text\n'
+        '    if parentList is missing value then\n'
+        '      set targetContainerId to id of targetAccount as text\n'
+        '      try\n'
+        '        set matchedList to first list whose name is partName and id of container is targetContainerId\n'
+        '      on error\n'
+        '        set matchedList to make new list at targetAccount with properties {name:partName}\n'
+        '        set createdAny to true\n'
+        '      end try\n'
+        '    else\n'
+        '      set targetContainerId to id of parentList as text\n'
+        '      try\n'
+        '        set matchedList to first list whose name is partName and id of container is targetContainerId\n'
+        '      on error\n'
+        '        set matchedList to make new list at parentList with properties {name:partName}\n'
+        '        set createdAny to true\n'
+        '      end try\n'
+        '    end if\n'
+        '    set parentList to matchedList\n'
+        '  end repeat\n'
+        '  if createdAny then\n'
         '    return "created"\n'
-        "  else\n"
-        '    return "exists"\n'
-        "  end if\n"
-        "end tell"
+        '  end if\n'
+        '  return "exists"\n'
+        'end tell'
     )
     return _ensure_via_applescript(script)
 

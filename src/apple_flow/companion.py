@@ -62,12 +62,43 @@ class CompanionLoop:
 
     async def run_forever(self, is_shutdown: Callable[[], bool]) -> None:
         """Run observation + digest + weekly review loops concurrently."""
-        tasks = [self._observation_loop(is_shutdown)]
+        tasks = [self._supervise_child_loop("observation", self._observation_loop, is_shutdown)]
         if self.config.companion_enable_daily_digest:
-            tasks.append(self._daily_digest_loop(is_shutdown))
+            tasks.append(self._supervise_child_loop("daily_digest", self._daily_digest_loop, is_shutdown))
         if self.config.enable_companion:
-            tasks.append(self._weekly_review_loop(is_shutdown))
+            tasks.append(self._supervise_child_loop("weekly_review", self._weekly_review_loop, is_shutdown))
         await asyncio.gather(*tasks)
+
+    def _restart_backoff_seconds(self, attempt: int) -> float:
+        if attempt <= 1:
+            return 1.0
+        if attempt == 2:
+            return 5.0
+        if attempt == 3:
+            return 15.0
+        return 60.0
+
+    async def _supervise_child_loop(
+        self,
+        name: str,
+        runner: Callable[[Callable[[], bool]], asyncio.Future],
+        is_shutdown: Callable[[], bool],
+    ) -> None:
+        attempt = 0
+        while not is_shutdown():
+            try:
+                await runner(is_shutdown)
+                if is_shutdown():
+                    return
+                logger.warning("Companion child loop exited unexpectedly: %s", name)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.exception("Companion child loop crashed: %s (%s)", name, exc)
+            attempt += 1
+            if is_shutdown():
+                return
+            await asyncio.sleep(self._restart_backoff_seconds(attempt))
 
     # ------------------------------------------------------------------
     # Observation loop
@@ -202,14 +233,21 @@ class CompanionLoop:
             reminders = apple_tools.reminders_list(filter="incomplete", limit=20)
             if isinstance(reminders, list):
                 now = datetime.now()
+                configured_path = ""
+                if "/" in self.config.reminders_list_name or "\\" in self.config.reminders_list_name:
+                    configured_target = apple_tools.reminders_resolve_list_selector(self.config.reminders_list_name)
+                    configured_path = (configured_target or {}).get("path", "")
                 for rem in reminders:
                     due = rem.get("due_date", "")
                     name = rem.get("name", "")
-                    list_name = rem.get("list", "")
+                    list_name = rem.get("list_path") or rem.get("list", "")
                     if not (due and name):
                         continue
                     # Scope to the configured reminders list
-                    if list_name and list_name != self.config.reminders_list_name:
+                    if configured_path:
+                        if list_name and list_name != configured_path:
+                            continue
+                    elif list_name and list_name != self.config.reminders_list_name:
                         continue
                     try:
                         due_dt = datetime.fromisoformat(due)
