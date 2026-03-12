@@ -1,83 +1,98 @@
 # GEMINI.md
 
-## Project Overview
-**Apple Flow** is a local-first macOS daemon that bridges Apple-native apps (iMessage, Mail, Reminders, Notes, and Calendar) to AI assistants (Claude, Codex, and Cline). It allows users to control AI directly through their everyday Apple apps, emphasizing privacy and security by keeping data local to the Mac.
+Gemini CLI entry point for this repository.
 
-### Key Features
-- **Multi-Channel Ingress/Egress:** Interact via iMessage, Mail, Reminders, Notes, and Calendar.
-- **Proactive Companion:** An autonomous AI layer that provides daily digests, reminders, and stale approval alerts.
-- **Security-First:** Includes sender allowlists, workspace restrictions, and a mandatory approval workflow for mutating operations.
-- **Modular AI Backends:** Supports Claude CLI, Codex CLI, and Cline for agentic or stateless execution.
-- **Admin API:** A FastAPI-based interface for health monitoring, session management, and programmatic task submission.
+Last updated: 2026-03-12
 
-### Tech Stack
-- **Language:** Python 3.11+
-- **Web Framework:** FastAPI (for Admin API)
-- **Configuration:** Pydantic Settings
-- **Persistence:** SQLite (for session, approval, and event storage)
-- **Integration:** AppleScript (for communication with macOS apps)
-- **Service Management:** Launchd (via `local.apple-flow.plist`)
+`AGENTS.md` is the canonical repo-wide guide. Read it first and treat this file as a Gemini-specific companion, not a separate source of truth.
 
----
+## Read Order
 
-## Building and Running
+1. `AGENTS.md`
+2. `docs/PROJECT_REFERENCE.md`
+3. `README.md`
+4. `docs/ENV_SETUP.md`
+5. `SECURITY.md`
 
-### Prerequisites
-- macOS with iMessage signed in.
-- Python 3.11+ and Node.js installed.
-- AI CLI (Claude, Codex, or Cline) installed and authenticated.
+## Project Snapshot
 
-### Key Commands
-- **Setup & Installation:**
-  ```bash
-  ./scripts/setup_autostart.sh  # Main installer and auto-start setup
-  python -m apple_flow setup    # Manual configuration wizard
-  ```
-- **Running the Daemon:**
-  ```bash
-  python -m apple_flow daemon   # Run the daemon in the foreground
-  launchctl start local.apple-flow # Start via launchd
-  ```
-- **Running the Admin API:**
-  ```bash
-  python -m apple_flow admin    # Run the FastAPI admin server (port 8787)
-  ```
-- **Testing:**
-  ```bash
-  pytest                        # Run the comprehensive test suite
-  bash scripts/smoke_test.sh    # End-to-end verification of all channels
-  ```
-- **Linting and Type Checking:**
-  ```bash
-  ruff check .                  # Lint the codebase
-  mypy src                      # Run static type analysis
-  ```
+Apple Flow is a local-first macOS daemon that routes work from iMessage, Apple Mail, Apple Reminders, Apple Notes, Apple Calendar, and the Admin API through policy checks, orchestration, connector execution, and Apple-app egress.
 
----
+Current version: `0.6.0`
 
-## Architecture and Design
+Main runtime modules:
 
-### Core Components
-1.  **`RelayDaemon` (`src/apple_flow/daemon.py`):** The central orchestrator that manages polling loops for all active ingress channels and the companion loop.
-2.  **`RelayOrchestrator` (`src/apple_flow/orchestrator.py`):** Handles message parsing, command routing, and execution flow. It manages the transition from natural language to actionable tasks.
-3.  **`ConnectorProtocol` (`src/apple_flow/protocols.py`):** Defines the interface for AI backends. Implementations include `ClaudeCliConnector`, `CodexCliConnector`, and `ClineConnector`.
-4.  **`Gateway` Modules:** Specialized ingress and egress handlers for iMessage, Mail, Reminders, Notes, and Calendar.
-5.  **`Companion` (`src/apple_flow/companion.py`):** Implements proactive logic using `SOUL.md` for personality and `MEMORY.md` for persistent context.
-6.  **`Store` (`src/apple_flow/store.py`):** A SQLite-backed repository for tracking conversation state, pending approvals, and system events.
+- `src/apple_flow/daemon.py`
+- `src/apple_flow/orchestrator.py`
+- `src/apple_flow/commanding.py`
+- `src/apple_flow/store.py`
+- `src/apple_flow/config.py`
+- `src/apple_flow/main.py`
+- `src/apple_flow/companion.py`
+- `src/apple_flow/memory.py`
+- `src/apple_flow/memory_v2.py`
 
-### Development Conventions
-- **Code Style:** Strictly adheres to Python 3.11+ idioms, using `from __future__ import annotations`.
-- **Formatting:** Managed by `ruff` with a line length of 100.
-- **Testing:** New features should include unit and/or integration tests in the `tests/` directory.
-- **Configuration:** All settings are managed via `RelaySettings` in `src/apple_flow/config.py`, which loads from `.env`.
-- **Security:** Mutating operations (e.g., file edits) *must* go through the `ApprovalHandler`.
+## Gemini-Specific Notes
 
----
+- Gemini connector module: `src/apple_flow/gemini_cli_connector.py`
+- Connector key: `apple_flow_connector=gemini-cli`
+- Auth prerequisite: `gemini auth login`
+- Main Gemini settings:
+  - `apple_flow_gemini_cli_command`
+  - `apple_flow_gemini_cli_model`
+  - `apple_flow_gemini_cli_context_window`
+  - `apple_flow_gemini_cli_approval_mode`
 
-## Key Files
-- `src/apple_flow/main.py`: Entry point for the Admin API.
-- `src/apple_flow/daemon.py`: Core daemon logic and loop management.
-- `src/apple_flow/orchestrator.py`: Message routing and command execution.
-- `src/apple_flow/config.py`: Centralized configuration management.
-- `agent-office/SOUL.md`: Personality definition for the AI companion.
-- `.env.example`: Template for system configuration.
+If you change Gemini connector behavior or config, also update:
+
+- `AGENTS.md`
+- `CLAUDE.md` if the shared project surface changed
+- `README.md`
+- `.env.example`
+- `docs/ENV_SETUP.md`
+
+## Common Commands
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
+
+pytest -q
+python -m apple_flow daemon
+python -m apple_flow admin
+python -m apple_flow version
+python -m apple_flow tools --list
+```
+
+## Commands Users Can Send
+
+Parsed in `src/apple_flow/commanding.py`:
+
+- Natural chat or `relay:`
+- `idea:`
+- `plan:`
+- `task:`
+- `project:`
+- `voice:`
+- `voice-task:`
+- `help`, `health`, `history:`, `usage`, `logs`, `status`
+- `approve <id>`, `deny <id>`, `deny all`
+- `system: ...`
+
+## Safety Rules To Preserve
+
+- Allowlisted senders only by default
+- Approval gates for mutating work
+- Approval requester verification
+- Workspace boundaries via `allowed_workspaces`
+- Read-only iMessage DB access
+- Duplicate outbound suppression
+- Rate limiting
+
+## Contributor Expectations
+
+- Run `pytest -q` after behavior changes.
+- Update docs when config, commands, connectors, or admin endpoints change.
+- Prefer `rg` for code search.
+- Defer to `AGENTS.md` when this file and another doc disagree.
