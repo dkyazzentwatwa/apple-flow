@@ -450,5 +450,5 @@ Run those for a week before adding more.
 ## Notes
 
 - This pack is intentionally maintainer-focused. It is for automated repo maintenance, debugging, testing, release confidence, and workflow hygiene.
-- If you want broader office routines, use `docs/AGENT_OFFICE_PROMPT_PACK.md`.
-- If you want stricter automation-card formatting, use `docs/AUTOMATION_PROMPT_BUNDLE_SHORTCUTS.md`.
+- If you want broader office routines, use `docs/internal/prompt-packs/AGENT_OFFICE_PROMPT_PACK.md`.
+- If you want stricter automation-card formatting, use `docs/internal/prompt-packs/AUTOMATION_PROMPT_BUNDLE_SHORTCUTS.md`.

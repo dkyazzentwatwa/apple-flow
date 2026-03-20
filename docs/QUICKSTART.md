@@ -1,6 +1,6 @@
 # Apple Flow - Quick Start Guide
 
-Get Apple Flow running in 5 steps. This guide assumes you're new to the project.
+Get Apple Flow running quickly. This guide assumes you're new to the project.
 
 ## Installation Options
 
@@ -18,8 +18,18 @@ See [dashboard-app/README.md](../dashboard-app/README.md) for details.
 ### Option 2: Vibe-Coding Method (Recommended for AI Users)
 
 1. Clone this repo and `cd` into it
-2. Paste [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md) into Codex/Claude/Cline
+2. Paste [AI_INSTALL_MASTER_PROMPT.md](./AI_INSTALL_MASTER_PROMPT.md) into Codex/Claude/Cline
 3. Let the AI run `./scripts/setup_autostart.sh` and complete full `.env` customization, gateway setup, validation, and service health checks with explicit confirmations
+
+### Option 3: Fast Terminal Path
+
+If you want the quickest terminal-only bootstrap without the AI-led installer flow:
+
+```bash
+./scripts/start_beginner.sh
+```
+
+This creates `.venv`, installs dependencies, validates the required `.env` fields, runs `pytest -q`, and starts the daemon in the foreground.
 
 ## What You'll Get
 
@@ -142,7 +152,7 @@ Apple Flow Auto-Start Setup
 
 Open Codex, Claude, or Cline and paste this:
 
-- [docs/AI_INSTALL_MASTER_PROMPT.md](docs/AI_INSTALL_MASTER_PROMPT.md)
+- [AI_INSTALL_MASTER_PROMPT.md](./AI_INSTALL_MASTER_PROMPT.md)
 
 The assistant will:
 1. Run health checks (`wizard doctor --json`)
@@ -153,7 +163,7 @@ The assistant will:
 6. Verify final health (`service status --json`) and give a completion summary
 
 Optional after this flow: build the standalone SwiftUI control board app:
-- [docs/MACOS_GUI_APP_EXPORT.md](docs/MACOS_GUI_APP_EXPORT.md)
+- [MACOS_GUI_APP_EXPORT.md](./MACOS_GUI_APP_EXPORT.md)
 
 You can also run it directly:
 

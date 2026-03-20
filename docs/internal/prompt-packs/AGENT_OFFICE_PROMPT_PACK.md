@@ -539,4 +539,4 @@ Run those for two weeks before adding more.
 
 - This pack intentionally leaves out generic folder systems like `pipeline/`, `content/`, `community/`, and `finance/` because `agent-office` already has stronger, more flexible zones.
 - If you want sales, content, or finance automations, attach them to a project in `20_projects/` or an ongoing responsibility in `30_areas/` instead of creating a second organizational system.
-- For stricter automation-card formatting, see `docs/AUTOMATION_PROMPT_BUNDLE_SHORTCUTS.md`.
+- For stricter automation-card formatting, see `docs/internal/prompt-packs/AUTOMATION_PROMPT_BUNDLE_SHORTCUTS.md`.

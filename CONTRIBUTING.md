@@ -80,6 +80,14 @@ Use descriptive branch names:
 - `docs/update-security-guide`
 - `refactor/orchestrator-cleanup`
 
+### Documentation Layout
+
+- Use [`docs/README.md`](docs/README.md) as the entrypoint for repo docs.
+- Keep top-level `docs/` focused on setup and canonical project reference material.
+- Put prompt packs, helpers, and maintainer operations docs under `docs/internal/`.
+- Put superseded guides and dated plan artifacts under `docs/archive/`.
+- Prefer updating an existing canonical doc instead of adding another overlapping walkthrough.
+
 ### Commit Messages
 
 Follow conventional commits format:

@@ -2,7 +2,7 @@
 
 Canonical AI-agent guide for this repository.
 
-Last updated: 2026-03-12
+Last updated: 2026-03-19
 Version: 0.6.0
 Python: >=3.11
 Package: `apple-flow`
@@ -250,6 +250,14 @@ pytest tests/test_setup_wizard.py -v
 - Prefer updating canonical docs instead of duplicating long config matrices in multiple places.
 - When changing config fields, update `src/apple_flow/config.py`, `.env.example`, `README.md`, and the relevant docs.
 - When changing command kinds or admin endpoints, update this file, `CLAUDE.md`, `GEMINI.md`, `README.md`, and any docs that mention the surface.
+
+## Docs Structure
+
+- `docs/README.md` is the navigation index for repository docs.
+- Top-level `docs/` should stay limited to user-facing setup docs and canonical project reference pages.
+- Maintainer-only prompt packs, helper templates, and scheduled automation material belong under `docs/internal/`.
+- Historical plans and superseded guides belong under `docs/archive/`.
+- Do not add overlapping setup guides when an existing canonical page can be updated instead.
 
 ## File-Sync Policy
 

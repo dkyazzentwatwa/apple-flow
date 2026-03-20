@@ -2,17 +2,18 @@
 
 Gemini CLI entry point for this repository.
 
-Last updated: 2026-03-12
+Last updated: 2026-03-19
 
 `AGENTS.md` is the canonical repo-wide guide. Read it first and treat this file as a Gemini-specific companion, not a separate source of truth.
 
 ## Read Order
 
 1. `AGENTS.md`
-2. `docs/PROJECT_REFERENCE.md`
-3. `README.md`
-4. `docs/ENV_SETUP.md`
-5. `SECURITY.md`
+2. `README.md`
+3. `docs/README.md`
+4. `docs/PROJECT_REFERENCE.md`
+5. `docs/ENV_SETUP.md`
+6. `SECURITY.md`
 
 ## Project Snapshot
 
@@ -48,6 +49,7 @@ If you change Gemini connector behavior or config, also update:
 - `AGENTS.md`
 - `CLAUDE.md` if the shared project surface changed
 - `README.md`
+- `docs/README.md` if docs navigation or placement changed
 - `.env.example`
 - `docs/ENV_SETUP.md`
 
