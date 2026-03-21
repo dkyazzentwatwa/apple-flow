@@ -1,0 +1,19 @@
+{
+  "title": "QA + Handoff",
+  "properties": [
+    {"name": "Item", "type": "title"},
+    {"name": "Type", "type": "select", "options": ["Company Brain", "Training Material", "Setup", "Final Deliverable"]},
+    {"name": "Owner", "type": "rich_text"},
+    {"name": "QA Reviewer", "type": "rich_text"},
+    {"name": "Status", "type": "select", "options": ["Not Reviewed", "In QA", "Revisions Needed", "Approved"]},
+    {"name": "Client Approval Needed", "type": "checkbox"},
+    {"name": "Final Delivery Status", "type": "select", "options": ["Pending", "Delivered"]},
+    {"name": "Notes", "type": "rich_text"}
+  ],
+  "views": [
+    {"name": "Needs QA"},
+    {"name": "Revisions Needed"},
+    {"name": "Approved for Delivery"},
+    {"name": "Delivered"}
+  ]
+}

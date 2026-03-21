@@ -1,0 +1,5 @@
+[
+  {"Issue / Question": "Confirm final client dates and session times", "Category": "Scheduling", "Priority": "High", "Owner": "Producer / Ops", "Status": "Open", "Raised By": "Delivery Lead", "Related Phase": "Cohort Training", "Notes": "Run of show needs exact timing before live delivery"},
+  {"Issue / Question": "Confirm participant roster and cohort assignment", "Category": "Stakeholder", "Priority": "High", "Owner": "Client Lead", "Status": "Open", "Raised By": "Producer / Ops", "Related Phase": "Cohort Training", "Notes": "Needed before setup templates become participant records"},
+  {"Issue / Question": "Confirm tool access for ChatGPT, Claude, and recording workflow", "Category": "Technical", "Priority": "Medium", "Owner": "Tech Support", "Status": "Open", "Raised By": "Facilitator", "Related Phase": "AI Employee Setup", "Notes": "Needed before setup lab and recordings"}
+]

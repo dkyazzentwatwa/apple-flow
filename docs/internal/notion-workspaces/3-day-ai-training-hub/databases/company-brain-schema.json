@@ -1,0 +1,20 @@
+{
+  "title": "Company Brain",
+  "properties": [
+    {"name": "Document Name", "type": "title"},
+    {"name": "Status", "type": "select", "options": ["Draft", "Review", "Approved", "Loaded"]},
+    {"name": "Owner", "type": "rich_text"},
+    {"name": "Source Type", "type": "select", "options": ["Questionnaire", "Interview", "Existing Docs", "Transcript", "Notes"]},
+    {"name": "Stakeholder", "type": "rich_text"},
+    {"name": "Last Updated", "type": "date"},
+    {"name": "Approved By", "type": "rich_text"},
+    {"name": "Loaded Into Tools", "type": "select", "options": ["ChatGPT", "Claude", "Both", "Not Yet"]},
+    {"name": "Notes", "type": "rich_text"}
+  ],
+  "views": [
+    {"name": "Core 6 Docs"},
+    {"name": "Pending Approval"},
+    {"name": "Ready to Load"},
+    {"name": "Loaded Into Tools"}
+  ]
+}

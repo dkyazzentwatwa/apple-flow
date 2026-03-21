@@ -1,0 +1,19 @@
+{
+  "title": "Issues + Questions",
+  "properties": [
+    {"name": "Issue / Question", "type": "title"},
+    {"name": "Category", "type": "select", "options": ["Content", "Access", "Scheduling", "Technical", "Stakeholder", "Scope"]},
+    {"name": "Priority", "type": "select", "options": ["High", "Medium", "Low"]},
+    {"name": "Owner", "type": "rich_text"},
+    {"name": "Status", "type": "select", "options": ["Open", "Waiting", "Resolved"]},
+    {"name": "Raised By", "type": "rich_text"},
+    {"name": "Related Phase", "type": "select", "options": ["Company Brain Build", "Cohort Training", "AI Employee Setup"]},
+    {"name": "Notes", "type": "rich_text"}
+  ],
+  "views": [
+    {"name": "Open Issues"},
+    {"name": "High Priority"},
+    {"name": "By Phase"},
+    {"name": "Resolved Log"}
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "title": "Training Sessions",
+  "properties": [
+    {"name": "Session Name", "type": "title"},
+    {"name": "Day", "type": "select", "options": ["Day 1", "Day 2", "Day 3"]},
+    {"name": "Track", "type": "select", "options": ["Foundations", "ChatGPT", "Claude", "Role-Based Workflows", "Mobile Productivity", "Leadership"]},
+    {"name": "Audience", "type": "rich_text"},
+    {"name": "Facilitator", "type": "rich_text"},
+    {"name": "Producer", "type": "rich_text"},
+    {"name": "Duration", "type": "rich_text"},
+    {"name": "Status", "type": "select", "options": ["Planned", "Ready", "Delivered", "Follow-Up Needed"]},
+    {"name": "Artifact Produced", "type": "rich_text"},
+    {"name": "Recording Link", "type": "url"},
+    {"name": "Slides / Materials", "type": "url"},
+    {"name": "Notes", "type": "rich_text"}
+  ],
+  "views": [
+    {"name": "Agenda by Day"},
+    {"name": "Ready for Delivery"},
+    {"name": "Delivered Sessions"},
+    {"name": "Follow-Up Needed"}
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "title": "Resource Library",
+  "properties": [
+    {"name": "Resource Name", "type": "title"},
+    {"name": "Resource Type", "type": "select", "options": ["Template", "Deck", "Worksheet", "Guide", "Checklist", "Recording", "Example", "Prompt Pack"]},
+    {"name": "Phase", "type": "select", "options": ["Company Brain Build", "Cohort Training", "AI Employee Setup"]},
+    {"name": "Audience", "type": "rich_text"},
+    {"name": "Linked Deliverable", "type": "rich_text"},
+    {"name": "Version", "type": "rich_text"},
+    {"name": "Owner", "type": "rich_text"},
+    {"name": "Status", "type": "select", "options": ["Draft", "Final", "Archived"]},
+    {"name": "Link / File", "type": "url"},
+    {"name": "Notes", "type": "rich_text"}
+  ],
+  "views": [
+    {"name": "All Resources"},
+    {"name": "Templates Only"},
+    {"name": "Participant Materials"},
+    {"name": "Facilitator Materials"},
+    {"name": "Final Client Assets"}
+  ]
+}

@@ -1,0 +1,10 @@
+[
+  {"Item": "Company Brain draft set", "Type": "Company Brain", "Owner": "Content Producer", "QA Reviewer": "QA Reviewer", "Status": "Not Reviewed", "Client Approval Needed": true, "Final Delivery Status": "Pending", "Notes": "All six docs reviewed together"},
+  {"Item": "Company Brain loading checklist", "Type": "Company Brain", "Owner": "Facilitator", "QA Reviewer": "QA Reviewer", "Status": "Not Reviewed", "Client Approval Needed": false, "Final Delivery Status": "Pending", "Notes": "Verify approved docs were loaded correctly"},
+  {"Item": "Master training deck", "Type": "Training Material", "Owner": "Facilitator", "QA Reviewer": "QA Reviewer", "Status": "Not Reviewed", "Client Approval Needed": true, "Final Delivery Status": "Pending", "Notes": "Check flow and brand alignment"},
+  {"Item": "Participant workbook", "Type": "Training Material", "Owner": "Content Producer", "QA Reviewer": "QA Reviewer", "Status": "Not Reviewed", "Client Approval Needed": false, "Final Delivery Status": "Pending", "Notes": "Check exercises and prompts"},
+  {"Item": "Role workflow packets", "Type": "Training Material", "Owner": "Content Producer", "QA Reviewer": "QA Reviewer", "Status": "Not Reviewed", "Client Approval Needed": false, "Final Delivery Status": "Pending", "Notes": "Review by cohort"},
+  {"Item": "AI employee setup worksheet", "Type": "Setup", "Owner": "Setup Facilitator", "QA Reviewer": "QA Reviewer", "Status": "Not Reviewed", "Client Approval Needed": false, "Final Delivery Status": "Pending", "Notes": "Verify setup and testing prompts"},
+  {"Item": "Personal setup guides", "Type": "Setup", "Owner": "Setup Facilitator", "QA Reviewer": "QA Reviewer", "Status": "Not Reviewed", "Client Approval Needed": false, "Final Delivery Status": "Pending", "Notes": "One per participant at closeout"},
+  {"Item": "Final handoff bundle", "Type": "Final Deliverable", "Owner": "Delivery Lead", "QA Reviewer": "QA Reviewer", "Status": "Not Reviewed", "Client Approval Needed": true, "Final Delivery Status": "Pending", "Notes": "Final review before delivery"}
+]

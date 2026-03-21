@@ -1,0 +1,152 @@
+{
+  "workspace_id": "3-day-ai-training-hub",
+  "workspace_title": "3-Day AI Training Hub",
+  "workspace_intro": "This workspace is the central delivery hub for the 3-day AI training program.",
+  "home_file": "pages/home.md",
+  "pages": [
+    {
+      "id": "program-overview",
+      "title": "Program Overview",
+      "file": "pages/program-overview.md"
+    },
+    {
+      "id": "run-of-show",
+      "title": "Run of Show",
+      "file": "pages/run-of-show.md"
+    },
+    {
+      "id": "participant-resource-center",
+      "title": "Participant Resource Center",
+      "file": "pages/participant-resource-center.md"
+    },
+    {
+      "id": "facilitator-command-center",
+      "title": "Facilitator Command Center",
+      "file": "pages/facilitator-command-center.md"
+    },
+    {
+      "id": "final-handoff",
+      "title": "Final Handoff",
+      "file": "pages/final-handoff.md"
+    },
+    {
+      "id": "phase-1-company-brain-build",
+      "title": "Phase 1 - Company Brain Build",
+      "file": "pages/phase-1-company-brain-build.md"
+    },
+    {
+      "id": "phase-2-cohort-training",
+      "title": "Phase 2 - Cohort Training",
+      "file": "pages/phase-2-cohort-training.md"
+    },
+    {
+      "id": "phase-3-ai-employee-setup",
+      "title": "Phase 3 - AI Employee Setup",
+      "file": "pages/phase-3-ai-employee-setup.md"
+    }
+  ],
+  "databases": [
+    {
+      "id": "deliverables",
+      "title": "Deliverables",
+      "schema_file": "databases/deliverables-schema.json",
+      "seed_file": "seed/deliverables.json"
+    },
+    {
+      "id": "company-brain",
+      "title": "Company Brain",
+      "schema_file": "databases/company-brain-schema.json",
+      "seed_file": "seed/company-brain.json"
+    },
+    {
+      "id": "training-sessions",
+      "title": "Training Sessions",
+      "schema_file": "databases/training-sessions-schema.json",
+      "seed_file": "seed/training-sessions.json"
+    },
+    {
+      "id": "resource-library",
+      "title": "Resource Library",
+      "schema_file": "databases/resource-library-schema.json",
+      "seed_file": "seed/resource-library.json"
+    },
+    {
+      "id": "cohort-workflows",
+      "title": "Cohort Workflows",
+      "schema_file": "databases/cohort-workflows-schema.json",
+      "seed_file": "seed/cohort-workflows.json"
+    },
+    {
+      "id": "ai-employee-setup",
+      "title": "AI Employee Setup",
+      "schema_file": "databases/ai-employee-setup-schema.json",
+      "seed_file": "seed/ai-employee-setup.json"
+    },
+    {
+      "id": "qa-handoff",
+      "title": "QA + Handoff",
+      "schema_file": "databases/qa-handoff-schema.json",
+      "seed_file": "seed/qa-handoff.json"
+    },
+    {
+      "id": "issues-questions",
+      "title": "Issues + Questions",
+      "schema_file": "databases/issues-questions-schema.json",
+      "seed_file": "seed/issues-questions.json"
+    }
+  ],
+  "manual_views": {
+    "Deliverables": [
+      "All Deliverables",
+      "By Phase",
+      "Needs QA",
+      "Awaiting Approval",
+      "Client-Facing Only",
+      "This Week"
+    ],
+    "Company Brain": [
+      "Core 6 Docs",
+      "Pending Approval",
+      "Ready to Load",
+      "Loaded Into Tools"
+    ],
+    "Training Sessions": [
+      "Agenda by Day",
+      "Ready for Delivery",
+      "Delivered Sessions",
+      "Follow-Up Needed"
+    ],
+    "Resource Library": [
+      "All Resources",
+      "Templates Only",
+      "Participant Materials",
+      "Facilitator Materials",
+      "Final Client Assets"
+    ],
+    "Cohort Workflows": [
+      "By Cohort",
+      "Tested Workflows",
+      "Needs Examples",
+      "Ready for Training"
+    ],
+    "AI Employee Setup": [
+      "All Participants",
+      "Needs Setup",
+      "Needs Testing",
+      "Ready for Handoff",
+      "Completed"
+    ],
+    "QA + Handoff": [
+      "Needs QA",
+      "Revisions Needed",
+      "Approved for Delivery",
+      "Delivered"
+    ],
+    "Issues + Questions": [
+      "Open Issues",
+      "High Priority",
+      "By Phase",
+      "Resolved Log"
+    ]
+  }
+}

@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -36,19 +37,34 @@ def _request(method: str, path: str, payload: dict[str, Any] | None = None) -> d
             "Content-Type": "application/json",
         },
     )
+    backoff_seconds = 1.0
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        try:
-            parsed = json.loads(body)
-            message = parsed.get("message", body)
-            code = parsed.get("code", "unknown_error")
-        except json.JSONDecodeError:
-            message = body
-            code = "unknown_error"
-        raise SystemExit(f"Notion API error ({exc.code}, {code}): {message}") from exc
+        while True:
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                body = exc.read().decode("utf-8", errors="replace")
+                if exc.code == 429:
+                    retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                    if retry_after:
+                        try:
+                            backoff_seconds = max(float(retry_after), backoff_seconds)
+                        except ValueError:
+                            pass
+                    time.sleep(backoff_seconds)
+                    backoff_seconds = min(backoff_seconds * 2, 10.0)
+                    continue
+                try:
+                    parsed = json.loads(body)
+                    message = parsed.get("message", body)
+                    code = parsed.get("code", "unknown_error")
+                except json.JSONDecodeError:
+                    message = body
+                    code = "unknown_error"
+                raise SystemExit(f"Notion API error ({exc.code}, {code}): {message}") from exc
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"Notion API request failed: {exc.reason}") from exc
 
 
 def _short_id(raw_id: str) -> str:
@@ -140,6 +156,10 @@ def _callout_block(text: str) -> dict[str, Any]:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_json_list(path: Path) -> list[dict[str, Any]]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -258,7 +278,170 @@ def _list_child_titles(page_id: str) -> dict[str, set[str]]:
 def _append_blocks(block_id: str, blocks: list[dict[str, Any]]) -> None:
     if not blocks:
         return
-    _request("PATCH", f"/blocks/{block_id}/children", {"children": blocks})
+    for idx in range(0, len(blocks), 100):
+        chunk = blocks[idx:idx + 100]
+        _request("PATCH", f"/blocks/{block_id}/children", {"children": chunk})
+
+
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "workspace"
+
+
+def _default_state_path(workspace_title: str) -> Path:
+    return Path("/tmp") / "apple-flow-notion" / f"{_slugify(workspace_title)}.json"
+
+
+def _default_row_key(record: dict[str, Any], fallback_index: int) -> str:
+    if record.get("id"):
+        return str(record["id"])
+    for key in ("Name", "Document Name", "Session Name", "Resource Name", "Workflow Name", "Participant Name", "Item", "Issue / Question"):
+        value = str(record.get(key, "")).strip()
+        if value:
+            return _slugify(value)
+    return f"row-{fallback_index}"
+
+
+def _load_state(path: Path, workspace_id: str) -> dict[str, Any]:
+    if path.exists():
+        state = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        state = {}
+    state.setdefault("workspace_id", workspace_id)
+    state.setdefault("hub_page", {})
+    state.setdefault("hub_content_appended", False)
+    state.setdefault("pages", {})
+    state.setdefault("databases", {})
+    state.setdefault("database_rows", {})
+    return state
+
+
+def _save_state(path: Path, state: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+
+
+class _BatchThrottle:
+    def __init__(self, batch_size: int, sleep_seconds: float) -> None:
+        self.batch_size = max(batch_size, 1)
+        self.sleep_seconds = max(sleep_seconds, 0.0)
+        self.operations = 0
+
+    def after_mutation(self) -> None:
+        if self.sleep_seconds <= 0:
+            return
+        self.operations += 1
+        if self.operations % self.batch_size == 0:
+            time.sleep(self.sleep_seconds)
+
+
+def _throttled_request(
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None,
+    throttle: _BatchThrottle | None,
+) -> dict[str, Any]:
+    response = _request(method, path, payload)
+    if throttle is not None and method in {"POST", "PATCH"}:
+        throttle.after_mutation()
+    return response
+
+
+def _append_blocks_throttled(
+    block_id: str,
+    blocks: list[dict[str, Any]],
+    throttle: _BatchThrottle | None,
+) -> None:
+    if not blocks:
+        return
+    for idx in range(0, len(blocks), 100):
+        chunk = blocks[idx:idx + 100]
+        _throttled_request(
+            "PATCH",
+            f"/blocks/{block_id}/children",
+            {"children": chunk},
+            throttle,
+        )
+
+
+def _manual_view_blocks(manual_views: dict[str, list[str]]) -> list[dict[str, Any]]:
+    if not manual_views:
+        return []
+    blocks = [_heading_block(2, "Manual Saved Views")]
+    blocks.append(
+        _paragraph_block(
+            "Notion saved views still need to be created in the UI after this publish completes."
+        )
+    )
+    for database_title, view_names in manual_views.items():
+        blocks.append(_heading_block(3, database_title))
+        for view_name in view_names:
+            blocks.append(_bulleted_item_block(view_name))
+    return blocks
+
+
+def _build_properties_from_schema(schema: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
+    properties: dict[str, Any] = {}
+    for prop in schema.get("properties", []):
+        prop_name = prop["name"]
+        prop_type = prop["type"]
+        raw_value = values.get(prop_name)
+        if raw_value in (None, ""):
+            continue
+        if prop_type == "title":
+            properties[prop_name] = _title_prop(str(raw_value))
+        elif prop_type == "date":
+            properties[prop_name] = _date_prop(str(raw_value))
+        elif prop_type == "checkbox":
+            properties[prop_name] = {"checkbox": bool(raw_value)}
+        elif prop_type == "select":
+            properties[prop_name] = _select_prop(str(raw_value))
+        elif prop_type == "url":
+            properties[prop_name] = _url_prop(str(raw_value))
+        elif prop_type == "email":
+            properties[prop_name] = _email_prop(str(raw_value))
+        elif prop_type == "number":
+            properties[prop_name] = _number_prop(float(raw_value))
+        else:
+            properties[prop_name] = _rich_text_prop(str(raw_value))
+    return properties
+
+
+def _build_database_row_payload(database_id: str, schema: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "parent": {"database_id": database_id},
+        "properties": _build_properties_from_schema(schema, values),
+    }
+
+
+def _load_workspace_manifest(workspace_dir: Path) -> dict[str, Any]:
+    manifest = _load_json(workspace_dir / "manifest.json")
+    pages: list[dict[str, Any]] = []
+    for page in manifest.get("pages", []):
+        page_copy = dict(page)
+        page_copy["content"] = (workspace_dir / page["file"]).read_text(encoding="utf-8")
+        pages.append(page_copy)
+
+    databases: list[dict[str, Any]] = []
+    for database in manifest.get("databases", []):
+        db_copy = dict(database)
+        db_copy["schema"] = _load_json(workspace_dir / database["schema_file"])
+        seed_file = database.get("seed_file")
+        db_copy["seed_rows"] = _load_json_list(workspace_dir / seed_file) if seed_file else []
+        databases.append(db_copy)
+
+    home_file = manifest.get("home_file")
+    home_markdown = (workspace_dir / home_file).read_text(encoding="utf-8") if home_file else ""
+
+    return {
+        "workspace_title": manifest["workspace_title"],
+        "workspace_intro": manifest.get("workspace_intro", ""),
+        "workspace_id": manifest.get("workspace_id", _slugify(manifest["workspace_title"])),
+        "home_markdown": home_markdown,
+        "pages": pages,
+        "databases": databases,
+        "manual_views": manifest.get("manual_views", {}),
+    }
 
 
 def _build_root_blocks(
@@ -383,6 +566,136 @@ def publish_guidebook(root_page_id: str, guidebook_dir: str, dry_run: bool = Fal
 
     summary["created_pages"] = created_pages
     summary["created_database"] = created_database
+    return summary
+
+
+def publish_workspace(
+    root_page_id: str,
+    workspace_dir: str,
+    dry_run: bool = False,
+    *,
+    state_path: str | None = None,
+    batch_size: int = 5,
+    sleep_seconds: float = 0.75,
+) -> dict[str, Any]:
+    root_id = _short_id(root_page_id)
+    workspace_path = Path(workspace_dir)
+    spec = _load_workspace_manifest(workspace_path)
+    state_file = Path(state_path) if state_path else _default_state_path(spec["workspace_title"])
+    state = _load_state(state_file, spec["workspace_id"])
+
+    root_page = _request("GET", f"/pages/{root_id}")
+    existing_children = _list_child_titles(root_id)
+    workspace_title = spec["workspace_title"]
+    existing_hub_in_state = ((state.get("hub_page") or {}).get("title") or "").strip() == workspace_title
+    if workspace_title in existing_children["pages"] and not existing_hub_in_state:
+        raise SystemExit(f"Workspace content already exists under root page: {workspace_title}")
+
+    summary: dict[str, Any] = {
+        "dry_run": dry_run,
+        "hub_parent_id": root_id,
+        "hub_parent_title": _page_title(root_page),
+        "workspace_title": workspace_title,
+        "page_titles": [page["title"] for page in spec["pages"]],
+        "database_titles": [database["title"] for database in spec["databases"]],
+        "manual_views": spec["manual_views"],
+    }
+    if dry_run:
+        return summary
+
+    throttle = _BatchThrottle(batch_size=batch_size, sleep_seconds=sleep_seconds)
+
+    hub_page = state.get("hub_page") or {}
+    if not hub_page:
+        hub_response = _throttled_request(
+            "POST",
+            "/pages",
+            _build_page_payload(root_id, workspace_title),
+            throttle,
+        )
+        hub_page = {
+            "id": hub_response["id"],
+            "title": workspace_title,
+            "url": hub_response.get("url", ""),
+        }
+        state["hub_page"] = hub_page
+        _save_state(state_file, state)
+
+    if not state.get("hub_content_appended"):
+        hub_blocks = _markdown_to_blocks(spec["home_markdown"])
+        hub_blocks.extend(_manual_view_blocks(spec["manual_views"]))
+        if hub_blocks:
+            _append_blocks_throttled(hub_page["id"], hub_blocks, throttle)
+        state["hub_content_appended"] = True
+        _save_state(state_file, state)
+
+    created_pages: list[dict[str, str]] = []
+    for page in spec["pages"]:
+        existing_page = state["pages"].get(page["id"])
+        if existing_page:
+            created_pages.append(existing_page)
+            continue
+        page_response = _throttled_request(
+            "POST",
+            "/pages",
+            _build_page_payload(hub_page["id"], page["title"]),
+            throttle,
+        )
+        page_info = {
+            "id": page_response["id"],
+            "title": page["title"],
+            "url": page_response.get("url", ""),
+        }
+        blocks = _markdown_to_blocks(page["content"])
+        if blocks:
+            _append_blocks_throttled(page_info["id"], blocks, throttle)
+        state["pages"][page["id"]] = page_info
+        _save_state(state_file, state)
+        created_pages.append(page_info)
+
+    created_databases: list[dict[str, str]] = []
+    for database in spec["databases"]:
+        existing_database = state["databases"].get(database["id"])
+        if existing_database:
+            created_databases.append(existing_database)
+            db_info = existing_database
+        else:
+            database_response = _throttled_request(
+                "POST",
+                "/databases",
+                _build_database_payload(hub_page["id"], database["schema"]),
+                throttle,
+            )
+            db_info = {
+                "id": database_response["id"],
+                "title": database["title"],
+                "url": database_response.get("url", ""),
+            }
+            state["databases"][database["id"]] = db_info
+            _save_state(state_file, state)
+            created_databases.append(db_info)
+
+        row_state = state["database_rows"].setdefault(database["id"], {})
+        for idx, record in enumerate(database.get("seed_rows", []), start=1):
+            row_key = _default_row_key(record, idx)
+            if row_key in row_state:
+                continue
+            row_response = _throttled_request(
+                "POST",
+                "/pages",
+                _build_database_row_payload(db_info["id"], database["schema"], record),
+                throttle,
+            )
+            row_state[row_key] = {
+                "id": row_response["id"],
+                "url": row_response.get("url", ""),
+            }
+            _save_state(state_file, state)
+
+    summary["created_hub_page"] = hub_page
+    summary["created_pages"] = created_pages
+    summary["created_databases"] = created_databases
+    summary["state_path"] = str(state_file)
     return summary
 
 
@@ -536,6 +849,25 @@ def cmd_publish_guidebook(root_page_id: str, guidebook_dir: str, dry_run: bool) 
     print(json.dumps(summary, indent=2))
 
 
+def cmd_publish_workspace(
+    root_page_id: str,
+    workspace_dir: str,
+    dry_run: bool,
+    state_path: str | None,
+    batch_size: int,
+    sleep_seconds: float,
+) -> None:
+    summary = publish_workspace(
+        root_page_id,
+        workspace_dir,
+        dry_run=dry_run,
+        state_path=state_path,
+        batch_size=batch_size,
+        sleep_seconds=sleep_seconds,
+    )
+    print(json.dumps(summary, indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Direct Notion API helper (without MCP).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -585,6 +917,14 @@ def main() -> None:
     )
     publish.add_argument("--dry-run", action="store_true", help="Validate inputs and show planned publish actions")
 
+    workspace = sub.add_parser("publish-workspace", help="Publish a multi-page, multi-database Notion workspace scaffold.")
+    workspace.add_argument("--root-page-id", required=True, help="Existing Notion page that will become the workspace parent")
+    workspace.add_argument("--workspace-dir", required=True, help="Path to the local workspace scaffold directory")
+    workspace.add_argument("--dry-run", action="store_true", help="Validate inputs and show planned publish actions")
+    workspace.add_argument("--state-path", default="", help="Optional local JSON checkpoint path for resumable publishing")
+    workspace.add_argument("--batch-size", type=int, default=5, help="Mutating request count before pausing briefly")
+    workspace.add_argument("--sleep-seconds", type=float, default=0.75, help="Pause duration between batches")
+
     args = parser.parse_args()
     if args.command == "fetch":
         cmd_fetch(args.id)
@@ -611,6 +951,15 @@ def main() -> None:
         cmd_append_research(args.page_id, args.tier, args.score, args.confidence, args.evidence, args.source)
     elif args.command == "publish-guidebook":
         cmd_publish_guidebook(args.root_page_id, args.guidebook_dir, args.dry_run)
+    elif args.command == "publish-workspace":
+        cmd_publish_workspace(
+            args.root_page_id,
+            args.workspace_dir,
+            args.dry_run,
+            args.state_path.strip() or None,
+            args.batch_size,
+            args.sleep_seconds,
+        )
     else:
         raise SystemExit("Unknown command")
 

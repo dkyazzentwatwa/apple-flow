@@ -1,0 +1,27 @@
+{
+  "title": "Deliverables",
+  "properties": [
+    {"name": "Name", "type": "title"},
+    {"name": "Phase", "type": "select", "options": ["Company Brain Build", "Cohort Training", "AI Employee Setup"]},
+    {"name": "Category", "type": "select", "options": ["Doc", "Deck", "Worksheet", "Template", "Checklist", "Recording", "Guide", "Resource"]},
+    {"name": "Owner", "type": "rich_text"},
+    {"name": "Status", "type": "select", "options": ["Not Started", "In Progress", "In Review", "Approved", "Delivered", "Archived"]},
+    {"name": "Priority", "type": "select", "options": ["High", "Medium", "Low"]},
+    {"name": "Client Facing", "type": "checkbox"},
+    {"name": "Format", "type": "select", "options": ["Notion Page", "PDF", "DOCX", "PPTX", "Link", "Video"]},
+    {"name": "Related Cohort", "type": "select", "options": ["Marketing", "Operations", "People-HR", "Sales-BD", "Leadership", "All"]},
+    {"name": "Due Date", "type": "date"},
+    {"name": "QA Complete", "type": "checkbox"},
+    {"name": "Approval Needed", "type": "checkbox"},
+    {"name": "Dependencies", "type": "rich_text"},
+    {"name": "Notes", "type": "rich_text"}
+  ],
+  "views": [
+    {"name": "All Deliverables"},
+    {"name": "By Phase"},
+    {"name": "Needs QA"},
+    {"name": "Awaiting Approval"},
+    {"name": "Client-Facing Only"},
+    {"name": "This Week"}
+  ]
+}

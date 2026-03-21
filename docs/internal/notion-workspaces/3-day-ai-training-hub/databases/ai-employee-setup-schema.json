@@ -1,0 +1,24 @@
+{
+  "title": "AI Employee Setup",
+  "properties": [
+    {"name": "Participant Name", "type": "title"},
+    {"name": "Department / Cohort", "type": "select", "options": ["Marketing", "Operations", "People-HR", "Sales-BD", "Leadership"]},
+    {"name": "AI Employee Name", "type": "rich_text"},
+    {"name": "Workspace Status", "type": "select", "options": ["Not Started", "In Setup", "Ready", "Tested", "Handed Off"]},
+    {"name": "Instructions Loaded", "type": "checkbox"},
+    {"name": "Voice / Style Set", "type": "checkbox"},
+    {"name": "Company Brain Connected", "type": "checkbox"},
+    {"name": "Skills / Actions Added", "type": "checkbox"},
+    {"name": "3 Real Tasks Tested", "type": "checkbox"},
+    {"name": "Personal Setup Guide Complete", "type": "checkbox"},
+    {"name": "Owner Confirmed", "type": "checkbox"},
+    {"name": "Notes", "type": "rich_text"}
+  ],
+  "views": [
+    {"name": "All Participants"},
+    {"name": "Needs Setup"},
+    {"name": "Needs Testing"},
+    {"name": "Ready for Handoff"},
+    {"name": "Completed"}
+  ]
+}

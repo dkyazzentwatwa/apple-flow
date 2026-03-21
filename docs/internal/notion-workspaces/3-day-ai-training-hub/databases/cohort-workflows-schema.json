@@ -1,0 +1,20 @@
+{
+  "title": "Cohort Workflows",
+  "properties": [
+    {"name": "Workflow Name", "type": "title"},
+    {"name": "Cohort", "type": "select", "options": ["Marketing", "Operations", "People-HR", "Sales-BD", "Leadership"]},
+    {"name": "Current Manual Task", "type": "rich_text"},
+    {"name": "AI-Assisted Outcome", "type": "rich_text"},
+    {"name": "Tool", "type": "select", "options": ["ChatGPT", "Claude", "Both", "Mobile"]},
+    {"name": "Artifact Template", "type": "rich_text"},
+    {"name": "Status", "type": "select", "options": ["Draft", "Tested", "Delivered"]},
+    {"name": "Owner", "type": "rich_text"},
+    {"name": "Notes", "type": "rich_text"}
+  ],
+  "views": [
+    {"name": "By Cohort"},
+    {"name": "Tested Workflows"},
+    {"name": "Needs Examples"},
+    {"name": "Ready for Training"}
+  ]
+}
