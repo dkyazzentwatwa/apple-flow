@@ -165,11 +165,13 @@ apple_flow_mail_from_address=you@example.com
 
 Incomplete reminders in a designated list become tasks for the AI.
 
+Apple Flow supports only normal top-level Reminders lists through AppleScript. Grouped lists, nested selectors, sections, and Accessibility-backed Reminders automation are not supported.
+
 | Variable | Default | Description |
 |---|---|---|
 | `apple_flow_enable_reminders_polling` | `false` | Enable Apple Reminders as a task queue. |
-| `apple_flow_reminders_list_name` | `agent-task` | Reminders list to watch for new tasks. |
-| `apple_flow_reminders_archive_list_name` | `agent-archive` | List to move completed reminders into. |
+| `apple_flow_reminders_list_name` | `agent-task` | Top-level Reminders list to watch for new tasks. |
+| `apple_flow_reminders_archive_list_name` | `agent-archive` | Top-level Reminders list to move completed reminders into. |
 | `apple_flow_reminders_owner` | *(first allowed_sender)* | Sender identity used for reminder tasks (phone number). |
 | `apple_flow_reminders_auto_approve` | `false` | Skip the approval gate for reminder tasks. |
 | `apple_flow_reminders_poll_interval_seconds` | `5` | How often to poll Reminders (seconds). |

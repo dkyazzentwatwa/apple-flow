@@ -233,21 +233,13 @@ class CompanionLoop:
             reminders = apple_tools.reminders_list(filter="incomplete", limit=20)
             if isinstance(reminders, list):
                 now = datetime.now()
-                configured_path = ""
-                if "/" in self.config.reminders_list_name or "\\" in self.config.reminders_list_name:
-                    configured_target = apple_tools.reminders_resolve_list_selector(self.config.reminders_list_name)
-                    configured_path = (configured_target or {}).get("path", "")
                 for rem in reminders:
                     due = rem.get("due_date", "")
                     name = rem.get("name", "")
-                    list_name = rem.get("list_path") or rem.get("list", "")
+                    list_name = rem.get("list", "")
                     if not (due and name):
                         continue
-                    # Scope to the configured reminders list
-                    if configured_path:
-                        if list_name and list_name != configured_path:
-                            continue
-                    elif list_name and list_name != self.config.reminders_list_name:
+                    if list_name and list_name != self.config.reminders_list_name:
                         continue
                     try:
                         due_dt = datetime.fromisoformat(due)

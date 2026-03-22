@@ -155,7 +155,6 @@ class AppleRemindersIngress:
                         "list_name": (resolved_list or {}).get("path") or raw_list_path or self.list_name,
                         "list_path": (resolved_list or {}).get("path") or raw_list_path,
                         "list_id": (resolved_list or {}).get("id") or raw_list_id,
-                        "section_name": str(raw.get("section_name", "") or ""),
                     },
                 )
             )
@@ -209,28 +208,6 @@ class AppleRemindersIngress:
         resolved_list = self._resolve_list_selector()
         if self.list_name and resolved_list is None:
             self.last_fetch_error = f"list selector not found: {self.list_name}"
-            return []
-        if resolved_list and resolved_list.get("source") == "accessibility":
-            reminders = apple_tools.reminders_list(
-                list_name=str(resolved_list.get("path", "")),
-                filter="incomplete",
-                limit=limit,
-                as_text=False,
-            )
-            if isinstance(reminders, list):
-                return [
-                    {
-                        "id": str(item.get("id", "")),
-                        "name": str(item.get("name", "")),
-                        "body": str(item.get("body", "")),
-                        "creation_date": str(item.get("creation_date", "")),
-                        "due_date": str(item.get("due_date", "")),
-                        "list_path": str(item.get("list_path", "")),
-                        "section_name": str(item.get("section_name", "")),
-                        "source": str(item.get("source", "")),
-                    }
-                    for item in reminders
-                ]
             return []
         if resolved_list and resolved_list.get("id"):
             escaped_list_id = resolved_list["id"].replace('"', '\\"')

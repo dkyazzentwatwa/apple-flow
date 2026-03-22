@@ -14,7 +14,6 @@ Use this folder as a product and setup docs surface first. If a page is primaril
 
 - [SKILLS_AND_MCP.md](./SKILLS_AND_MCP.md) for Codex and Claude skills or MCP setup
 - [MACOS_GUI_APP_EXPORT.md](./MACOS_GUI_APP_EXPORT.md) for exporting or running the macOS dashboard app from source
-- [harness/README.md](./harness/README.md) for harness engineering, evals, and rollout docs
 - [launchd/README.md](./launchd/README.md) for the sample launchd plist and related notes
 
 ## Internal And Archived Material

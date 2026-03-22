@@ -10,8 +10,6 @@ from __future__ import annotations
 import logging
 import subprocess
 
-from . import reminders_accessibility as reminders_ax
-
 logger = logging.getLogger("apple_flow.reminders_egress")
 REMINDERS_APP_TARGET = 'application id "com.apple.reminders"'
 
@@ -44,12 +42,6 @@ class AppleRemindersEgress:
         resolved_list = self._resolve_list_selector(self.list_name)
         if resolved_list is None:
             return False
-        if reminders_ax.is_ax_reminder_id(reminder_id) or resolved_list.get("source") == "accessibility":
-            return reminders_ax.complete_reminder(
-                list_path=str(resolved_list.get("path", "")),
-                reminder_id=reminder_id,
-                note=result_text,
-            )
         if resolved_list.get("id"):
             escaped_list_id = resolved_list["id"].replace('"', '\\"')
             target_list_clause = f'set taskList to first list whose id is "{escaped_list_id}"'
@@ -115,12 +107,6 @@ class AppleRemindersEgress:
         resolved_list = self._resolve_list_selector(self.list_name)
         if resolved_list is None:
             return False
-        if reminders_ax.is_ax_reminder_id(reminder_id) or resolved_list.get("source") == "accessibility":
-            return reminders_ax.annotate_reminder(
-                list_path=str(resolved_list.get("path", "")),
-                reminder_id=reminder_id,
-                note=note,
-            )
         if resolved_list.get("id"):
             escaped_list_id = resolved_list["id"].replace('"', '\\"')
             target_list_clause = f'set taskList to first list whose id is "{escaped_list_id}"'
@@ -196,13 +182,6 @@ class AppleRemindersEgress:
         resolved_archive_list = self._resolve_list_selector(archive_list_name)
         if resolved_source_list is None or resolved_archive_list is None:
             return False
-        if reminders_ax.is_ax_reminder_id(reminder_id) or resolved_source_list.get("source") == "accessibility":
-            return reminders_ax.move_to_archive(
-                reminder_id=reminder_id,
-                source_list_path=str(resolved_source_list.get("path", "")),
-                archive_list_path=str(resolved_archive_list.get("path", "")),
-                result_text=result_text,
-            )
         if resolved_source_list.get("id"):
             escaped_source_id = resolved_source_list["id"].replace('"', '\\"')
             source_list_clause = f'set sourceList to first list whose id is "{escaped_source_id}"'

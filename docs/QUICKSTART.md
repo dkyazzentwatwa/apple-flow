@@ -455,6 +455,7 @@ apple_flow_reminders_archive_list_name=agent-archive
 ```
 
 Default names are `agent-task` and `agent-archive` (auto-created/verified by setup).
+Only normal top-level Reminders lists are supported. Grouped lists, nested paths, sections, and Accessibility-backed Reminders automation are not supported.
 
 ### Enable Apple Notes Integration (Optional)
 

@@ -46,18 +46,13 @@ from .apple_tools import (
     pages_update_sections,
     reminders_complete,
     reminders_create,
-    reminders_create_group,
-    reminders_create_list,
-    reminders_create_section,
     reminders_list,
     reminders_list_lists,
-    reminders_move_section,
     reminders_search,
 )
 from .cli_control import run_cli_control
 from .config import RelaySettings
 from .daemon import run as run_daemon
-from .reminders_scaffold import scaffold_template as reminders_scaffold_template
 from .setup_wizard import run_wizard
 
 _LOCK_FILE = None
@@ -499,29 +494,10 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
     elif command == "reminders_list_lists":
         _output(reminders_list_lists(as_text=as_text))
 
-    elif command == "reminders_create_group":
-        if not positional:
-            print("Usage: apple-flow tools reminders_create_group <group-name> [--account X]", file=sys.stderr)
-            raise SystemExit(1)
-        _output(reminders_create_group(positional[0], account_name=args.account or "iCloud"))
-
-    elif command == "reminders_create_list":
-        if len(positional) < 2:
-            print("Usage: apple-flow tools reminders_create_list <group-selector> <list-name> [--account X]", file=sys.stderr)
-            raise SystemExit(1)
-        _output(reminders_create_list(positional[0], positional[1], account_name=args.account or "iCloud"))
-
-    elif command == "reminders_create_section":
-        if len(positional) < 2:
-            print("Usage: apple-flow tools reminders_create_section <list-selector> <section-name>", file=sys.stderr)
-            raise SystemExit(1)
-        _output(reminders_create_section(positional[0], positional[1]))
-
     elif command == "reminders_list":
         _output(
             reminders_list(
                 list_name=args.list or "",
-                section_name=args.section or "",
                 filter=args.filter or "incomplete",
                 limit=limit,
                 as_text=as_text,
@@ -530,13 +506,12 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
 
     elif command == "reminders_search":
         if not positional:
-            print("Usage: apple-flow tools reminders_search <query> [--list <selector>] [--section <name>] [--limit N]", file=sys.stderr)
+            print("Usage: apple-flow tools reminders_search <query> [--list <name>] [--limit N]", file=sys.stderr)
             raise SystemExit(1)
         _output(
             reminders_search(
                 positional[0],
                 list_name=args.list or "",
-                section_name=args.section or "",
                 limit=limit,
                 as_text=as_text,
             )
@@ -544,44 +519,21 @@ def _run_tools_subcommand(args: argparse.Namespace) -> None:
 
     elif command == "reminders_create":
         if not positional:
-            print("Usage: apple-flow tools reminders_create <name> [--list <selector>] [--section <name>] [--due YYYY-MM-DD]", file=sys.stderr)
+            print("Usage: apple-flow tools reminders_create <name> [--list <name>] [--due YYYY-MM-DD]", file=sys.stderr)
             raise SystemExit(1)
         _output(
             reminders_create(
                 positional[0],
                 list_name=args.list or "Reminders",
-                section_name=args.section or "",
                 due_date=args.due or "",
             )
         )
 
     elif command == "reminders_complete":
         if not positional or not args.list:
-            print("Usage: apple-flow tools reminders_complete <id> --list <selector> [--section <name>]", file=sys.stderr)
+            print("Usage: apple-flow tools reminders_complete <id> --list <name>", file=sys.stderr)
             raise SystemExit(1)
-        _output(reminders_complete(positional[0], list_name=args.list, section_name=args.section or ""))
-
-    elif command == "reminders_move_section":
-        if not positional or not args.list or not args.section:
-            print("Usage: apple-flow tools reminders_move_section <id> --list <selector> --section <target-section>", file=sys.stderr)
-            raise SystemExit(1)
-        _output(reminders_move_section(positional[0], list_name=args.list, section_name=args.section))
-
-    elif command == "reminders_scaffold_template":
-        if len(positional) < 2:
-            print(
-                "Usage: apple-flow tools reminders_scaffold_template <template> <project-name> [--account X] [--template-file /abs/path/templates.json]",
-                file=sys.stderr,
-            )
-            raise SystemExit(1)
-        _output(
-            reminders_scaffold_template(
-                positional[0],
-                positional[1],
-                template_file=args.template_file or "",
-                account_name=args.account or "iCloud",
-            )
-        )
+        _output(reminders_complete(positional[0], list_name=args.list))
 
     # ── Calendar ───────────────────────────────────────────────────────────
     elif command == "calendar_list_calendars":

@@ -256,16 +256,15 @@ class TestObservations:
             obs = comp._gather_observations()
         assert any("Buy milk" in o for o in obs)
 
-    def test_gather_reminders_matches_nested_list_path(self):
-        comp = _make_companion(config=_make_config(reminders_list_name="iCloud/Linear/agent-task"))
+    def test_gather_reminders_ignores_other_lists(self):
+        comp = _make_companion(config=_make_config(reminders_list_name="agent-task"))
         overdue = (datetime.now() - timedelta(hours=2)).isoformat()
         with patch("apple_flow.apple_tools.calendar_list_events", return_value=[]), \
-             patch("apple_flow.apple_tools.reminders_resolve_list_selector", return_value={"path": "iCloud/Linear/agent-task"}), \
              patch("apple_flow.apple_tools.reminders_list", return_value=[
-                 {"name": "Buy milk", "due_date": overdue, "list": "agent-task", "list_path": "iCloud/Linear/agent-task"}
+                 {"name": "Buy milk", "due_date": overdue, "list": "other-list"}
              ]):
             obs = comp._gather_observations()
-        assert any("Buy milk" in o for o in obs)
+        assert not any("Buy milk" in o for o in obs)
 
     def test_gather_office_inbox(self, tmp_path):
         inbox_dir = tmp_path / "00_inbox"

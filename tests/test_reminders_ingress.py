@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from conftest import FakeStore
 
@@ -40,11 +39,13 @@ def test_fetch_new_converts_to_inbound_messages(monkeypatch):
     assert msg.sender == "+15551234567"
     assert "Fix the login bug" in msg.text
     assert "Users can't log in with SSO" in msg.text
-    assert msg.text.startswith("task:")  # default: not auto-approve
+    assert msg.text.startswith("task:")
     assert msg.is_from_me is False
     assert msg.context["channel"] == "reminders"
     assert msg.context["reminder_id"] == "rem_001"
     assert msg.context["occurrence_key"] == "rem_001|"
+    assert msg.context["list_name"] == "agent-task"
+    assert "section_name" not in msg.context
 
 
 def test_fetch_new_auto_approve_uses_relay_prefix(monkeypatch):
@@ -241,286 +242,20 @@ def test_fetch_new_respects_limit(monkeypatch):
     assert len(messages) == 3
 
 
-def test_context_carries_list_name(monkeypatch):
+def test_fetch_new_skips_due_dates_in_future(monkeypatch):
     store = FakeStore()
     ingress = AppleRemindersIngress(
-        list_name="My Custom List",
+        list_name="agent-task",
         owner_sender="+15551234567",
         store=store,
+        due_delay_seconds=0,
     )
     raw = [
-        {"id": "rem_ctx", "name": "Test context", "body": "", "creation_date": "", "due_date": ""},
-    ]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-
-    messages = ingress.fetch_new()
-    assert messages[0].context["list_name"] == "My Custom List"
-
-
-def test_context_carries_canonical_list_path(monkeypatch):
-    store = FakeStore()
-    ingress = AppleRemindersIngress(
-        list_name="iCloud/Linear/agent-task",
-        owner_sender="+15551234567",
-        store=store,
-    )
-    monkeypatch.setattr(
-        ingress,
-        "_resolve_list_selector",
-        lambda: {
-            "id": "list_dev",
-            "name": "agent-task",
-            "path": "iCloud/Linear/agent-task",
-        },
-    )
-    raw = [
-        {"id": "rem_ctx_path", "name": "Test context", "body": "", "creation_date": "", "due_date": ""},
-    ]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-
-    messages = ingress.fetch_new()
-    assert messages[0].context["list_name"] == "iCloud/Linear/agent-task"
-    assert messages[0].context["list_path"] == "iCloud/Linear/agent-task"
-    assert messages[0].context["list_id"] == "list_dev"
-
-
-def test_ax_only_list_uses_accessibility_backed_fetch(monkeypatch):
-    store = FakeStore()
-    ingress = AppleRemindersIngress(
-        list_name="dev-waiting",
-        owner_sender="+15551234567",
-        store=store,
-    )
-    monkeypatch.setattr(
-        ingress,
-        "_resolve_list_selector",
-        lambda: {
-            "id": "",
-            "name": "dev-waiting",
-            "path": "iCloud/linear/dev-waiting",
-            "source": "accessibility",
-        },
-    )
-    monkeypatch.setattr(
-        "apple_flow.reminders_ingress.apple_tools.reminders_list",
-        lambda **kwargs: [
-            {
-                "id": "ax://rem-1",
-                "name": "Nested task",
-                "body": "From AX",
-                "creation_date": "",
-                "due_date": "",
-                "list_path": "iCloud/linear/dev-waiting",
-                "source": "accessibility",
-            }
-        ],
-    )
-
-    messages = ingress.fetch_new()
-    assert len(messages) == 1
-    assert messages[0].context["list_path"] == "iCloud/linear/dev-waiting"
-    assert messages[0].context["reminder_id"] == "ax://rem-1"
-
-
-def test_ax_only_list_carries_section_name_in_context(monkeypatch):
-    store = FakeStore()
-    ingress = AppleRemindersIngress(
-        list_name="dev-backlog",
-        owner_sender="+15551234567",
-        store=store,
-    )
-    monkeypatch.setattr(
-        ingress,
-        "_resolve_list_selector",
-        lambda: {
-            "id": "",
-            "name": "dev-backlog",
-            "path": "iCloud/linear/dev-backlog",
-            "source": "accessibility",
-        },
-    )
-    monkeypatch.setattr(
-        "apple_flow.reminders_ingress.apple_tools.reminders_list",
-        lambda **kwargs: [
-            {
-                "id": "ax://rem-2",
-                "name": "Section task",
-                "body": "",
-                "creation_date": "",
-                "due_date": "",
-                "list_path": "iCloud/linear/dev-backlog",
-                "section_name": "started",
-                "source": "accessibility",
-            }
-        ],
-    )
-
-    messages = ingress.fetch_new()
-
-    assert messages[0].context["section_name"] == "started"
-
-
-def test_due_date_future_waits(monkeypatch):
-    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent", due_delay_seconds=60)
-    raw = [
-        {
-            "id": "rem_future",
-            "name": "Deploy !!agent",
-            "body": "",
-            "creation_date": "",
-            "due_date": _due_in(300),
-        },
-    ]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-    assert ingress.fetch_new() == []
-
-
-def test_due_date_within_delay_waits(monkeypatch):
-    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent", due_delay_seconds=60)
-    raw = [
-        {
-            "id": "rem_recent_due",
-            "name": "Deploy !!agent",
-            "body": "",
-            "creation_date": "",
-            "due_date": _due_in(-10),
-        },
-    ]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-    assert ingress.fetch_new() == []
-
-
-def test_due_date_past_runs(monkeypatch):
-    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent", due_delay_seconds=60)
-    raw = [
-        {
-            "id": "rem_past_due",
-            "name": "Deploy !!agent",
-            "body": "",
-            "creation_date": "",
-            "due_date": _due_in(-180),
-        },
-    ]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-    messages = ingress.fetch_new()
-    assert len(messages) == 1
-
-
-def test_unparseable_due_date_skips(monkeypatch):
-    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent", due_delay_seconds=60)
-    raw = [
-        {
-            "id": "rem_bad_due",
-            "name": "Deploy !!agent",
-            "body": "",
-            "creation_date": "",
-            "due_date": "not-a-date",
-        },
-    ]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-    assert ingress.fetch_new() == []
-
-
-def test_parse_due_date_uses_configured_timezone():
-    ingress = AppleRemindersIngress(timezone_name="UTC")
-    parsed = ingress._parse_due_date("2026-03-01 10:00:00")
-    assert parsed is not None
-    assert parsed.tzinfo == ZoneInfo("UTC")
-
-
-def test_due_date_with_configured_timezone_runs(monkeypatch):
-    ingress = AppleRemindersIngress(
-        owner_sender="+15551234567",
-        trigger_tag="!!agent",
-        due_delay_seconds=60,
-        timezone_name="UTC",
-    )
-    due_utc = (datetime.now(ZoneInfo("UTC")) - timedelta(seconds=180)).strftime("%Y-%m-%d %H:%M:%S")
-    raw = [
-        {
-            "id": "rem_tz_due",
-            "name": "Deploy !!agent",
-            "body": "",
-            "creation_date": "",
-            "due_date": due_utc,
-        },
-    ]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-    messages = ingress.fetch_new()
-    assert len(messages) == 1
-
-
-def test_recurrence_runs_new_due_occurrence(monkeypatch):
-    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent", due_delay_seconds=60)
-    due1 = _due_in(-180)
-    due2 = _due_in(300)
-    raw = [{"id": "rem_repeat", "name": "Task !!agent", "body": "", "creation_date": "", "due_date": due1}]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-
-    first = ingress.fetch_new()
-    assert len(first) == 1
-    ingress.mark_processed_occurrence(first[0].context["occurrence_key"])
-
-    raw[0]["due_date"] = due2
-    second = ingress.fetch_new()
-    assert second == []
-
-    raw[0]["due_date"] = _due_in(-240)
-    third = ingress.fetch_new()
-    assert len(third) == 1
-    assert third[0].context["occurrence_key"] != first[0].context["occurrence_key"]
-
-
-# --- Trigger Tag Tests ---
-
-
-def test_trigger_tag_required_skips_without_tag(monkeypatch):
-    """Reminders without the trigger tag should be skipped."""
-    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent")
-    raw = [
-        {"id": "rem_1", "name": "Buy milk", "body": "Don't forget", "creation_date": "", "due_date": ""},
-    ]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-
-    messages = ingress.fetch_new()
-    assert messages == []
-
-
-def test_trigger_tag_in_name_passes_and_stripped(monkeypatch):
-    """Reminder with tag in name should be returned with tag stripped."""
-    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent")
-    raw = [
-        {"id": "rem_1", "name": "Buy milk !!agent", "body": "", "creation_date": "", "due_date": ""},
+        {"id": "future", "name": "Future task", "body": "", "creation_date": "", "due_date": _due_in(300)},
+        {"id": "ready", "name": "Ready task", "body": "", "creation_date": "", "due_date": _due_in(-300)},
     ]
     monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
 
     messages = ingress.fetch_new()
     assert len(messages) == 1
-    assert "!!agent" not in messages[0].text
-    assert "Buy milk" in messages[0].text
-
-
-def test_trigger_tag_in_body_passes(monkeypatch):
-    """Reminder with tag in body should be returned."""
-    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="!!agent")
-    raw = [
-        {"id": "rem_1", "name": "Deploy app", "body": "!!agent push to staging", "creation_date": "", "due_date": ""},
-    ]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-
-    messages = ingress.fetch_new()
-    assert len(messages) == 1
-    assert "Deploy app" in messages[0].text
-
-
-def test_trigger_tag_empty_processes_all(monkeypatch):
-    """When trigger_tag is empty, all reminders are processed (backward compat)."""
-    ingress = AppleRemindersIngress(owner_sender="+15551234567", trigger_tag="")
-    raw = [
-        {"id": "rem_1", "name": "Buy milk", "body": "", "creation_date": "", "due_date": ""},
-        {"id": "rem_2", "name": "Walk dog", "body": "", "creation_date": "", "due_date": ""},
-    ]
-    monkeypatch.setattr(ingress, "_fetch_incomplete_via_applescript", lambda limit: raw)
-
-    messages = ingress.fetch_new()
-    assert len(messages) == 2
+    assert messages[0].context["reminder_id"] == "ready"

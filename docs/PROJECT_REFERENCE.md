@@ -210,7 +210,6 @@ For behavior changes, run `pytest -q` before considering the change complete. Ad
 - [AI_INSTALL_MASTER_PROMPT.md](./AI_INSTALL_MASTER_PROMPT.md)
 - [SKILLS_AND_MCP.md](./SKILLS_AND_MCP.md)
 - [MACOS_GUI_APP_EXPORT.md](./MACOS_GUI_APP_EXPORT.md)
-- [docs/harness/README.md](./harness/README.md)
 - [SECURITY.md](../SECURITY.md)
 - [CONTRIBUTING.md](../CONTRIBUTING.md)
 - [CHANGELOG.md](../CHANGELOG.md)
