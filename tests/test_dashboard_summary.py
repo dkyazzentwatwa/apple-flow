@@ -61,6 +61,40 @@ def test_build_agent_office_summary_ignores_unknown_paths(agent_office):
     assert "unrelated.txt" not in {item["name"] for item in summary["recent"]["logs"]}
 
 
+def test_build_agent_office_summary_includes_runtime_and_companion_state(agent_office):
+    store = FakeStore()
+    store.create_approval(
+        request_id="req-1",
+        run_id="run-1",
+        summary="Approval one",
+        command_preview="do something",
+        expires_at="2026-03-22T13:00:00+00:00",
+        sender="+15551234567",
+    )
+    store.create_approval(
+        request_id="req-2",
+        run_id="run-2",
+        summary="Approval two",
+        command_preview="do something else",
+        expires_at="2026-03-22T13:30:00+00:00",
+        sender="+15551234567",
+    )
+    store.set_state("companion_muted", "true")
+    store.set_state("companion_last_check_at", "2026-03-22T11:55:00+00:00")
+    store.set_state("companion_last_sent_at", "2026-03-22T11:56:00+00:00")
+    store.set_state("companion_last_skip_reason", "quiet_hours")
+    store.set_state("companion_proactive_hour_count", "3")
+
+    summary = build_agent_office_summary(agent_office, store=store, config=SimpleNamespace())
+
+    assert summary["runtime"]["pending_approvals_count"] == 2
+    assert summary["companion"]["muted"] is True
+    assert summary["companion"]["last_check_at"] == "2026-03-22T11:55:00+00:00"
+    assert summary["companion"]["last_sent_at"] == "2026-03-22T11:56:00+00:00"
+    assert summary["companion"]["skip_reason"] == "quiet_hours"
+    assert summary["companion"]["proactive_hour_count"] == "3"
+
+
 def test_build_agent_office_summary_counts_entries_section_only(tmp_path):
     office = tmp_path / "agent-office"
     inbox_dir = office / "00_inbox"

@@ -49,6 +49,53 @@ def _list_recent_files(directory: Path, *, limit: int = 5) -> list[dict[str, Any
     return [_summarize_file(path) for path in files[:limit]]
 
 
+def _safe_pending_approvals_count(store: Any | None) -> int:
+    if store is None or not hasattr(store, "list_pending_approvals"):
+        return 0
+    try:
+        pending = store.list_pending_approvals()
+    except Exception:
+        return 0
+    if not isinstance(pending, list):
+        return 0
+    return len(pending)
+
+
+def _safe_state(store: Any | None, key: str, default: str = "") -> str:
+    if store is None or not hasattr(store, "get_state"):
+        return default
+    try:
+        value = store.get_state(key)
+    except Exception:
+        return default
+    if value is None:
+        return default
+    return str(value)
+
+
+def _summarize_runtime(store: Any | None) -> dict[str, Any]:
+    pending_count = _safe_pending_approvals_count(store)
+    return {
+        "pending_approvals_count": pending_count,
+    }
+
+
+def _summarize_companion(store: Any | None) -> dict[str, Any]:
+    muted = _safe_state(store, "companion_muted") == "true"
+    last_check_at = _safe_state(store, "companion_last_check_at")
+    last_sent_at = _safe_state(store, "companion_last_sent_at")
+    skip_reason = _safe_state(store, "companion_last_skip_reason")
+    hour_count = _safe_state(store, "companion_proactive_hour_count", "0")
+
+    return {
+        "muted": muted,
+        "last_check_at": last_check_at or None,
+        "last_sent_at": last_sent_at or None,
+        "skip_reason": skip_reason,
+        "proactive_hour_count": hour_count,
+    }
+
+
 def _summarize_inbox(office_path: Path) -> dict[str, Any]:
     inbox_path = office_path / "00_inbox" / "inbox.md"
     if not inbox_path.exists():
@@ -165,4 +212,6 @@ def build_agent_office_summary(
         "daily": _summarize_daily(office, now=current),
         "memory": _summarize_memory(office),
         "recent": recent,
+        "runtime": _summarize_runtime(store),
+        "companion": _summarize_companion(store),
     }
