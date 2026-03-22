@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Agent Office Dashboard</title>
+    <meta name="color-scheme" content="light">
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f1ea;
+        --panel: #ffffff;
+        --text: #15202b;
+        --muted: #5b6470;
+        --line: #d8d1c4;
+        --accent: #0f766e;
+        --accent-strong: #115e59;
+        --shadow: 0 12px 30px rgba(21, 32, 43, 0.08);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top, #fffaf0 0, var(--bg) 45%, #e9ecef 100%);
+        color: var(--text);
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(1.8rem, 4vw, 3rem);
+        line-height: 1.05;
+      }
+      .subtitle {
+        margin: 8px 0 0;
+        color: var(--muted);
+        max-width: 42rem;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      button {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--text);
+        border-radius: 999px;
+        padding: 10px 14px;
+        font: inherit;
+        cursor: pointer;
+        box-shadow: var(--shadow);
+      }
+      button.primary {
+        background: var(--accent);
+        color: white;
+        border-color: var(--accent);
+      }
+      button.primary:hover { background: var(--accent-strong); }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+        box-shadow: var(--shadow);
+      }
+      .card h2 {
+        margin: 0 0 8px;
+        font-size: 1rem;
+      }
+      .muted { color: var(--muted); }
+      .status {
+        margin-top: 16px;
+      }
+      .status pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 0.95rem;
+        line-height: 1.45;
+      }
+      @media (max-width: 640px) {
+        main { padding: 16px; }
+        header { flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Agent Office Dashboard</h1>
+          <p class="subtitle">
+            A lightweight command center for the companion, inbox, memory, and logs.
+          </p>
+        </div>
+        <div class="actions" aria-label="Dashboard actions">
+          <button class="primary" id="refresh-button" type="button">Refresh</button>
+          <button id="mute-button" type="button">Mute</button>
+          <button id="unmute-button" type="button">Unmute</button>
+        </div>
+      </header>
+
+      <section class="grid" aria-label="Dashboard summary">
+        <article class="card">
+          <h2>Runtime</h2>
+          <div id="runtime-summary" class="muted">Loading summary...</div>
+        </article>
+        <article class="card">
+          <h2>Companion</h2>
+          <div id="companion-summary" class="muted">Loading summary...</div>
+        </article>
+        <article class="card">
+          <h2>Inbox</h2>
+          <div id="inbox-summary" class="muted">Loading summary...</div>
+        </article>
+        <article class="card">
+          <h2>Memory</h2>
+          <div id="memory-summary" class="muted">Loading summary...</div>
+        </article>
+      </section>
+
+      <section class="card status" aria-label="Raw summary">
+        <h2>Live Summary</h2>
+        <pre id="summary-json">Waiting for data from <code>/dashboard/api/summary</code>...</pre>
+      </section>
+    </main>
+
+    <script>
+      const summaryJson = document.getElementById("summary-json");
+      const runtimeSummary = document.getElementById("runtime-summary");
+      const companionSummary = document.getElementById("companion-summary");
+      const inboxSummary = document.getElementById("inbox-summary");
+      const memorySummary = document.getElementById("memory-summary");
+
+      async function postJson(path) {
+        const response = await fetch(path, { method: "POST", credentials: "same-origin" });
+        if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+        return response.json();
+      }
+
+      async function loadSummary() {
+        const response = await fetch("/dashboard/api/summary", { credentials: "same-origin" });
+        if (!response.ok) {
+          summaryJson.textContent = `Failed to load summary (${response.status})`;
+          return;
+        }
+        const summary = await response.json();
+        summaryJson.textContent = JSON.stringify(summary, null, 2);
+        runtimeSummary.textContent = `Pending approvals: ${summary.runtime.pending_approvals_count}`;
+        companionSummary.textContent = `Muted: ${summary.companion.muted ? "yes" : "no"} | Last check: ${summary.companion.last_check_at || "n/a"}`;
+        inboxSummary.textContent = `Unchecked items: ${summary.inbox.unchecked_count}`;
+        memorySummary.textContent = `Memory topics: ${summary.memory.topic_count}`;
+      }
+
+      document.getElementById("refresh-button").addEventListener("click", loadSummary);
+      document.getElementById("mute-button").addEventListener("click", async () => {
+        await postJson("/dashboard/api/companion/mute");
+        await loadSummary();
+      });
+      document.getElementById("unmute-button").addEventListener("click", async () => {
+        await postJson("/dashboard/api/companion/unmute");
+        await loadSummary();
+      });
+
+      loadSummary();
+    </script>
+  </body>
+</html>

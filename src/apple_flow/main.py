@@ -6,8 +6,10 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from .config import RelaySettings
@@ -19,6 +21,8 @@ from .runtime_health import read_all_daemon_loop_health, read_daemon_watchdog
 from .store import SQLiteStore
 
 logger = logging.getLogger("apple_flow.main")
+_DASHBOARD_COOKIE_NAME = "apple_flow_dashboard_token"
+_DASHBOARD_COOKIE_PATH = "/dashboard"
 
 
 class ApprovalOverrideBody(BaseModel):
@@ -43,6 +47,96 @@ def _make_auth_dependency(token: str):
         if not secrets.compare_digest(provided, token):
             raise HTTPException(status_code=401, detail="Invalid API token")
     return _verify_token
+
+
+def _dashboard_auth_token(request: Request, token: str) -> str | None:
+    if not token:
+        return ""
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        provided = auth_header[7:]
+        if secrets.compare_digest(provided, token):
+            return provided
+
+    cookie_token = request.cookies.get(_DASHBOARD_COOKIE_NAME, "")
+    if cookie_token and secrets.compare_digest(cookie_token, token):
+        return cookie_token
+
+    return None
+
+
+def _dashboard_login_page() -> str:
+    return """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Agent Office Dashboard Login</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f1ea;
+        --panel: #ffffff;
+        --text: #15202b;
+        --muted: #5b6470;
+        --line: #d8d1c4;
+        --accent: #0f766e;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top, #fffaf0 0, var(--bg) 55%, #e9ecef 100%);
+        color: var(--text);
+      }
+      main {
+        width: min(100%, 420px);
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel);
+        box-shadow: 0 12px 30px rgba(21, 32, 43, 0.08);
+      }
+      h1 { margin: 0 0 8px; font-size: 1.8rem; }
+      p { margin: 0 0 18px; color: var(--muted); }
+      label { display: block; margin-bottom: 8px; font-weight: 600; }
+      input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        font: inherit;
+      }
+      button {
+        margin-top: 14px;
+        width: 100%;
+        padding: 12px 14px;
+        border: 0;
+        border-radius: 999px;
+        background: var(--accent);
+        color: white;
+        font: inherit;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Agent Office Dashboard</h1>
+      <p>Enter your Apple Flow admin token to open the dashboard in this browser.</p>
+      <form method="post" action="/dashboard/bootstrap">
+        <label for="dashboard-token">Dashboard token</label>
+        <input id="dashboard-token" name="dashboard_token" type="password" autocomplete="current-password" required>
+        <button type="submit">Open dashboard</button>
+      </form>
+    </main>
+  </body>
+</html>"""
 
 
 def build_app(store: Any | None = None) -> FastAPI:
@@ -101,6 +195,13 @@ def build_app(store: Any | None = None) -> FastAPI:
         office_path = resolve_agent_office_path(settings.soul_file)
         return build_agent_office_summary(office_path, store=app.state.store, config=settings)
 
+    def _dashboard_html_path() -> Path:
+        return Path(__file__).resolve().parent / "static" / "dashboard.html"
+
+    async def verify_dashboard_auth(request: Request) -> None:
+        if _dashboard_auth_token(request, settings.admin_api_token) is None:
+            raise HTTPException(status_code=401, detail="Missing or invalid dashboard auth")
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         gateways = read_all_gateway_health(app.state.store)
@@ -152,11 +253,61 @@ def build_app(store: Any | None = None) -> FastAPI:
             return []
         return app.state.store.list_events(limit=limit)
 
-    @app.get("/dashboard/api/summary", dependencies=[Depends(verify_token)])
+    @app.get("/dashboard/api/summary", dependencies=[Depends(verify_dashboard_auth)])
     def dashboard_summary() -> dict[str, Any]:
         return _dashboard_summary()
 
-    @app.get("/dashboard/api/section/{section_name}", dependencies=[Depends(verify_token)])
+    @app.get("/dashboard", response_class=HTMLResponse)
+    def dashboard_page(request: Request) -> HTMLResponse:
+        if not settings.admin_api_token:
+            html_path = _dashboard_html_path()
+            try:
+                content = html_path.read_text(encoding="utf-8")
+            except OSError as exc:
+                raise HTTPException(status_code=500, detail="dashboard shell not available") from exc
+            return HTMLResponse(content=content)
+
+        token = _dashboard_auth_token(request, settings.admin_api_token)
+        if token is None:
+            return HTMLResponse(content=_dashboard_login_page())
+        html_path = _dashboard_html_path()
+        try:
+            content = html_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail="dashboard shell not available") from exc
+
+        response = HTMLResponse(content=content)
+        if request.cookies.get(_DASHBOARD_COOKIE_NAME) != token:
+            response.set_cookie(
+                key=_DASHBOARD_COOKIE_NAME,
+                value=token,
+                httponly=True,
+                samesite="lax",
+                secure=request.url.scheme == "https",
+                path=_DASHBOARD_COOKIE_PATH,
+            )
+        return response
+
+    @app.post("/dashboard/bootstrap")
+    async def dashboard_bootstrap(request: Request) -> RedirectResponse:
+        raw_body = (await request.body()).decode("utf-8", errors="replace")
+        dashboard_token = parse_qs(raw_body).get("dashboard_token", [""])[0]
+        if settings.admin_api_token and not secrets.compare_digest(dashboard_token, settings.admin_api_token):
+            raise HTTPException(status_code=401, detail="Invalid dashboard token")
+
+        response = RedirectResponse(url="/dashboard", status_code=303)
+        if settings.admin_api_token:
+            response.set_cookie(
+                key=_DASHBOARD_COOKIE_NAME,
+                value=dashboard_token,
+                httponly=True,
+                samesite="lax",
+                secure=request.url.scheme == "https",
+                path=_DASHBOARD_COOKIE_PATH,
+            )
+        return response
+
+    @app.get("/dashboard/api/section/{section_name}", dependencies=[Depends(verify_dashboard_auth)])
     def dashboard_section(section_name: str) -> dict[str, Any]:
         summary = _dashboard_summary()
         try:
@@ -164,7 +315,7 @@ def build_app(store: Any | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="dashboard section not found") from exc
 
-    @app.post("/dashboard/api/companion/mute", dependencies=[Depends(verify_token)])
+    @app.post("/dashboard/api/companion/mute", dependencies=[Depends(verify_dashboard_auth)])
     def dashboard_companion_mute() -> dict[str, Any]:
         if hasattr(app.state.store, "set_state"):
             app.state.store.set_state("companion_muted", "true")
@@ -172,7 +323,7 @@ def build_app(store: Any | None = None) -> FastAPI:
             raise HTTPException(status_code=500, detail="store does not support state updates")
         return {"companion_muted": True}
 
-    @app.post("/dashboard/api/companion/unmute", dependencies=[Depends(verify_token)])
+    @app.post("/dashboard/api/companion/unmute", dependencies=[Depends(verify_dashboard_auth)])
     def dashboard_companion_unmute() -> dict[str, Any]:
         if hasattr(app.state.store, "set_state"):
             app.state.store.set_state("companion_muted", "false")

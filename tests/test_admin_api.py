@@ -123,8 +123,13 @@ def test_dashboard_routes_require_auth(monkeypatch, tmp_path):
     app = build_app(store=InMemoryStore())
     client = TestClient(app)
 
+    dashboard_response = client.get("/dashboard")
+    assert dashboard_response.status_code == 200
+    assert "Agent Office Dashboard" in dashboard_response.text
+    assert 'action="/dashboard/bootstrap"' in dashboard_response.text
     assert client.get("/dashboard/api/summary").status_code == 401
     assert client.get("/dashboard/api/section/inbox").status_code == 401
+    assert client.post("/dashboard/bootstrap", data={"dashboard_token": "wrong"}).status_code == 401
 
 
 def test_dashboard_summary_and_section_expose_agent_office_state(monkeypatch, tmp_path):
@@ -150,6 +155,38 @@ def test_dashboard_summary_and_section_expose_agent_office_state(monkeypatch, tm
     section = section_response.json()
     assert section["section"] == "inbox"
     assert section["data"]["unchecked_count"] == 1
+
+
+def test_dashboard_shell_serves_html(monkeypatch, tmp_path):
+    office = tmp_path / "agent-office"
+    _write_agent_office_fixture(office)
+    monkeypatch.setenv("apple_flow_admin_api_token", "secret-token")
+    monkeypatch.setenv("apple_flow_soul_file", str(office / "SOUL.md"))
+
+    app = build_app(store=InMemoryStore())
+    client = TestClient(app)
+
+    bootstrap = client.post("/dashboard/bootstrap", data={"dashboard_token": "secret-token"}, follow_redirects=False)
+    assert bootstrap.status_code == 303
+    assert "apple_flow_dashboard_token=secret-token" in bootstrap.headers["set-cookie"]
+    assert "HttpOnly" in bootstrap.headers["set-cookie"]
+    assert "Path=/dashboard" in bootstrap.headers["set-cookie"]
+
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    body = response.text
+    assert "Agent Office Dashboard" in body
+    assert "/dashboard/api/summary" in body
+    assert "refresh-button" in body
+    assert "mute-button" in body
+    assert "unmute-button" in body
+    assert "secret-token" not in body
+
+    summary_response = client.get("/dashboard/api/summary")
+    assert summary_response.status_code == 200
+    assert summary_response.json()["agent_office_path"] == str(office)
+    assert client.get("/sessions").status_code == 401
 
 
 def test_dashboard_companion_actions_require_auth(monkeypatch, tmp_path):
