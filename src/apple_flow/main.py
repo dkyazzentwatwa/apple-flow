@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from .config import RelaySettings
 from .csv_audit import CsvAuditLogger
+from .dashboard import build_agent_office_summary, get_agent_office_section, resolve_agent_office_path
 from .gateway_health import read_all_gateway_health
 from .models import InboundMessage
 from .runtime_health import read_all_daemon_loop_health, read_daemon_watchdog
@@ -96,6 +97,10 @@ def build_app(store: Any | None = None) -> FastAPI:
         status = "degraded" if not watchdog.get("healthy", True) else "healthy"
         return {"status": status, "loops": loops, "watchdog": watchdog}
 
+    def _dashboard_summary() -> dict[str, Any]:
+        office_path = resolve_agent_office_path(settings.soul_file)
+        return build_agent_office_summary(office_path, store=app.state.store, config=settings)
+
     @app.get("/health")
     def health() -> dict[str, Any]:
         gateways = read_all_gateway_health(app.state.store)
@@ -146,6 +151,18 @@ def build_app(store: Any | None = None) -> FastAPI:
         if not hasattr(app.state.store, "list_events"):
             return []
         return app.state.store.list_events(limit=limit)
+
+    @app.get("/dashboard/api/summary", dependencies=[Depends(verify_token)])
+    def dashboard_summary() -> dict[str, Any]:
+        return _dashboard_summary()
+
+    @app.get("/dashboard/api/section/{section_name}", dependencies=[Depends(verify_token)])
+    def dashboard_section(section_name: str) -> dict[str, Any]:
+        summary = _dashboard_summary()
+        try:
+            return get_agent_office_section(summary, section_name)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="dashboard section not found") from exc
 
     # --- Feature 4: Siri Shortcuts / Programmatic Task Submission ---
 

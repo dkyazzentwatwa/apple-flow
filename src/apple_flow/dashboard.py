@@ -6,6 +6,21 @@ from pathlib import Path
 from typing import Any
 
 _KNOWN_RECENT_DIRS = ("30_outputs", "40_resources", "90_logs")
+_DASHBOARD_SECTIONS = {
+    "inbox": "inbox",
+    "daily": "daily",
+    "memory": "memory",
+    "recent": "recent",
+    "runtime": "runtime",
+    "companion": "companion",
+}
+
+
+def resolve_agent_office_path(soul_file: str | Path) -> Path:
+    soul_path = Path(soul_file)
+    if not soul_path.is_absolute():
+        soul_path = Path(__file__).resolve().parents[2] / soul_path
+    return soul_path.parent
 
 
 def _coerce_now(now: datetime | None) -> datetime:
@@ -187,6 +202,14 @@ def _summarize_memory(office_path: Path) -> dict[str, Any]:
         "topics": topics,
         "preview": preview,
     }
+
+
+def get_agent_office_section(summary: dict[str, Any], section_name: str) -> dict[str, Any]:
+    section = section_name.strip().lower()
+    if section not in _DASHBOARD_SECTIONS:
+        raise KeyError(section_name)
+    key = _DASHBOARD_SECTIONS[section]
+    return {"section": section, "data": summary[key]}
 
 
 def build_agent_office_summary(

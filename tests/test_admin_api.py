@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from apple_flow.main import build_app
@@ -35,6 +37,31 @@ class InMemoryStore:
 
     def get_state(self, key):
         return self._state.get(key)
+
+
+def _write_agent_office_fixture(office: Path) -> None:
+    (office / "00_inbox").mkdir(parents=True, exist_ok=True)
+    (office / "10_daily").mkdir(parents=True, exist_ok=True)
+    (office / "60_memory").mkdir(parents=True, exist_ok=True)
+    (office / "30_outputs").mkdir(parents=True, exist_ok=True)
+    (office / "40_resources").mkdir(parents=True, exist_ok=True)
+    (office / "90_logs").mkdir(parents=True, exist_ok=True)
+
+    (office / "SOUL.md").write_text("You are Flow.\n", encoding="utf-8")
+    (office / "00_inbox" / "inbox.md").write_text(
+        "# Inbox\n\n## Entries\n- [ ] Inbox item one\n- [x] Inbox item done\n",
+        encoding="utf-8",
+    )
+    (office / "10_daily" / "2026-03-22.md").write_text(
+        "# Daily Note\n\n## Morning Briefing\nToday looks good.\n",
+        encoding="utf-8",
+    )
+    (office / "MEMORY.md").write_text("# Memory\n\n## Durable\nImportant note.\n", encoding="utf-8")
+    (office / "60_memory" / "topic.md").write_text("# Topic\nMemory body.\n", encoding="utf-8")
+    (office / "30_outputs" / "output.md").write_text("# Output\nOutput body.\n", encoding="utf-8")
+    (office / "40_resources" / "resource.md").write_text("# Resource\nResource body.\n", encoding="utf-8")
+    (office / "90_logs" / "automation-log.md").write_text("# Log\n", encoding="utf-8")
+    (office / "90_logs" / "events.csv").write_text("id,timestamp,event\n1,now,test\n", encoding="utf-8")
 
 
 
@@ -82,3 +109,41 @@ def test_admin_health_includes_gateway_status():
             os.environ["apple_flow_admin_api_token"] = old_token
         else:
             os.environ.pop("apple_flow_admin_api_token", None)
+
+
+def test_dashboard_routes_require_auth(monkeypatch, tmp_path):
+    office = tmp_path / "agent-office"
+    _write_agent_office_fixture(office)
+    monkeypatch.setenv("apple_flow_admin_api_token", "secret-token")
+    monkeypatch.setenv("apple_flow_soul_file", str(office / "SOUL.md"))
+
+    app = build_app(store=InMemoryStore())
+    client = TestClient(app)
+
+    assert client.get("/dashboard/api/summary").status_code == 401
+    assert client.get("/dashboard/api/section/inbox").status_code == 401
+
+
+def test_dashboard_summary_and_section_expose_agent_office_state(monkeypatch, tmp_path):
+    office = tmp_path / "agent-office"
+    _write_agent_office_fixture(office)
+    monkeypatch.setenv("apple_flow_admin_api_token", "secret-token")
+    monkeypatch.setenv("apple_flow_soul_file", str(office / "SOUL.md"))
+
+    app = build_app(store=InMemoryStore())
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer secret-token"}
+
+    summary_response = client.get("/dashboard/api/summary", headers=headers)
+    assert summary_response.status_code == 200
+    summary = summary_response.json()
+    assert summary["agent_office_path"] == str(office)
+    assert summary["inbox"]["unchecked_count"] == 1
+    assert summary["runtime"]["pending_approvals_count"] == 1
+    assert summary["companion"]["muted"] is False
+
+    section_response = client.get("/dashboard/api/section/inbox", headers=headers)
+    assert section_response.status_code == 200
+    section = section_response.json()
+    assert section["section"] == "inbox"
+    assert section["data"]["unchecked_count"] == 1
