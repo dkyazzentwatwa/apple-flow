@@ -208,6 +208,27 @@ apple_flow_connector=kilo-cli
 Configure auth according to your local Kilo setup (often `kilo auth login`).
 
 **Phone Number Format:**
+
+### Optional: Phone-Friendly Dashboard
+
+After setup, the admin service also exposes a lightweight browser dashboard at:
+
+```text
+http://localhost:8787/dashboard
+```
+
+If `apple_flow_admin_api_token` is enabled, the first browser visit shows a dashboard login form. Enter the admin token once to create a dashboard-only browser session for `/dashboard`.
+
+For remote phone access over Tailscale:
+- make sure the Apple Flow admin service is listening on your Mac as usual
+- open `http://<tailscale-host-or-magicdns-name>:8787/dashboard` on your phone
+- sign in through the dashboard form with the same admin token
+
+The dashboard is intentionally narrow in v1:
+- live Agent Office summary
+- companion status
+- inbox, memory, and logs snapshots
+- `Mute` / `Unmute` companion controls
 - Correct: `+15551234567` (with country code)
 - Wrong: `5551234567` (missing +1)
 - Wrong: `(555) 123-4567` (with formatting)

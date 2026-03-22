@@ -134,7 +134,26 @@ Pick one AI backend. The value of `apple_flow_connector` determines which is use
 | `apple_flow_admin_host` | `127.0.0.1` | Host for the admin API server. |
 | `apple_flow_admin_port` | `8787` | Port for the admin API server. |
 
-Access it at `http://localhost:8787` — endpoints: `/health`, `/sessions`, `/runs/{run_id}`, `/approvals/pending`, `/audit/events`, `/metrics`, `POST /task`.
+Access it at `http://localhost:8787`.
+
+Core endpoints:
+- `/health`
+- `/sessions`
+- `/runs/{run_id}`
+- `/approvals/pending`
+- `/audit/events`
+- `/metrics`
+- `POST /task`
+
+Browser dashboard:
+- `GET /dashboard` serves the Agent Office dashboard shell.
+- `GET /dashboard/api/summary` returns the aggregate dashboard payload.
+- `GET /dashboard/api/section/{section_name}` returns a single dashboard section.
+- `POST /dashboard/api/companion/mute` and `POST /dashboard/api/companion/unmute` toggle companion state from the dashboard.
+
+When `apple_flow_admin_api_token` is set:
+- non-dashboard admin API routes still require `Authorization: Bearer <token>`
+- the dashboard uses a browser bootstrap form at `/dashboard` and sets a dashboard-only `HttpOnly` cookie scoped to `/dashboard`
 
 ---
 

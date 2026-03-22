@@ -197,6 +197,24 @@ python -m apple_flow service restart --json
 python -m apple_flow service status --json
 ```
 
+### Browser Dashboard
+
+The admin service also serves a lightweight Agent Office dashboard for phone and browser access.
+
+Open:
+
+```text
+http://localhost:8787/dashboard
+```
+
+If `apple_flow_admin_api_token` is set, the first visit shows a small dashboard login form. Enter the same admin token there once and the browser receives a dashboard-only `HttpOnly` cookie scoped to `/dashboard`.
+
+Practical notes:
+- The dashboard is read-heavy and focused on `agent-office`, companion state, inbox, memory, and logs.
+- `Mute` / `Unmute` companion are the only built-in dashboard actions in v1.
+- The dashboard cookie is scoped to `/dashboard`, so it does not unlock the broader admin API surface.
+- Over Tailscale, use your Mac's Tailscale IP or MagicDNS hostname with port `8787`, for example `http://your-mac-name.tailnet.ts.net:8787/dashboard`.
+
 ## Core Commands
 
 | Command | What it does |
