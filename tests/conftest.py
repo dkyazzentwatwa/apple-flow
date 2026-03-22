@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sys
+import os
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -368,3 +369,50 @@ def fake_egress() -> FakeEgress:
 def fake_store() -> FakeStore:
     """Provide a fake store for tests."""
     return FakeStore()
+
+
+@pytest.fixture
+def agent_office(tmp_path: Path) -> Path:
+    """Build a representative agent-office tree for dashboard summary tests."""
+    office = tmp_path / "agent-office"
+    office.mkdir()
+
+    base_time = datetime(2026, 3, 22, 12, 0, tzinfo=UTC)
+
+    def write(relative_path: str, content: str, minutes_ago: int) -> Path:
+        path = office / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        stamp = (base_time - timedelta(minutes=minutes_ago)).timestamp()
+        os.utime(path, (stamp, stamp))
+        return path
+
+    write(
+        "00_inbox/inbox.md",
+        "# Inbox\n\n## Entries\n- [ ] First inbox item\n- [ ] Second inbox item\n- [x] Finished item\n",
+        30,
+    )
+    write(
+        "10_daily/2026-03-22.md",
+        "# Daily Note\n\n## Morning Briefing\nToday is the thing.\n",
+        20,
+    )
+    write(
+        "10_daily/2026-03-21.md",
+        "# Daily Note\n\n## Morning Briefing\nYesterday happened.\n",
+        180,
+    )
+    write("30_outputs/latest-output.md", "# Latest output\n\nNewest output body.\n", 5)
+    write("30_outputs/older-output.md", "# Older output\n\nOlder output body.\n", 60)
+    write("40_resources/library.md", "# Resource Library\n\nResource body.\n", 15)
+    write("40_resources/reference.md", "# Reference\n\nReference body.\n", 90)
+    write("MEMORY.md", "# Memory\n\n## Durable\nImportant durable memory.\n", 25)
+    write("60_memory/project-alpha.md", "# Project Alpha\nAlpha memory.\n", 40)
+    write("60_memory/project-beta.md", "# Project Beta\nBeta memory.\n", 45)
+    write("60_memory/intro.md", "# Intro\nIgnore this topic.\n", 50)
+    write("90_logs/automation-log.md", "# Automation Log\n\n## Runs\n- companion checked in.\n", 10)
+    write("90_logs/events.csv", "id,timestamp,event\n1,2026-03-22T11:50:00Z,summary\n", 12)
+    write("90_logs/debug.txt", "Debug log line one.\nDebug log line two.\n", 18)
+    write("unrelated.txt", "Do not include this.\n", 3)
+
+    return office
