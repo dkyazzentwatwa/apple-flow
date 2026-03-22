@@ -110,6 +110,41 @@ class TestScan:
         assert not topic_file.exists()
 
 
+class TestInit:
+    def test_stores_memory_and_interval(self, memory):
+        scanner = AmbientScanner(memory=memory, scan_interval_seconds=300.0)
+        assert scanner.memory is memory
+        assert scanner.scan_interval_seconds == 300.0
+
+    def test_default_interval(self, memory):
+        scanner = AmbientScanner(memory=memory)
+        assert scanner.scan_interval_seconds == 900.0
+
+
+class TestWriteAmbientContext:
+    def test_writes_file_with_observations(self, scanner, office):
+        scanner._write_ambient_context(["Note: Foo — Bar", "Event: Meeting at 9am [Work]"])
+        topic_file = office / "60_memory" / "ambient-context.md"
+        assert topic_file.exists()
+        content = topic_file.read_text()
+        assert "# Ambient Context" in content
+        assert "Note: Foo — Bar" in content
+        assert "Event: Meeting at 9am [Work]" in content
+
+    def test_overwrites_existing_file(self, scanner, office):
+        scanner._write_ambient_context(["Note: First"])
+        scanner._write_ambient_context(["Note: Second"])
+        topic_file = office / "60_memory" / "ambient-context.md"
+        content = topic_file.read_text()
+        assert "Note: Second" in content
+
+    def test_includes_last_updated_timestamp(self, scanner, office):
+        scanner._write_ambient_context(["Email: Hello from nobody"])
+        topic_file = office / "60_memory" / "ambient-context.md"
+        content = topic_file.read_text()
+        assert "Last Updated:" in content
+
+
 class TestRunForever:
     async def test_runs_and_stops(self, scanner):
         """Test that run_forever respects shutdown flag."""
