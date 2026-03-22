@@ -17,7 +17,7 @@ An AI reads this document and follows the numbered Recreation Steps at the end t
 2. Inbox is append-only — never hard-delete.
 3. Archive only after summarizing or categorizing.
 4. Memory updates must be factual and compact.
-5. Every automation run logs to `90_logs/automation-log.md`.
+5. Every automation run logs to `90_logs/automation-log.numbers`.
 6. Source of truth is files, not chat context.
 
 ---
@@ -35,7 +35,7 @@ An AI reads this document and follows the numbered Recreation Steps at the end t
 | `60_memory/` | Modular long-term memory | topic `.md` files | One file per memory topic, factual and compact | Session-specific or speculative notes |
 | `70_playbooks/` | SOPs and checklists | — | Repeatable operating procedures, checklists | One-off notes or daily logs |
 | `80_automation/` | Automation specs | `apple-flow-routines.md` | Automation specs, routine definitions | Manual-only process notes (use playbooks) |
-| `90_logs/` | Automation audit trail | `automation-log.md` | Timestamped run results, actions, blockers | Planning notes or durable memory |
+| `90_logs/` | Automation audit trail | `automation-log.numbers` | Timestamped run results, actions, blockers | Planning notes or durable memory |
 | `templates/` | Note templates | 7 template files | Starter templates only | Filled-in notes or live content |
 
 ---
@@ -54,14 +54,26 @@ Use this as append-only capture. Newest entries at bottom.
 ## Entries
 ```
 
-### `90_logs/automation-log.md`
-```markdown
-# Automation Log
+### `90_logs/automation-log.numbers`
+```text
+Canonical workbook:
+- Sheet: Automation
+- Table: AutomationLog
 
-## Run Format
-- YYYY-MM-DD HH:MM | schedule(hourly|daily|weekly) | action | result | notes
+Columns:
+- timestamp
+- source
+- event_type
+- status
+- summary
+- details
+- run_id
+- owner
+- notes
 
-## Runs
+Rules:
+- Append-only rows
+- No in-place edits to historical runs
 ```
 
 ### `MEMORY.md`
@@ -442,10 +454,10 @@ Follow these steps in order to rebuild the workspace from zero:
    ## Purpose
    Audit trail of automation runs and outcomes.
 
-   Canonical file: `automation-log.md`
+   Canonical file: `automation-log.numbers`
 
    ## What Goes Here
-   - `90_logs/automation-log.md` entries with timestamped run results.
+   - `90_logs/automation-log.numbers` entries with timestamped run results.
    - Concise outcomes, actions, and blockers.
 
    ## What Does Not Go Here
@@ -457,7 +469,7 @@ Follow these steps in order to rebuild the workspace from zero:
 
 4. **Create canonical files** using the verbatim initial states in the Canonical File Initial States section above:
    - `00_inbox/inbox.md`
-   - `90_logs/automation-log.md`
+   - `90_logs/automation-log.numbers`
    - `MEMORY.md`
 
 5. **Create all 7 template files** using verbatim content from the Template Contents section above:
@@ -480,7 +492,7 @@ Follow these steps in order to rebuild the workspace from zero:
 7. **Verify** the workspace matches this manifest:
    - All 10 numbered folders exist plus `templates/`.
    - Each numbered folder has an `intro.md`.
-   - `00_inbox/inbox.md`, `90_logs/automation-log.md`, and `MEMORY.md` exist with correct headers.
+   - `00_inbox/inbox.md`, `90_logs/automation-log.numbers`, and `MEMORY.md` exist with correct headers.
    - All 7 template files exist in `templates/`.
    - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `SECURITY.md`, `CONTRIBUTING.md`, `README.md`, and `SCAFFOLD.md` exist at root.
    - No live user content was overwritten.

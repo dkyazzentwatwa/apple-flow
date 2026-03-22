@@ -5,7 +5,8 @@
 
 set -euo pipefail
 
-ROOT="$PWD"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$SCRIPT_DIR"
 CREATED=()
 SKIPPED=()
 
@@ -205,11 +206,12 @@ write_if_missing "$ROOT/90_logs/intro.md" \
 ## Purpose
 Audit trail of automation runs and outcomes.
 
-Canonical file: `automation-log.md`
+Canonical file: `automation-log.numbers`
 
 ## What Goes Here
-- `90_logs/automation-log.md` entries with timestamped run results.
+- `90_logs/automation-log.numbers` entries with timestamped run results.
 - Concise outcomes, actions, and blockers.
+- `90_logs/automation-log.md` only as a legacy archive or pointer.
 
 ## What Does Not Go Here
 - Long-form planning notes or durable memory content.
@@ -233,12 +235,15 @@ Use this as append-only capture. Newest entries at bottom.
 '
 
 write_if_missing "$ROOT/90_logs/automation-log.md" \
-'# Automation Log
+'# Automation Log (Legacy)
 
-## Run Format
-- YYYY-MM-DD HH:MM | schedule(hourly|daily|weekly) | action | result | notes
+This file is a legacy archive only.
 
-## Runs
+Canonical ledger: `90_logs/automation-log.numbers`
+
+## Use
+- Read-only historical notes, if any.
+- Do not append new automation runs here.
 '
 
 write_if_missing "$ROOT/MEMORY.md" \

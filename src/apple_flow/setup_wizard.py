@@ -44,9 +44,9 @@ def validate_workspace_path(value: str) -> str | None:
     return str(path)
 
 
-def check_messages_db_access() -> tuple[bool, str]:
-    """Check whether the current terminal process can read chat.db."""
-    db_path = Path.home() / "Library" / "Messages" / "chat.db"
+def check_messages_db_access(db_path: Path | None = None) -> tuple[bool, str]:
+    """Check whether the current terminal process can read the configured Messages DB."""
+    db_path = db_path or (Path.home() / "Library" / "Messages" / "chat.db")
     if not db_path.exists():
         return False, f"Messages DB not found at {db_path}"
     try:
@@ -90,6 +90,7 @@ def generate_env(
         "apple_flow_default_workspace": workspace,
         "apple_flow_connector": connector,
         "apple_flow_codex_cli_command": connector_command if connector == "codex-cli" else "codex",
+        "apple_flow_codex_cli_model": "gpt-5.4-mini" if connector == "codex-cli" else "",
         "apple_flow_claude_cli_command": connector_command if connector == "claude-cli" else "claude",
         "apple_flow_gemini_cli_command": connector_command if connector == "gemini-cli" else "gemini",
         "apple_flow_cline_command": connector_command if connector == "cline" else "cline",

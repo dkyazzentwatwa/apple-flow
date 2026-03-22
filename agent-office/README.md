@@ -9,7 +9,7 @@ Agent Office is a structured workspace that your Apple Flow companion uses to:
 - **Remember** important facts and preferences about you (MEMORY.md)
 - **Track** daily work and priorities (daily notes)
 - **Organize** active projects (project briefs)
-- **Log** automation runs and outcomes (automation logs)
+- **Log** automation runs and outcomes in the central Numbers ledger
 - **Capture** quick thoughts and ideas (inbox)
 
 Everything stays local on your Mac. No cloud uploads, no external services.
@@ -52,7 +52,7 @@ This creates:
 - All 10 numbered folders plus `templates/`
 - Intro files explaining each folder's purpose
 - Empty templates for daily notes, project briefs, and memory entries
-- Canonical files (inbox.md, automation-log.md, MEMORY.md)
+- Canonical files (inbox.md, automation-log.numbers, MEMORY.md)
 
 ## Usage Patterns
 
@@ -67,12 +67,18 @@ This creates:
 - Memories are factual and compact
 
 ### Automation Logging
-Every automation run appends to `90_logs/automation-log.md` with:
+Every automation run appends to `90_logs/automation-log.numbers` in the `Automation` sheet / `AutomationLog` table with:
 - Timestamp
-- Schedule type (hourly/daily/weekly)
-- Action performed
-- Result
+- Source
+- Event type
+- Status
+- Summary
+- Details
+- Run ID
+- Owner
 - Notes
+
+`90_logs/automation-log.md` is legacy-only and should not receive new runs.
 
 ## Rules
 
@@ -80,7 +86,7 @@ Every automation run appends to `90_logs/automation-log.md` with:
 2. **Inbox is append-only**: Never hard-delete entries
 3. **Archive after summarizing**: Move items from active zones only after processing
 4. **Memory updates must be factual**: No speculation in memory files
-5. **Every run gets logged**: Automation appends to the log, always
+5. **Every run gets logged**: Automation appends to the workbook ledger, always
 6. **Files are the source of truth**: Not chat context
 
 ## Git

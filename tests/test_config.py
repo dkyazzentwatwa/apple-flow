@@ -9,6 +9,7 @@ def test_parse_csv_lists_from_settings_init():
     settings = RelaySettings(
         allowed_senders="+15551234567,+15550000000",
         allowed_workspaces="/Users/cypher/Public/code,/tmp/safe",
+        connector="",
     )
 
     assert settings.allowed_senders == ["+15551234567", "+15550000000"]
@@ -24,11 +25,18 @@ def test_parse_json_lists_from_settings_init():
     settings = RelaySettings(
         allowed_senders='["+15551234567"]',
         allowed_workspaces='["/Users/cypher/Public/code"]',
+        connector="",
     )
 
     assert settings.allowed_senders == ["+15551234567"]
     assert settings.allowed_workspaces == [str(Path("/Users/cypher/Public/code").resolve())]
     assert settings.get_connector_type() == "codex-cli"
+
+
+def test_codex_cli_model_defaults_to_gpt_5_4_mini(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    settings = RelaySettings()
+    assert settings.codex_cli_model == "gpt-5.4-mini"
 
 
 def test_parse_claude_tool_lists_from_settings_init():

@@ -368,6 +368,41 @@ def test_service_status_contract(capsys, monkeypatch):
     assert payload["iMessage_polling_active"] is True
 
 
+def test_service_status_uses_configured_messages_db_path(capsys, monkeypatch):
+    db_path = Path("/tmp/custom-chat.db")
+    captured: dict[str, Path] = {}
+
+    def fake_check_messages_db_access(path: Path | None = None):
+        captured["path"] = path if path is not None else Path.home() / "Library" / "Messages" / "chat.db"
+        return True, "OK"
+
+    monkeypatch.setattr(cli_control, "_launchctl_service_row", lambda _label: (True, 123))
+    monkeypatch.setattr(cli_control, "_daemon_process_detected", lambda: True)
+    monkeypatch.setattr(cli_control, "_admin_process_detected", lambda: True)
+    monkeypatch.setattr(cli_control, "_admin_health", lambda _host, _port, _token: True)
+    monkeypatch.setattr(cli_control, "check_messages_db_access", fake_check_messages_db_access)
+    monkeypatch.setattr(Path, "exists", lambda self: str(self) == str(db_path))
+    monkeypatch.setattr(
+        cli_control,
+        "RelaySettings",
+        lambda: SimpleNamespace(
+            admin_host="127.0.0.1",
+            admin_port=8787,
+            admin_api_token="token",
+            messages_db_path=db_path,
+            only_poll_allowed_senders=False,
+            allowed_senders=[],
+            startup_catchup_window_seconds=180,
+        ),
+    )
+
+    args = _args(tool_args=["status"])
+    code = cli_control.run_cli_control("service", args)
+
+    assert code == 0
+    assert captured["path"] == db_path
+
+
 def test_service_logs_returns_path_and_lines(capsys, tmp_path, monkeypatch):
     logs_dir = tmp_path / "logs"
     logs_dir.mkdir()

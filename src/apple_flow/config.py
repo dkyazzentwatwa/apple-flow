@@ -32,7 +32,7 @@ class RelaySettings(BaseSettings):
 
     codex_cli_command: str = "codex"
     codex_cli_context_window: int = 10
-    codex_cli_model: str = ""  # e.g., "gpt-5.3-codex" (empty = use codex default)
+    codex_cli_model: str = "gpt-5.4-mini"  # Pinned Codex CLI model; empty = use codex default
 
     # Connector selection.
     connector: str = ""  # "codex-cli" | "claude-cli" | "gemini-cli" | "kilo-cli" | "cline" | "ollama"

@@ -37,7 +37,7 @@ class CodexCliConnector:
             workspace: Working directory for codex exec (default: None)
             timeout: Timeout in seconds for each exec (default: 300s/5min)
             context_window: Number of recent message pairs to include as context (default: 3)
-            model: Model to use (e.g., "sonnet", "opus", "haiku"). Empty = use codex default
+            model: Model to use (e.g., "gpt-5.4-mini"). Empty = use codex default
             inject_tools_context: Prepend TOOLS_CONTEXT to prompts so AI knows apple-flow tools (default: True)
         """
         self.codex_command = codex_command
