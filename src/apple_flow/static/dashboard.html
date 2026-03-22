@@ -9,32 +9,47 @@
       :root {
         color-scheme: light;
         --bg: #f4f1ea;
+        --bg-accent: rgba(15, 118, 110, 0.12);
         --panel: #ffffff;
         --text: #15202b;
         --muted: #5b6470;
         --line: #d8d1c4;
         --accent: #0f766e;
         --accent-strong: #115e59;
-        --shadow: 0 12px 30px rgba(21, 32, 43, 0.08);
+        --shadow: 0 14px 32px rgba(21, 32, 43, 0.09);
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: radial-gradient(circle at top, #fffaf0 0, var(--bg) 45%, #e9ecef 100%);
+        font-family: "Avenir Next", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(15, 118, 110, 0.16), transparent 30%),
+          radial-gradient(circle at top right, rgba(180, 83, 9, 0.08), transparent 22%),
+          linear-gradient(180deg, #fffaf0 0%, var(--bg) 38%, #e9ecef 100%);
         color: var(--text);
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image: linear-gradient(rgba(21, 32, 43, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(21, 32, 43, 0.03) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.75), transparent 92%);
       }
       main {
         max-width: 960px;
         margin: 0 auto;
-        padding: 20px;
+        padding: 20px 20px 28px;
       }
       header {
         display: flex;
         justify-content: space-between;
-        align-items: start;
-        gap: 16px;
-        margin-bottom: 20px;
+        align-items: flex-start;
+        gap: 18px;
+        margin-bottom: 18px;
+        position: relative;
+        z-index: 1;
       }
       h1 {
         margin: 0;
@@ -42,7 +57,7 @@
         line-height: 1.05;
       }
       .subtitle {
-        margin: 8px 0 0;
+        margin: 10px 0 0;
         color: var(--muted);
         max-width: 42rem;
       }
@@ -50,6 +65,8 @@
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
+        justify-content: flex-end;
+        align-items: center;
       }
       button {
         appearance: none;
@@ -61,6 +78,12 @@
         font: inherit;
         cursor: pointer;
         box-shadow: var(--shadow);
+        transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+      }
+      button:hover { transform: translateY(-1px); }
+      button:focus-visible {
+        outline: 3px solid rgba(15, 118, 110, 0.22);
+        outline-offset: 2px;
       }
       button.primary {
         background: var(--accent);
@@ -68,25 +91,114 @@
         border-color: var(--accent);
       }
       button.primary:hover { background: var(--accent-strong); }
+      .status-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 18px 0 14px;
+        position: relative;
+        z-index: 1;
+      }
+      .stat {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 249, 243, 0.96));
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px;
+        box-shadow: var(--shadow);
+        min-height: 96px;
+      }
+      .stat label {
+        display: block;
+        color: var(--muted);
+        font-size: 0.88rem;
+        margin-bottom: 8px;
+      }
+      .stat strong {
+        display: block;
+        font-size: 1.2rem;
+        line-height: 1.15;
+        margin-bottom: 4px;
+      }
+      .stat span {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
       .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 14px;
+        position: relative;
+        z-index: 1;
       }
       .card {
-        background: var(--panel);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 246, 239, 0.96));
         border: 1px solid var(--line);
         border-radius: 18px;
         padding: 16px;
         box-shadow: var(--shadow);
       }
+      .section-card {
+        width: 100%;
+        text-align: left;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.96);
+        padding: 16px;
+        box-shadow: none;
+      }
+      .section-card.is-active {
+        border-color: rgba(15, 118, 110, 0.55);
+        box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.08);
+      }
       .card h2 {
         margin: 0 0 8px;
         font-size: 1rem;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
       }
       .muted { color: var(--muted); }
+      .section-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 6px 10px;
+        background: rgba(15, 118, 110, 0.08);
+        color: var(--accent-strong);
+        font-size: 0.84rem;
+      }
+      .detail-panel {
+        margin-top: 14px;
+      }
+      .detail-panel ul {
+        margin: 10px 0 0;
+        padding-left: 20px;
+      }
+      .detail-panel li {
+        margin-bottom: 8px;
+      }
+      .timeline {
+        margin-top: 10px;
+        display: grid;
+        gap: 8px;
+      }
+      .timeline div {
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: rgba(15, 118, 110, 0.06);
+      }
       .status {
         margin-top: 16px;
+        position: relative;
+        z-index: 1;
       }
       .status pre {
         margin: 0;
@@ -95,9 +207,20 @@
         font-size: 0.95rem;
         line-height: 1.45;
       }
+      .loading {
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.72; }
+        50% { opacity: 1; }
+      }
       @media (max-width: 640px) {
-        main { padding: 16px; }
+        main { padding: 16px 16px 24px; }
         header { flex-direction: column; }
+        .actions { width: 100%; justify-content: stretch; }
+        .actions button { flex: 1 1 0; }
+        .status-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .grid { grid-template-columns: 1fr; }
       }
     </style>
   </head>
@@ -117,37 +240,86 @@
         </div>
       </header>
 
-      <section class="grid" aria-label="Dashboard summary">
-        <article class="card">
-          <h2>Runtime</h2>
-          <div id="runtime-summary" class="muted">Loading summary...</div>
+      <section class="status-row" aria-label="Runtime status">
+        <article class="stat">
+          <label>Runtime</label>
+          <strong id="runtime-status" class="loading">Loading</strong>
+          <span id="runtime-summary">Pending approvals and health summary.</span>
         </article>
-        <article class="card">
-          <h2>Companion</h2>
-          <div id="companion-summary" class="muted">Loading summary...</div>
+        <article class="stat">
+          <label>Companion</label>
+          <strong id="companion-status" class="loading">Loading</strong>
+          <span id="companion-summary">Mute state and last activity.</span>
         </article>
-        <article class="card">
-          <h2>Inbox</h2>
-          <div id="inbox-summary" class="muted">Loading summary...</div>
+        <article class="stat">
+          <label>Inbox</label>
+          <strong id="inbox-status" class="loading">Loading</strong>
+          <span id="inbox-summary">Current triage load.</span>
         </article>
-        <article class="card">
-          <h2>Memory</h2>
-          <div id="memory-summary" class="muted">Loading summary...</div>
+        <article class="stat">
+          <label>Memory</label>
+          <strong id="memory-status" class="loading">Loading</strong>
+          <span id="memory-summary">Durable notes and topics.</span>
         </article>
       </section>
 
+      <section class="grid" aria-label="Dashboard sections">
+        <button class="section-card" type="button" data-section="runtime">
+          <h2>Runtime <span class="pill">Health</span></h2>
+          <div class="muted">Pending approvals, loop health, and watch status.</div>
+        </button>
+        <button class="section-card" type="button" data-section="companion">
+          <h2>Companion <span class="pill">Signals</span></h2>
+          <div class="muted">Mute state, last send, and proactive counters.</div>
+        </button>
+        <button class="section-card" type="button" data-section="inbox">
+          <h2>Inbox <span class="pill">Triage</span></h2>
+          <div class="muted">Unchecked items and the latest inbox snapshot.</div>
+        </button>
+        <button class="section-card" type="button" data-section="daily">
+          <h2>Daily Note <span class="pill">Today</span></h2>
+          <div class="muted">Today's note and morning briefing preview.</div>
+        </button>
+        <button class="section-card" type="button" data-section="memory">
+          <h2>Memory <span class="pill">Context</span></h2>
+          <div class="muted">Durable memory and recent topic files.</div>
+        </button>
+        <button class="section-card" type="button" data-section="recent">
+          <h2>Recent Files <span class="pill">Ops</span></h2>
+          <div class="muted">Outputs, resources, and logs at a glance.</div>
+        </button>
+      </section>
+
+      <section class="card detail-panel" aria-label="Selected section detail">
+        <h2>
+          <span id="detail-title">Live Summary</span>
+          <span class="pill" id="detail-count">Waiting</span>
+        </h2>
+        <div id="section-detail" class="muted">Waiting for data from <code>/dashboard/api/summary</code>...</div>
+      </section>
+
       <section class="card status" aria-label="Raw summary">
-        <h2>Live Summary</h2>
+        <h2>Raw Summary</h2>
         <pre id="summary-json">Waiting for data from <code>/dashboard/api/summary</code>...</pre>
       </section>
     </main>
 
     <script>
       const summaryJson = document.getElementById("summary-json");
+      const runtimeStatus = document.getElementById("runtime-status");
       const runtimeSummary = document.getElementById("runtime-summary");
+      const companionStatus = document.getElementById("companion-status");
       const companionSummary = document.getElementById("companion-summary");
+      const inboxStatus = document.getElementById("inbox-status");
       const inboxSummary = document.getElementById("inbox-summary");
+      const memoryStatus = document.getElementById("memory-status");
       const memorySummary = document.getElementById("memory-summary");
+      const detailTitle = document.getElementById("detail-title");
+      const detailCount = document.getElementById("detail-count");
+      const sectionDetail = document.getElementById("section-detail");
+      const sectionButtons = Array.from(document.querySelectorAll(".section-card"));
+      let dashboardSummary = null;
+      let activeSection = "runtime";
 
       async function postJson(path) {
         const response = await fetch(path, { method: "POST", credentials: "same-origin" });
@@ -155,18 +327,121 @@
         return response.json();
       }
 
+      function setActiveSection(section) {
+        activeSection = section;
+        sectionButtons.forEach((button) => {
+          button.classList.toggle("is-active", button.dataset.section === section);
+        });
+      }
+
+      function escapeHtml(text) {
+        return String(text)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function renderEntries(items) {
+        if (!items || !items.length) {
+          return '<div class="muted">No files in this section right now.</div>';
+        }
+        return `<div class="timeline">${items.map((item) => `
+          <div>
+            <strong>${escapeHtml(item.name)}</strong>
+            <div class="muted">${escapeHtml(item.modified_at || "n/a")} · ${escapeHtml(item.size_bytes ?? "")} bytes</div>
+            <div>${escapeHtml(item.preview || "No preview available.")}</div>
+          </div>
+        `).join("")}</div>`;
+      }
+
+      function renderSection(section) {
+        if (!dashboardSummary) return;
+        const sections = {
+          runtime: {
+            title: "Runtime",
+            count: `${dashboardSummary.runtime.pending_approvals_count} approvals`,
+            html: `
+              <div><strong>Pending approvals:</strong> ${dashboardSummary.runtime.pending_approvals_count}</div>
+              <div><strong>Status:</strong> ${dashboardSummary.runtime.pending_approvals_count === 0 ? "quiet" : "active"}</div>
+            `,
+          },
+          companion: {
+            title: "Companion",
+            count: dashboardSummary.companion.muted ? "Muted" : "Live",
+            html: `
+              <div><strong>Muted:</strong> ${dashboardSummary.companion.muted ? "yes" : "no"}</div>
+              <div><strong>Last check:</strong> ${escapeHtml(dashboardSummary.companion.last_check_at || "n/a")}</div>
+              <div><strong>Last sent:</strong> ${escapeHtml(dashboardSummary.companion.last_sent_at || "n/a")}</div>
+              <div><strong>Skip reason:</strong> ${escapeHtml(dashboardSummary.companion.skip_reason || "none")}</div>
+              <div><strong>Hourly count:</strong> ${escapeHtml(dashboardSummary.companion.proactive_hour_count)}</div>
+            `,
+          },
+          inbox: {
+            title: "Inbox",
+            count: `${dashboardSummary.inbox.unchecked_count} unchecked`,
+            html: `
+              <div><strong>Unchecked items:</strong> ${dashboardSummary.inbox.unchecked_count}</div>
+              <div class="muted">${escapeHtml(dashboardSummary.inbox.preview || "No inbox preview available.")}</div>
+            `,
+          },
+          daily: {
+            title: "Daily Note",
+            count: dashboardSummary.daily.today_exists ? "Today exists" : "Missing",
+            html: `
+              <div><strong>Today exists:</strong> ${dashboardSummary.daily.today_exists ? "yes" : "no"}</div>
+              <div><strong>Path:</strong> ${escapeHtml(dashboardSummary.daily.today_path)}</div>
+              <div class="muted">${escapeHtml(dashboardSummary.daily.preview || "No daily note preview available.")}</div>
+            `,
+          },
+          memory: {
+            title: "Memory",
+            count: `${dashboardSummary.memory.topic_count} topics`,
+            html: `
+              <div><strong>Topic count:</strong> ${dashboardSummary.memory.topic_count}</div>
+              <div class="muted">${escapeHtml(dashboardSummary.memory.preview || "No memory preview available.")}</div>
+              ${renderEntries(dashboardSummary.memory.topics)}
+            `,
+          },
+          recent: {
+            title: "Recent Files",
+            count: "3 buckets",
+            html: `
+              <div><strong>Outputs</strong>${renderEntries(dashboardSummary.recent.outputs)}</div>
+              <div style="margin-top: 12px;"><strong>Resources</strong>${renderEntries(dashboardSummary.recent.resources)}</div>
+              <div style="margin-top: 12px;"><strong>Logs</strong>${renderEntries(dashboardSummary.recent.logs)}</div>
+            `,
+          },
+        };
+        const selected = sections[section] || sections.runtime;
+        detailTitle.textContent = selected.title;
+        detailCount.textContent = selected.count;
+        sectionDetail.innerHTML = selected.html;
+        setActiveSection(section in sections ? section : "runtime");
+      }
+
       async function loadSummary() {
         const response = await fetch("/dashboard/api/summary", { credentials: "same-origin" });
         if (!response.ok) {
           summaryJson.textContent = `Failed to load summary (${response.status})`;
+          runtimeStatus.textContent = "Error";
+          companionStatus.textContent = "Error";
+          inboxStatus.textContent = "Error";
+          memoryStatus.textContent = "Error";
           return;
         }
-        const summary = await response.json();
-        summaryJson.textContent = JSON.stringify(summary, null, 2);
-        runtimeSummary.textContent = `Pending approvals: ${summary.runtime.pending_approvals_count}`;
-        companionSummary.textContent = `Muted: ${summary.companion.muted ? "yes" : "no"} | Last check: ${summary.companion.last_check_at || "n/a"}`;
-        inboxSummary.textContent = `Unchecked items: ${summary.inbox.unchecked_count}`;
-        memorySummary.textContent = `Memory topics: ${summary.memory.topic_count}`;
+        dashboardSummary = await response.json();
+        summaryJson.textContent = JSON.stringify(dashboardSummary, null, 2);
+        runtimeStatus.textContent = `${dashboardSummary.runtime.pending_approvals_count}`;
+        companionStatus.textContent = dashboardSummary.companion.muted ? "Muted" : "Live";
+        inboxStatus.textContent = `${dashboardSummary.inbox.unchecked_count}`;
+        memoryStatus.textContent = `${dashboardSummary.memory.topic_count}`;
+        runtimeSummary.textContent = `Pending approvals: ${dashboardSummary.runtime.pending_approvals_count}`;
+        companionSummary.textContent = `Muted: ${dashboardSummary.companion.muted ? "yes" : "no"} | Last check: ${dashboardSummary.companion.last_check_at || "n/a"}`;
+        inboxSummary.textContent = `Unchecked items: ${dashboardSummary.inbox.unchecked_count}`;
+        memorySummary.textContent = `Memory topics: ${dashboardSummary.memory.topic_count}`;
+        renderSection(activeSection);
       }
 
       document.getElementById("refresh-button").addEventListener("click", loadSummary);
@@ -178,8 +453,12 @@
         await postJson("/dashboard/api/companion/unmute");
         await loadSummary();
       });
+      sectionButtons.forEach((button) => {
+        button.addEventListener("click", () => renderSection(button.dataset.section));
+      });
 
       loadSummary();
+      setInterval(loadSummary, 30000);
     </script>
   </body>
 </html>

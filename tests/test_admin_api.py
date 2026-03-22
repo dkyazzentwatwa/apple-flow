@@ -177,10 +177,14 @@ def test_dashboard_shell_serves_html(monkeypatch, tmp_path):
     assert "text/html" in response.headers["content-type"]
     body = response.text
     assert "Agent Office Dashboard" in body
+    assert 'id="runtime-status"' in body
+    assert 'data-section="inbox"' in body
+    assert 'data-section="memory"' in body
     assert "/dashboard/api/summary" in body
     assert "refresh-button" in body
     assert "mute-button" in body
     assert "unmute-button" in body
+    assert "section-detail" in body
     assert "secret-token" not in body
 
     summary_response = client.get("/dashboard/api/summary")
