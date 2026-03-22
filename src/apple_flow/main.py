@@ -164,6 +164,22 @@ def build_app(store: Any | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="dashboard section not found") from exc
 
+    @app.post("/dashboard/api/companion/mute", dependencies=[Depends(verify_token)])
+    def dashboard_companion_mute() -> dict[str, Any]:
+        if hasattr(app.state.store, "set_state"):
+            app.state.store.set_state("companion_muted", "true")
+        else:
+            raise HTTPException(status_code=500, detail="store does not support state updates")
+        return {"companion_muted": True}
+
+    @app.post("/dashboard/api/companion/unmute", dependencies=[Depends(verify_token)])
+    def dashboard_companion_unmute() -> dict[str, Any]:
+        if hasattr(app.state.store, "set_state"):
+            app.state.store.set_state("companion_muted", "false")
+        else:
+            raise HTTPException(status_code=500, detail="store does not support state updates")
+        return {"companion_muted": False}
+
     # --- Feature 4: Siri Shortcuts / Programmatic Task Submission ---
 
     @app.post("/task", dependencies=[Depends(verify_token)])

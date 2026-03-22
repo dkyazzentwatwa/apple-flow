@@ -38,6 +38,9 @@ class InMemoryStore:
     def get_state(self, key):
         return self._state.get(key)
 
+    def set_state(self, key, value):
+        self._state[key] = value
+
 
 def _write_agent_office_fixture(office: Path) -> None:
     (office / "00_inbox").mkdir(parents=True, exist_ok=True)
@@ -147,3 +150,38 @@ def test_dashboard_summary_and_section_expose_agent_office_state(monkeypatch, tm
     section = section_response.json()
     assert section["section"] == "inbox"
     assert section["data"]["unchecked_count"] == 1
+
+
+def test_dashboard_companion_actions_require_auth(monkeypatch, tmp_path):
+    office = tmp_path / "agent-office"
+    _write_agent_office_fixture(office)
+    monkeypatch.setenv("apple_flow_admin_api_token", "secret-token")
+    monkeypatch.setenv("apple_flow_soul_file", str(office / "SOUL.md"))
+
+    app = build_app(store=InMemoryStore())
+    client = TestClient(app)
+
+    assert client.post("/dashboard/api/companion/mute").status_code == 401
+    assert client.post("/dashboard/api/companion/unmute").status_code == 401
+
+
+def test_dashboard_companion_actions_toggle_store_state(monkeypatch, tmp_path):
+    office = tmp_path / "agent-office"
+    _write_agent_office_fixture(office)
+    monkeypatch.setenv("apple_flow_admin_api_token", "secret-token")
+    monkeypatch.setenv("apple_flow_soul_file", str(office / "SOUL.md"))
+
+    store = InMemoryStore()
+    app = build_app(store=store)
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer secret-token"}
+
+    mute_response = client.post("/dashboard/api/companion/mute", headers=headers)
+    assert mute_response.status_code == 200
+    assert mute_response.json() == {"companion_muted": True}
+    assert store.get_state("companion_muted") == "true"
+
+    unmute_response = client.post("/dashboard/api/companion/unmute", headers=headers)
+    assert unmute_response.status_code == 200
+    assert unmute_response.json() == {"companion_muted": False}
+    assert store.get_state("companion_muted") == "false"
