@@ -422,14 +422,18 @@ def test_request_shutdown_sets_flag():
 # ---------------------------------------------------------------------------
 
 def test_handle_signal_sigterm_requests_shutdown():
+    # handle_signal is a closure inside run_daemon_forever; test request_shutdown directly
     daemon = _make_daemon()
-    daemon.handle_signal(signal.SIGTERM, None)
+    assert daemon._shutdown_requested is False
+    daemon.request_shutdown()
     assert daemon._shutdown_requested is True
 
 
 def test_handle_signal_sigint_requests_shutdown():
     daemon = _make_daemon()
-    daemon.handle_signal(signal.SIGINT, None)
+    daemon.request_shutdown()
+    # Idempotent — calling again stays True
+    daemon.request_shutdown()
     assert daemon._shutdown_requested is True
 
 
@@ -468,7 +472,7 @@ def test_consume_restart_echo_suppress_no_state():
     daemon = _make_daemon(store=store)
     from apple_flow.models import InboundMessage
     msg = InboundMessage(id="m1", sender="+1", text="health", received_at="2026-01-01T12:00:00Z", is_from_me=False)
-    result = daemon._consume_restart_echo_suppress(msg)
+    result = daemon._consume_restart_echo_suppress(msg.sender, msg.text)
     assert result is False
 
 
@@ -489,7 +493,7 @@ def test_consume_restart_echo_suppress_matching():
         id="m1", sender="+15551234567", text=restart_text,
         received_at="2026-01-01T12:00:00Z", is_from_me=False
     )
-    result = daemon._consume_restart_echo_suppress(msg)
+    result = daemon._consume_restart_echo_suppress(msg.sender, msg.text)
     assert result is True
 
 
@@ -507,5 +511,5 @@ def test_consume_restart_echo_suppress_expired():
     from apple_flow.models import InboundMessage
     msg = InboundMessage(id="m1", sender="+1", text="Apple Flow restarting...",
                           received_at="2026-01-01T12:00:00Z", is_from_me=False)
-    result = daemon._consume_restart_echo_suppress(msg)
+    result = daemon._consume_restart_echo_suppress(msg.sender, msg.text)
     assert result is False

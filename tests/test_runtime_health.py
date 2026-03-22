@@ -276,5 +276,8 @@ def test_summarize_watchdog_no_degraded_reasons_shown_when_healthy():
     watchdog = daemon_watchdog_payload(healthy=True, degraded_reasons=[])
     store = FakeStore({daemon_watchdog_state_key(): watchdog})
     lines = summarize_runtime_health_lines(store)
-    # No reason string should be prepended
-    assert " | " not in lines[0].split("Runtime: OK")[1].split("inflight")[0]
+    assert lines[0].startswith("Runtime: OK")
+    assert "DEGRADED" not in lines[0]
+    # Between "Runtime: OK" and "inflight" only the separator appears (no reason text)
+    between = lines[0].split("Runtime: OK")[1].split("inflight")[0]
+    assert between.strip() == "|"

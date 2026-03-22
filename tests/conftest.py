@@ -185,6 +185,14 @@ class FakeStore:
     def list_pending_approvals(self) -> list[dict[str, Any]]:
         return [a for a in self.approvals.values() if a.get("status") == "pending"]
 
+    def deny_all_approvals(self) -> int:
+        count = 0
+        for a in self.approvals.values():
+            if a.get("status") == "pending":
+                a["status"] = "denied"
+                count += 1
+        return count
+
     def create_event(
         self, event_id: str, run_id: str, step: str, event_type: str, payload: dict[str, Any]
     ) -> None:

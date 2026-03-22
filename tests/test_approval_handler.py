@@ -648,8 +648,8 @@ def test_checkpoint_run_creates_approval():
         previous_request_id="req_1",
     )
 
-    # Should have created a new approval
-    assert len(store.list_pending_approvals()) == 1  # old is still pending, new is pending
+    # Should have created a new approval (old req_1 is still pending + new checkpoint approval)
+    assert len(store.list_pending_approvals()) == 2
     assert new_req_id.startswith("req_")
     assert "paused" in message.lower()
     assert new_req_id in message

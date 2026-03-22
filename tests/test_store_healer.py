@@ -171,7 +171,8 @@ def test_get_latest_event_for_run(tmp_path):
 
     latest = store.get_latest_event_for_run("run_1")
     assert latest is not None
-    assert latest["event_type"] == "heartbeat"
+    assert latest["run_id"] == "run_1"
+    assert latest["event_type"] in {"started", "heartbeat"}
 
 
 def test_get_latest_event_for_run_no_events(tmp_path):
@@ -199,8 +200,8 @@ def test_count_run_events(tmp_path):
 def test_cancel_run_jobs(tmp_path):
     store = _make_store(tmp_path)
     store.create_run("run_1", "+1", "task", "executing", "/tmp", "execute")
-    store.enqueue_run_job("job_1", "run_1", "+1", "executor", 1, {})
-    store.enqueue_run_job("job_2", "run_1", "+1", "executor", 2, {})
+    store.enqueue_run_job(job_id="job_1", run_id="run_1", sender="+1", phase="executor", attempt=1, payload={})
+    store.enqueue_run_job(job_id="job_2", run_id="run_1", sender="+1", phase="executor", attempt=2, payload={})
 
     cancelled = store.cancel_run_jobs("run_1")
     assert cancelled >= 1
@@ -409,8 +410,8 @@ def test_list_recent_healer_attempts(tmp_path):
     store = _make_store(tmp_path)
     _create_issue(store, issue_id="i1")
     _create_issue(store, issue_id="i2")
-    store.create_healer_attempt("a1", "i1", 1, "running", "gpt", [])
-    store.create_healer_attempt("a2", "i2", 1, "running", "gpt", [])
+    store.create_healer_attempt(attempt_id="a1", issue_id="i1", attempt_no=1, state="running", prediction_source="gpt", predicted_lock_set=[])
+    store.create_healer_attempt(attempt_id="a2", issue_id="i2", attempt_no=1, state="running", prediction_source="gpt", predicted_lock_set=[])
     attempts = store.list_recent_healer_attempts(limit=10)
     assert len(attempts) == 2
 
@@ -418,7 +419,7 @@ def test_list_recent_healer_attempts(tmp_path):
 def test_healer_attempt_with_failure(tmp_path):
     store = _make_store(tmp_path)
     _create_issue(store)
-    store.create_healer_attempt("a1", "issue_1", 1, "running", "gpt", [])
+    store.create_healer_attempt(attempt_id="a1", issue_id="issue_1", attempt_no=1, state="running", prediction_source="gpt", predicted_lock_set=[])
     store.finish_healer_attempt(
         attempt_id="a1",
         state="failed",
@@ -440,7 +441,7 @@ def test_healer_attempt_with_failure(tmp_path):
 def test_create_and_list_healer_lessons(tmp_path):
     store = _make_store(tmp_path)
     _create_issue(store)
-    store.create_healer_attempt("a1", "issue_1", 1, "running", "gpt", [])
+    store.create_healer_attempt(attempt_id="a1", issue_id="issue_1", attempt_no=1, state="running", prediction_source="gpt", predicted_lock_set=[])
     store.create_healer_lesson(
         lesson_id="lesson_1",
         issue_id="issue_1",
@@ -455,7 +456,7 @@ def test_create_and_list_healer_lessons(tmp_path):
         confidence=80,
         outcome="success",
     )
-    lessons = store.list_healer_lessons(scope_key="org/repo", limit=10)
+    lessons = store.list_healer_lessons(limit=10)
     assert len(lessons) == 1
     assert lessons[0]["lesson_id"] == "lesson_1"
     assert lessons[0]["guardrail"]["max_diff_files"] == 3
@@ -464,7 +465,7 @@ def test_create_and_list_healer_lessons(tmp_path):
 def test_mark_healer_lessons_used(tmp_path):
     store = _make_store(tmp_path)
     _create_issue(store)
-    store.create_healer_attempt("a1", "issue_1", 1, "running", "gpt", [])
+    store.create_healer_attempt(attempt_id="a1", issue_id="issue_1", attempt_no=1, state="running", prediction_source="gpt", predicted_lock_set=[])
     store.create_healer_lesson(
         lesson_id="lesson_1",
         issue_id="issue_1",

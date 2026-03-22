@@ -320,7 +320,8 @@ def test_build_prompt_with_soul():
     connector.set_soul_prompt("You are helpful.")
     prompt = connector._build_prompt_with_context("+15551234567", "hello")
     assert prompt.startswith("You are helpful.")
-    assert "New message:\nhello" in prompt
+    # Without history or tools context, message is appended directly (no "New message:" prefix)
+    assert "hello" in prompt
 
 
 def test_build_prompt_with_history():

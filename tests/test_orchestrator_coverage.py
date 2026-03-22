@@ -122,7 +122,11 @@ def test_deny_all_with_no_pending():
 # ---------------------------------------------------------------------------
 
 def test_handle_history_no_messages():
-    store = FakeStore()
+    class EmptyHistoryStore(FakeStore):
+        def recent_messages(self, sender, limit=10):
+            return []
+
+    store = EmptyHistoryStore()
     orch = _make_orchestrator(store=store)
 
     result = orch.handle_message(_msg("history:"))
