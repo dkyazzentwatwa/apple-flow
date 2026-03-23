@@ -15,6 +15,19 @@ Control AI from iMessage, Mail, Reminders, Notes, and Calendar on macOS.
 
 </div>
 
+**Translated READMEs:**
+- [日本語 (Japanese)](translations/README.jp.md)
+- [Español (Spanish)](translations/README.es.md)
+- [Français (French)](translations/README.fr.md)
+- [Deutsch (German)](translations/README.de.md)
+- [简体中文 (Simplified Chinese)](translations/README.zh-Hans.md)
+- [العربية (Arabic)](translations/README.ar.md)
+- [Русский (Russian)](translations/README.ru.md)
+- [Kiswahili (Swahili)](translations/README.sw.md)
+- [Yorùbá (Yoruba)](translations/README.yo.md)
+- [Hausa (Hausa)](translations/README.ha.md)
+- [አማርኛ (Amharic)](translations/README.am.md)
+
 Apple Flow is a local-first macOS daemon that bridges Apple apps to AI CLIs (Codex, Claude, Gemini, Cline, and Kilo). It enforces sender allowlists, approval gates for mutating work, and workspace restrictions by default.
 
 ## Screenshots

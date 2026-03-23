@@ -213,6 +213,7 @@ For behavior changes, run `pytest -q` before considering the change complete. Ad
 - [SECURITY.md](../SECURITY.md)
 - [CONTRIBUTING.md](../CONTRIBUTING.md)
 - [CHANGELOG.md](../CHANGELOG.md)
+- [Translated READMEs](../translations/)
 
 ## Not Applicable To This Project
 
