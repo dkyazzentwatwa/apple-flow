@@ -21,29 +21,29 @@ Apple Flow是一个本地优先的macOS守护程序，它将Apple应用程序连
 
 | 仪表板 | 任务管理 |
 |---|---|
-| ![Apple Flow 仪表板](docs/screenshots/dashboard.png) | ![Apple Flow 任务管理](docs/screenshots/task-management.png) |
+| ![Apple Flow 仪表板](../docs/screenshots/dashboard.png) | ![Apple Flow 任务管理](../docs/screenshots/task-management.png) |
 
 | AI策略日志 | 日历事件 |
 |---|---|
-| ![Apple Flow AI策略日志](docs/screenshots/ai-policy-log.png) | ![Apple Flow 日历事件](docs/screenshots/calendar-event.png) |
+| ![Apple Flow AI策略日志](../docs/screenshots/ai-policy-log.png) | ![Apple Flow 日历事件](../docs/screenshots/calendar-event.png) |
 
 | 办公室头脑风暴 |
 |---|
-| ![Apple Flow 办公室头脑风暴](docs/screenshots/office-brainstorm.png) |
+| ![Apple Flow 办公室头脑风暴](../docs/screenshots/office-brainstorm.png) |
 
 ### 仪表板应用程序
 
 | 入门 1 | 入门 2 |
 |---|---|
-| ![Apple Flow 入门步骤 1](docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow 入门步骤 2](docs/screenshots/onboarding-apple-flow2.png) |
+| ![Apple Flow 入门步骤 1](../docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow 入门步骤 2](../docs/screenshots/onboarding-apple-flow2.png) |
 
 | 入门 3 | 入门 4 |
 |---|---|
-| ![Apple Flow 入门步骤 3](docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow 入门步骤 4](docs/screenshots/onboarding-apple-flow4.png) |
+| ![Apple Flow 入门步骤 3](../docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow 入门步骤 4](../docs/screenshots/onboarding-apple-flow4.png) |
 
 | 设置配置 | 入门错误 |
 |---|---|
-| ![Apple Flow 应用程序设置配置](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Apple Flow 入门错误屏幕](docs/screenshots/apple-flow-onboarding-error..png) |
+| ![Apple Flow 应用程序设置配置](../docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Apple Flow 入门错误屏幕](../docs/screenshots/apple-flow-onboarding-error..png) |
 
 ## 亮点 (快速阅读)
 

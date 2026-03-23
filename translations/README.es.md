@@ -21,29 +21,29 @@ Apple Flow es un demonio de macOS local que conecta las aplicaciones de Apple a 
 
 | Panel de control | Gestión de tareas |
 |---|---|
-| ![Panel de control de Apple Flow](docs/screenshots/dashboard.png) | ![Gestión de tareas de Apple Flow](docs/screenshots/task-management.png) |
+| ![Panel de control de Apple Flow](../docs/screenshots/dashboard.png) | ![Gestión de tareas de Apple Flow](../docs/screenshots/task-management.png) |
 
 | Registro de política de IA | Evento del calendario |
 |---|---|
-| ![Registro de política de IA de Apple Flow](docs/screenshots/ai-policy-log.png) | ![Evento del calendario de Apple Flow](docs/screenshots/calendar-event.png) |
+| ![Registro de política de IA de Apple Flow](../docs/screenshots/ai-policy-log.png) | ![Evento del calendario de Apple Flow](../docs/screenshots/calendar-event.png) |
 
 | Lluvia de ideas en la oficina |
 |---|
-| ![Lluvia de ideas en la oficina de Apple Flow](docs/screenshots/office-brainstorm.png) |
+| ![Lluvia de ideas en la oficina de Apple Flow](../docs/screenshots/office-brainstorm.png) |
 
 ### Aplicación de panel de control
 
 | Incorporación 1 | Incorporación 2 |
 |---|---|
-| ![Paso 1 de incorporación de Apple Flow](docs/screenshots/onboarding-apple-flow1.png) | ![Paso 2 de incorporación de Apple Flow](docs/screenshots/onboarding-apple-flow2.png) |
+| ![Paso 1 de incorporación de Apple Flow](../docs/screenshots/onboarding-apple-flow1.png) | ![Paso 2 de incorporación de Apple Flow](../docs/screenshots/onboarding-apple-flow2.png) |
 
 | Incorporación 3 | Incorporación 4 |
 |---|---|
-| ![Paso 3 de incorporación de Apple Flow](docs/screenshots/onboarding-apple-flow3.png) | ![Paso 4 de incorporación de Apple Flow](docs/screenshots/onboarding-apple-flow4.png) |
+| ![Paso 3 de incorporación de Apple Flow](../docs/screenshots/onboarding-apple-flow3.png) | ![Paso 4 de incorporación de Apple Flow](../docs/screenshots/onboarding-apple-flow4.png) |
 
 | Configuración de la instalación | Error de incorporación |
 |---|---|
-| ![Configuración de la instalación de la aplicación Apple Flow](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Pantalla de error de incorporación de Apple Flow](docs/screenshots/apple-flow-onboarding-error..png) |
+| ![Configuración de la instalación de la aplicación Apple Flow](../docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Pantalla de error de incorporación de Apple Flow](../docs/screenshots/apple-flow-onboarding-error..png) |
 
 ## Destacados (lectura rápida)
 

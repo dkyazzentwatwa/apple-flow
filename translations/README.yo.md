@@ -21,29 +21,29 @@ Apple Flow jẹ daemon macOS ti o fẹran agbegbe agbegbe, ti o so awọn ohun e
 
 | Dasibodu | Iṣakoso Iṣẹ-ṣiṣe |
 |---|---|
-| ![Dasibodu Apple Flow](docs/screenshots/dashboard.png) | ![Iṣakoso Iṣẹ-ṣiṣe Apple Flow](docs/screenshots/task-management.png) |
+| ![Dasibodu Apple Flow](../docs/screenshots/dashboard.png) | ![Iṣakoso Iṣẹ-ṣiṣe Apple Flow](../docs/screenshots/task-management.png) |
 
 | Àkọsílẹ̀ Òfin AI | Ìṣẹ̀lẹ̀ Kàlẹ́ńdà |
 |---|---|
-| ![Àkọsílẹ̀ Òfin AI Apple Flow](docs/screenshots/ai-policy-log.png) | ![Ìṣẹ̀lẹ̀ Kàlẹ́ńdà Apple Flow](docs/screenshots/calendar-event.png) |
+| ![Àkọsílẹ̀ Òfin AI Apple Flow](../docs/screenshots/ai-policy-log.png) | ![Ìṣẹ̀lẹ̀ Kàlẹ́ńdà Apple Flow](../docs/screenshots/calendar-event.png) |
 
 | Àròkọ Ọ́fíìsì |
 |---|
-| ![Àròkọ Ọ́fíìsì Apple Flow](docs/screenshots/office-brainstorm.png) |
+| ![Àròkọ Ọ́fíìsì Apple Flow](../docs/screenshots/office-brainstorm.png) |
 
 ### Ìfilọ́lẹ̀ Dasibodu
 
 | Ìfúnlápá 1 | Ìfúnlápá 2 |
 |---|---|
-| ![Ìfúnlápá Apple Flow ìgbésẹ̀ 1](docs/screenshots/onboarding-apple-flow1.png) | ![Ìfúnlápá Apple Flow ìgbésẹ̀ 2](docs/screenshots/onboarding-apple-flow2.png) |
+| ![Ìfúnlápá Apple Flow ìgbésẹ̀ 1](../docs/screenshots/onboarding-apple-flow1.png) | ![Ìfúnlápá Apple Flow ìgbésẹ̀ 2](../docs/screenshots/onboarding-apple-flow2.png) |
 
 | Ìfúnlápá 3 | Ìfúnlápá 4 |
 |---|---|
-| ![Ìfúnlápá Apple Flow ìgbésẹ̀ 3](docs/screenshots/onboarding-apple-flow3.png) | ![Ìfúnlápá Apple Flow ìgbésẹ̀ 4](docs/screenshots/onboarding-apple-flow4.png) |
+| ![Ìfúnlápá Apple Flow ìgbésẹ̀ 3](../docs/screenshots/onboarding-apple-flow3.png) | ![Ìfúnlápá Apple Flow ìgbésẹ̀ 4](../docs/screenshots/onboarding-apple-flow4.png) |
 
 | Ìṣètò Ìfiwọlé | Àṣìṣe Ìfúnlápá |
 |---|---|
-| ![Ìṣètò Ìfiwọlé ìfilọ́lẹ̀ Apple Flow](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Àṣìṣe ìfúnlápá Apple Flow](docs/screenshots/apple-flow-onboarding-error..png) |
+| ![Ìṣètò Ìfiwọlé ìfilọ́lẹ̀ Apple Flow](../docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Àṣìṣe ìfúnlápá Apple Flow](../docs/screenshots/apple-flow-onboarding-error..png) |
 
 ## Awọn akọkọ (Kika Iyara)
 

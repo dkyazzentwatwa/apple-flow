@@ -21,29 +21,29 @@ Apple Flow هو برنامج خفي (daemon) يعمل على نظام macOS، و
 
 | لوحة التحكم | إدارة المهام |
 |---|---|
-| ![لوحة تحكم Apple Flow](docs/screenshots/dashboard.png) | ![إدارة المهام في Apple Flow](docs/screenshots/task-management.png) |
+| ![لوحة تحكم Apple Flow](../docs/screenshots/dashboard.png) | ![إدارة المهام في Apple Flow](../docs/screenshots/task-management.png) |
 
 | سجل سياسة الذكاء الاصطناعي | حدث التقويم |
 |---|---|
-| ![سجل سياسة الذكاء الاصطناعي في Apple Flow](docs/screenshots/ai-policy-log.png) | ![حدث التقويم في Apple Flow](docs/screenshots/calendar-event.png) |
+| ![سجل سياسة الذكاء الاصطناعي في Apple Flow](../docs/screenshots/ai-policy-log.png) | ![حدث التقويم في Apple Flow](../docs/screenshots/calendar-event.png) |
 
 | عصف ذهني مكتبي |
 |---|
-| ![عصف ذهني مكتبي في Apple Flow](docs/screenshots/office-brainstorm.png) |
+| ![عصف ذهني مكتبي في Apple Flow](../docs/screenshots/office-brainstorm.png) |
 
 ### تطبيق لوحة التحكم
 
 | الإعداد الأولي 1 | الإعداد الأولي 2 |
 |---|---|
-| ![الخطوة 1 من الإعداد الأولي لـ Apple Flow](docs/screenshots/onboarding-apple-flow1.png) | ![الخطوة 2 من الإعداد الأولي لـ Apple Flow](docs/screenshots/onboarding-apple-flow2.png) |
+| ![الخطوة 1 من الإعداد الأولي لـ Apple Flow](../docs/screenshots/onboarding-apple-flow1.png) | ![الخطوة 2 من الإعداد الأولي لـ Apple Flow](../docs/screenshots/onboarding-apple-flow2.png) |
 
 | الإعداد الأولي 3 | الإعداد الأولي 4 |
 |---|---|
-| ![الخطوة 3 من الإعداد الأولي لـ Apple Flow](docs/screenshots/onboarding-apple-flow3.png) | ![الخطوة 4 من الإعداد الأولي لـ Apple Flow](docs/screenshots/onboarding-apple-flow4.png) |
+| ![الخطوة 3 من الإعداد الأولي لـ Apple Flow](../docs/screenshots/onboarding-apple-flow3.png) | ![الخطوة 4 من الإعداد الأولي لـ Apple Flow](../docs/screenshots/onboarding-apple-flow4.png) |
 
 | تكوين الإعداد | خطأ الإعداد الأولي |
 |---|---|
-| ![تكوين إعداد تطبيق Apple Flow](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![شاشة خطأ الإعداد الأولي لتطبيق Apple Flow](docs/screenshots/apple-flow-onboarding-error..png) |
+| ![تكوين إعداد تطبيق Apple Flow](../docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![شاشة خطأ الإعداد الأولي لتطبيق Apple Flow](../docs/screenshots/apple-flow-onboarding-error..png) |
 
 ## النقاط البارزة (قراءة سريعة)
 

@@ -21,29 +21,29 @@ AIን ከiMessage፣ Mail፣ አስታዋሾች፣ ማስታወሻዎች እና 
 
 | ዳሽቦርድ | የተግባር አስተዳደር |
 |---|---|
-| ![Apple Flow ዳሽቦርድ](docs/screenshots/dashboard.png) | ![Apple Flow የተግባር አስተዳደር](docs/screenshots/task-management.png) |
+| ![Apple Flow ዳሽቦርድ](../docs/screenshots/dashboard.png) | ![Apple Flow የተግባር አስተዳደር](../docs/screenshots/task-management.png) |
 
 | የ AI ፖሊሲ ምዝግብ ማስታወሻ | የቀን መቁጠሪያ ክስተት |
 |---|---|
-| ![Apple Flow የ AI ፖሊሲ ምዝግብ ማስታወሻ](docs/screenshots/ai-policy-log.png) | ![Apple Flow የቀን መቁጠሪያ ክስተት](docs/screenshots/calendar-event.png) |
+| ![Apple Flow የ AI ፖሊሲ ምዝግብ ማስታወሻ](../docs/screenshots/ai-policy-log.png) | ![Apple Flow የቀን መቁጠሪያ ክስተት](../docs/screenshots/calendar-event.png) |
 
 | የቢሮ አእምሮ ማጎልበት |
 |---|
-| ![Apple Flow የቢሮ አእምሮ ማጎልበት](docs/screenshots/office-brainstorm.png) |
+| ![Apple Flow የቢሮ አእምሮ ማጎልበት](../docs/screenshots/office-brainstorm.png) |
 
 ### የዳሽቦርድ መተግበሪያ
 
 | መግቢያ 1 | መግቢያ 2 |
 |---|---|
-| ![Apple Flow የመግቢያ ደረጃ 1](docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow የመግቢያ ደረጃ 2](docs/screenshots/onboarding-apple-flow2.png) |
+| ![Apple Flow የመግቢያ ደረጃ 1](../docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow የመግቢያ ደረጃ 2](../docs/screenshots/onboarding-apple-flow2.png) |
 
 | መግቢያ 3 | መግቢያ 4 |
 |---|---|
-| ![Apple Flow የመግቢያ ደረጃ 3](docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow የመግቢያ ደረጃ 4](docs/screenshots/onboarding-apple-flow4.png) |
+| ![Apple Flow የመግቢያ ደረጃ 3](../docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow የመግቢያ ደረጃ 4](../docs/screenshots/onboarding-apple-flow4.png) |
 
 | የማዋቀር ቅንብር | የመግቢያ ስህተት |
 |---|---|
-| ![የአፕል ፍሎው መተግበሪያ የማዋቀር ቅንብር](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![የአፕል ፍሎው የመግቢያ ስህተት ማሳያ](docs/screenshots/apple-flow-onboarding-error..png) |
+| ![የአፕል ፍሎው መተግበሪያ የማዋቀር ቅንብር](../docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![የአፕል ፍሎው የመግቢያ ስህተት ማሳያ](../docs/screenshots/apple-flow-onboarding-error..png) |
 
 ## ዋና ዋና ጉዳዮች (ፈጣን ንባብ)
 

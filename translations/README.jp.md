@@ -21,29 +21,29 @@ Apple Flowは、AppleアプリをAI CLI（Codex、Claude、Gemini、Cline、Kilo
 
 | ダッシュボード | タスク管理 |
 |---|---|
-| ![Apple Flow ダッシュボード](docs/screenshots/dashboard.png) | ![Apple Flow タスク管理](docs/screenshots/task-management.png) |
+| ![Apple Flow ダッシュボード](../docs/screenshots/dashboard.png) | ![Apple Flow タスク管理](../docs/screenshots/task-management.png) |
 
 | AIポリシーログ | カレンダーイベント |
 |---|---|
-| ![Apple Flow AIポリシーログ](docs/screenshots/ai-policy-log.png) | ![Apple Flow カレンダーイベント](docs/screenshots/calendar-event.png) |
+| ![Apple Flow AIポリシーログ](../docs/screenshots/ai-policy-log.png) | ![Apple Flow カレンダーイベント](../docs/screenshots/calendar-event.png) |
 
 | オフィスブレインストーム |
 |---|
-| ![Apple Flow オフィスブレインストーム](docs/screenshots/office-brainstorm.png) |
+| ![Apple Flow オフィスブレインストーム](../docs/screenshots/office-brainstorm.png) |
 
 ### ダッシュボードアプリ
 
 | オンボーディング 1 | オンボーディング 2 |
 |---|---|
-| ![Apple Flow オンボーディング ステップ 1](docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow オンボーディング ステップ 2](docs/screenshots/onboarding-apple-flow2.png) |
+| ![Apple Flow オンボーディング ステップ 1](../docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow オンボーディング ステップ 2](../docs/screenshots/onboarding-apple-flow2.png) |
 
 | オンボーディング 3 | オンボーディング 4 |
 |---|---|
-| ![Apple Flow オンボーディング ステップ 3](docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow オンボーディング ステップ 4](docs/screenshots/onboarding-apple-flow4.png) |
+| ![Apple Flow オンボーディング ステップ 3](../docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow オンボーディング ステップ 4](../docs/screenshots/onboarding-apple-flow4.png) |
 
 | セットアップ構成 | オンボーディングエラー |
 |---|---|
-| ![Apple Flow アプリセットアップ構成](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Apple Flow オンボーディングエラー画面](docs/screenshots/apple-flow-onboarding-error..png) |
+| ![Apple Flow アプリセットアップ構成](../docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Apple Flow オンボーディングエラー画面](../docs/screenshots/apple-flow-onboarding-error..png) |
 
 ## ハイライト (早読み)
 

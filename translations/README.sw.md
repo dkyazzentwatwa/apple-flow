@@ -21,29 +21,29 @@ Apple Flow ni daemon ya macOS inayopendelea mazingira ya ndani, inayounganisha p
 
 | Dashibodi | Usimamizi wa Kazi |
 |---|---|
-| ![Dashibodi ya Apple Flow](docs/screenshots/dashboard.png) | ![Usimamizi wa kazi wa Apple Flow](docs/screenshots/task-management.png) |
+| ![Dashibodi ya Apple Flow](../docs/screenshots/dashboard.png) | ![Usimamizi wa kazi wa Apple Flow](../docs/screenshots/task-management.png) |
 
 | Kumbukumbu ya Sera ya AI | Tukio la Kalenda |
 |---|---|
-| ![Kumbukumbu ya Sera ya AI ya Apple Flow](docs/screenshots/ai-policy-log.png) | ![Tukio la Kalenda ya Apple Flow](docs/screenshots/calendar-event.png) |
+| ![Kumbukumbu ya Sera ya AI ya Apple Flow](../docs/screenshots/ai-policy-log.png) | ![Tukio la Kalenda ya Apple Flow](../docs/screenshots/calendar-event.png) |
 
 | Akili za Ofisi |
 |---|
-| ![Akili za Ofisi za Apple Flow](docs/screenshots/office-brainstorm.png) |
+| ![Akili za Ofisi za Apple Flow](../docs/screenshots/office-brainstorm.png) |
 
 ### Programu ya Dashibodi
 
 | Kuunganisha 1 | Kuunganisha 2 |
 |---|---|
-| ![Apple Flow hatua ya 1 ya kuunganisha](docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow hatua ya 2 ya kuunganisha](docs/screenshots/onboarding-apple-flow2.png) |
+| ![Apple Flow hatua ya 1 ya kuunganisha](../docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow hatua ya 2 ya kuunganisha](../docs/screenshots/onboarding-apple-flow2.png) |
 
 | Kuunganisha 3 | Kuunganisha 4 |
 |---|---|
-| ![Apple Flow hatua ya 3 ya kuunganisha](docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow hatua ya 4 ya kuunganisha](docs/screenshots/onboarding-apple-flow4.png) |
+| ![Apple Flow hatua ya 3 ya kuunganisha](../docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow hatua ya 4 ya kuunganisha](../docs/screenshots/onboarding-apple-flow4.png) |
 
 | Usanidi wa Kuweka | Hitilafu ya Kuunganisha |
 |---|---|
-| ![Usanidi wa kuweka programu ya Apple Flow](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Skrini ya hitilafu ya kuunganisha ya Apple Flow](docs/screenshots/apple-flow-onboarding-error..png) |
+| ![Usanidi wa kuweka programu ya Apple Flow](../docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Skrini ya hitilafu ya kuunganisha ya Apple Flow](../docs/screenshots/apple-flow-onboarding-error..png) |
 
 ## Muhtasari (Soma Haraka)
 

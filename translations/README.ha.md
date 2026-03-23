@@ -21,29 +21,29 @@ Apple Flow wani daemon ne na macOS mai fifita na gida, wanda ke haɗa aikace-aik
 
 | Dashboard | Gudanar da Ayyuka |
 |---|---|
-| ![Apple Flow dashboard](docs/screenshots/dashboard.png) | ![Gudanar da Ayyuka na Apple Flow](docs/screenshots/task-management.png) |
+| ![Apple Flow dashboard](../docs/screenshots/dashboard.png) | ![Gudanar da Ayyuka na Apple Flow](../docs/screenshots/task-management.png) |
 
 | Rajistar Siyasa ta AI | Taron Kalanda |
 |---|---|
-| ![Rajistar Siyasa ta AI na Apple Flow](docs/screenshots/ai-policy-log.png) | ![Taron Kalanda na Apple Flow](docs/screenshots/calendar-event.png) |
+| ![Rajistar Siyasa ta AI na Apple Flow](../docs/screenshots/ai-policy-log.png) | ![Taron Kalanda na Apple Flow](../docs/screenshots/calendar-event.png) |
 
 | Zuga-zugar Ofis |
 |---|
-| ![Zuga-zugar Ofis na Apple Flow](docs/screenshots/office-brainstorm.png) |
+| ![Zuga-zugar Ofis na Apple Flow](../docs/screenshots/office-brainstorm.png) |
 
 ### Aikace-aikacen Dashboard
 
 | Shigarwa 1 | Shigarwa 2 |
 |---|---|
-| ![Apple Flow matakin shigarwa na 1](docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow matakin shigarwa na 2](docs/screenshots/onboarding-apple-flow2.png) |
+| ![Apple Flow matakin shigarwa na 1](../docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow matakin shigarwa na 2](../docs/screenshots/onboarding-apple-flow2.png) |
 
 | Shigarwa 3 | Shigarwa 4 |
 |---|---|
-| ![Apple Flow matakin shigarwa na 3](docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow matakin shigarwa na 4](docs/screenshots/onboarding-apple-flow4.png) |
+| ![Apple Flow matakin shigarwa na 3](../docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow matakin shigarwa na 4](../docs/screenshots/onboarding-apple-flow4.png) |
 
 | Saituwar Sati | Kuskuren Shigarwa |
 |---|---|
-| ![Saituwar sati na aikace-aikacen Apple Flow](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Kuskuren shigarwa na Apple Flow](docs/screenshots/apple-flow-onboarding-error..png) |
+| ![Saituwar sati na aikace-aikacen Apple Flow](../docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Kuskuren shigarwa na Apple Flow](../docs/screenshots/apple-flow-onboarding-error..png) |
 
 ## Abubuwan ban mamaki (Karatu na Gaggawa)
 

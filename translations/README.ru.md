@@ -21,29 +21,29 @@ Apple Flow — это локальный демон macOS, который свя
 
 | Панель управления | Управление задачами |
 |---|---|
-| ![Панель управления Apple Flow](docs/screenshots/dashboard.png) | ![Управление задачами Apple Flow](docs/screenshots/task-management.png) |
+| ![Панель управления Apple Flow](../docs/screenshots/dashboard.png) | ![Управление задачами Apple Flow](../docs/screenshots/task-management.png) |
 
 | Журнал политики ИИ | Событие календаря |
 |---|---|
-| ![Журнал политики ИИ Apple Flow](docs/screenshots/ai-policy-log.png) | ![Событие календаря Apple Flow](docs/screenshots/calendar-event.png) |
+| ![Журнал политики ИИ Apple Flow](../docs/screenshots/ai-policy-log.png) | ![Событие календаря Apple Flow](../docs/screenshots/calendar-event.png) |
 
 | Офисный мозговой штурм |
 |---|
-| ![Офисный мозговой штурм Apple Flow](docs/screenshots/office-brainstorm.png) |
+| ![Офисный мозговой штурм Apple Flow](../docs/screenshots/office-brainstorm.png) |
 
 ### Приложение панели управления
 
 | Ввод в эксплуатацию 1 | Ввод в эксплуатацию 2 |
 |---|---|
-| ![Apple Flow ввод в эксплуатацию шаг 1](docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow ввод в эксплуатацию шаг 2](docs/screenshots/onboarding-apple-flow2.png) |
+| ![Apple Flow ввод в эксплуатацию шаг 1](../docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow ввод в эксплуатацию шаг 2](../docs/screenshots/onboarding-apple-flow2.png) |
 
 | Ввод в эксплуатацию 3 | Ввод в эксплуатацию 4 |
 |---|---|
-| ![Apple Flow ввод в эксплуатацию шаг 3](docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow ввод в эксплуатацию шаг 4](docs/screenshots/onboarding-apple-flow4.png) |
+| ![Apple Flow ввод в эксплуатацию шаг 3](../docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow ввод в эксплуатацию шаг 4](../docs/screenshots/onboarding-apple-flow4.png) |
 
 | Конфигурация установки | Ошибка ввода в эксплуатацию |
 |---|---|
-| ![Конфигурация установки приложения Apple Flow](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Экран ошибки ввода в эксплуатацию Apple Flow](docs/screenshots/apple-flow-onboarding-error..png) |
+| ![Конфигурация установки приложения Apple Flow](../docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Экран ошибки ввода в эксплуатацию Apple Flow](../docs/screenshots/apple-flow-onboarding-error..png) |
 
 ## Основные моменты (краткий обзор)
 

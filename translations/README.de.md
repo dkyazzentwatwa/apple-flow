@@ -21,29 +21,29 @@ Apple Flow ist ein lokaler macOS-Daemon, der Apple-Apps mit KI-CLIs (Codex, Clau
 
 | Dashboard | Aufgabenverwaltung |
 |---|---|
-| ![Apple Flow Dashboard](docs/screenshots/dashboard.png) | ![Apple Flow Aufgabenverwaltung](docs/screenshots/task-management.png) |
+| ![Apple Flow Dashboard](../docs/screenshots/dashboard.png) | ![Apple Flow Aufgabenverwaltung](../docs/screenshots/task-management.png) |
 
 | KI-Richtlinienprotokoll | Kalenderereignis |
 |---|---|
-| ![Apple Flow KI-Richtlinienprotokoll](docs/screenshots/ai-policy-log.png) | ![Apple Flow Kalenderereignis](docs/screenshots/calendar-event.png) |
+| ![Apple Flow KI-Richtlinienprotokoll](../docs/screenshots/ai-policy-log.png) | ![Apple Flow Kalenderereignis](../docs/screenshots/calendar-event.png) |
 
 | Büro-Brainstorming |
 |---|
-| ![Apple Flow Büro-Brainstorming](docs/screenshots/office-brainstorm.png) |
+| ![Apple Flow Büro-Brainstorming](../docs/screenshots/office-brainstorm.png) |
 
 ### Dashboard-App
 
 | Onboarding 1 | Onboarding 2 |
 |---|---|
-| ![Apple Flow Onboarding Schritt 1](docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow Onboarding Schritt 2](docs/screenshots/onboarding-apple-flow2.png) |
+| ![Apple Flow Onboarding Schritt 1](../docs/screenshots/onboarding-apple-flow1.png) | ![Apple Flow Onboarding Schritt 2](../docs/screenshots/onboarding-apple-flow2.png) |
 
 | Onboarding 3 | Onboarding 4 |
 |---|---|
-| ![Apple Flow Onboarding Schritt 3](docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow Onboarding Schritt 4](docs/screenshots/onboarding-apple-flow4.png) |
+| ![Apple Flow Onboarding Schritt 3](../docs/screenshots/onboarding-apple-flow3.png) | ![Apple Flow Onboarding Schritt 4](../docs/screenshots/onboarding-apple-flow4.png) |
 
 | Setup-Konfiguration | Onboarding-Fehler |
 |---|---|
-| ![Apple Flow App Setup-Konfiguration](docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Apple Flow Onboarding-Fehlerbildschirm](docs/screenshots/apple-flow-onboarding-error..png) |
+| ![Apple Flow App Setup-Konfiguration](../docs/screenshots/AppleFlowApp-setup-configuration-screen..png) | ![Apple Flow Onboarding-Fehlerbildschirm](../docs/screenshots/apple-flow-onboarding-error..png) |
 
 ## Highlights (Kurzfassung)
 
