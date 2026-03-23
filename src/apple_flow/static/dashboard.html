@@ -10,12 +10,17 @@
         color-scheme: light;
         --bg: #f4f1ea;
         --bg-accent: rgba(15, 118, 110, 0.12);
+        --bg-warm: rgba(255, 255, 255, 0.72);
         --panel: #ffffff;
         --text: #15202b;
         --muted: #5b6470;
         --line: #d8d1c4;
         --accent: #0f766e;
         --accent-strong: #115e59;
+        --warning: #9a3412;
+        --warning-bg: rgba(217, 119, 6, 0.12);
+        --quiet-bg: rgba(21, 32, 43, 0.05);
+        --stale-bg: rgba(127, 29, 29, 0.08);
         --shadow: 0 14px 32px rgba(21, 32, 43, 0.09);
       }
       * { box-sizing: border-box; }
@@ -38,9 +43,9 @@
         mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.75), transparent 92%);
       }
       main {
-        max-width: 960px;
+        max-width: 1120px;
         margin: 0 auto;
-        padding: 20px 20px 28px;
+        padding: 16px 16px 28px;
       }
       header {
         display: flex;
@@ -91,9 +96,12 @@
         border-color: var(--accent);
       }
       button.primary:hover { background: var(--accent-strong); }
+      button.subtle {
+        background: rgba(255, 255, 255, 0.88);
+      }
       .status-row {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: 1fr;
         gap: 12px;
         margin: 18px 0 14px;
         position: relative;
@@ -119,13 +127,78 @@
         line-height: 1.15;
         margin-bottom: 4px;
       }
+      .stat.is-warning strong {
+        color: var(--warning);
+      }
+      .stat.is-fresh strong {
+        color: var(--accent);
+      }
+      .stat.is-quiet strong {
+        color: var(--accent-strong);
+        opacity: 0.88;
+      }
+      .stat.is-stale strong {
+        color: var(--warning);
+      }
       .stat span {
         color: var(--muted);
         font-size: 0.92rem;
       }
+      .attention-strip {
+        margin: 0 0 14px;
+        border: 1px solid rgba(15, 118, 110, 0.22);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 244, 236, 0.96));
+      }
+      .attention-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+      .attention-header strong {
+        display: block;
+        font-size: 1rem;
+        margin-bottom: 4px;
+      }
+      .attention-items {
+        display: grid;
+        gap: 10px;
+      }
+      .attention-item {
+        display: grid;
+        gap: 8px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(21, 32, 43, 0.08);
+        background: rgba(255, 255, 255, 0.78);
+      }
+      .attention-item-kind {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .attention-item-label {
+        font-weight: 700;
+      }
+      .attention-item-value {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 4px 9px;
+        background: rgba(15, 118, 110, 0.08);
+        color: var(--accent-strong);
+        font-size: 0.82rem;
+      }
+      .attention-item-detail {
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
       .grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr;
         gap: 14px;
         position: relative;
         z-index: 1;
@@ -143,12 +216,44 @@
         border: 1px solid var(--line);
         border-radius: 16px;
         background: rgba(255, 255, 255, 0.96);
-        padding: 16px;
+        padding: 18px;
         box-shadow: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 150px;
       }
       .section-card.is-active {
         border-color: rgba(15, 118, 110, 0.55);
         box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.08);
+      }
+      .section-card .section-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .section-card .section-cta {
+        color: var(--accent-strong);
+        font-size: 0.84rem;
+        font-weight: 700;
+      }
+      .section-card .section-freshness {
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+      .section-freshness.fresh {
+        color: var(--accent-strong);
+        font-weight: 700;
+      }
+      .section-freshness.warning {
+        color: var(--warning);
+        font-weight: 700;
+      }
+      .section-freshness.stale {
+        color: var(--warning);
+        font-weight: 700;
       }
       .card h2 {
         margin: 0 0 8px;
@@ -175,6 +280,18 @@
         color: var(--accent-strong);
         font-size: 0.84rem;
       }
+      .pill.warning {
+        background: var(--warning-bg);
+        color: var(--warning);
+      }
+      .pill.quiet {
+        background: var(--quiet-bg);
+        color: var(--accent-strong);
+      }
+      .pill.stale {
+        background: var(--stale-bg);
+        color: var(--warning);
+      }
       .detail-panel {
         margin-top: 14px;
       }
@@ -195,10 +312,171 @@
         border-radius: 12px;
         background: rgba(15, 118, 110, 0.06);
       }
+      .log-highlights {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .log-highlight {
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(15, 118, 110, 0.16);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 244, 236, 0.95));
+      }
+      .log-highlight-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .log-highlight-source {
+        font-weight: 700;
+      }
+      .log-highlight-kind {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 4px 9px;
+        background: rgba(15, 118, 110, 0.08);
+        color: var(--accent-strong);
+        font-size: 0.78rem;
+      }
+      .log-highlight-line {
+        color: #20303d;
+        font: 0.88rem/1.5 "SF Mono", "Menlo", "Monaco", monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .log-list {
+        display: grid;
+        gap: 10px;
+      }
+      .log-line {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 243, 236, 0.96));
+        border: 1px solid rgba(21, 32, 43, 0.08);
+      }
+      .log-line-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .log-line-source {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 4px 10px;
+        background: rgba(15, 118, 110, 0.08);
+        color: var(--accent-strong);
+        font-size: 0.8rem;
+      }
+      .log-line-time {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .log-line-body {
+        color: #20303d;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font: 0.82rem/1.45 "SF Mono", "Menlo", "Monaco", monospace;
+      }
+      .section-block {
+        display: grid;
+        gap: 10px;
+      }
+      .section-block + .section-block {
+        margin-top: 16px;
+      }
+      .section-block h3 {
+        margin: 0;
+        font-size: 0.98rem;
+      }
+      .item-list {
+        display: grid;
+        gap: 10px;
+      }
+      .file-card {
+        display: grid;
+        gap: 8px;
+        width: 100%;
+        text-align: left;
+        padding: 14px;
+        border-radius: 16px;
+        border: 1px solid rgba(21, 32, 43, 0.08);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 243, 236, 0.96));
+        box-shadow: none;
+      }
+      .file-card:hover {
+        transform: translateY(-1px);
+      }
+      .file-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .file-card-title {
+        font-weight: 700;
+      }
+      .file-card-meta {
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+      .file-card-preview {
+        color: #20303d;
+        font: 0.88rem/1.45 "SF Mono", "Menlo", "Monaco", monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .file-card-cta {
+        color: var(--accent-strong);
+        font-size: 0.78rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
       .status {
         margin-top: 16px;
         position: relative;
         z-index: 1;
+      }
+      .collapsible-panel {
+        overflow: hidden;
+      }
+      .collapsible-panel summary {
+        list-style: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-weight: 700;
+      }
+      .collapsible-panel summary::-webkit-details-marker {
+        display: none;
+      }
+      .collapsible-panel summary::after {
+        content: "+";
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        background: var(--bg-accent);
+        color: var(--accent-strong);
+        font-size: 1.1rem;
+        line-height: 1;
+      }
+      .collapsible-panel[open] summary::after {
+        content: "-";
+      }
+      .collapsible-body {
+        margin-top: 14px;
       }
       .status pre {
         margin: 0;
@@ -210,17 +488,90 @@
       .loading {
         animation: pulse 1.4s ease-in-out infinite;
       }
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: flex-end;
+        justify-content: center;
+        padding: 12px;
+        background: rgba(12, 18, 24, 0.38);
+        backdrop-filter: blur(10px);
+        z-index: 40;
+      }
+      .modal-overlay.is-open {
+        display: flex;
+      }
+      .modal-sheet {
+        width: min(100%, 920px);
+        max-height: min(92vh, 920px);
+        display: flex;
+        flex-direction: column;
+        border-radius: 24px 24px 18px 18px;
+        border: 1px solid rgba(21, 32, 43, 0.14);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(249, 246, 239, 0.98));
+        box-shadow: 0 28px 64px rgba(12, 18, 24, 0.24);
+        overflow: hidden;
+      }
+      .modal-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 18px 18px 14px;
+        border-bottom: 1px solid rgba(21, 32, 43, 0.08);
+      }
+      .modal-title {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+      .modal-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .modal-body {
+        padding: 18px;
+        overflow: auto;
+      }
+      .modal-body pre {
+        margin: 0;
+        padding: 16px;
+        border-radius: 18px;
+        border: 1px solid rgba(21, 32, 43, 0.08);
+        background: rgba(15, 118, 110, 0.04);
+        color: #20303d;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font: 0.9rem/1.55 "SF Mono", "Menlo", "Monaco", monospace;
+      }
       @keyframes pulse {
         0%, 100% { opacity: 0.72; }
         50% { opacity: 1; }
       }
+      @media (min-width: 700px) {
+        .status-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .modal-overlay {
+          align-items: center;
+          padding: 24px;
+        }
+        .modal-sheet {
+          border-radius: 24px;
+        }
+      }
+      @media (min-width: 1080px) {
+        .status-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      }
       @media (max-width: 640px) {
-        main { padding: 16px 16px 24px; }
         header { flex-direction: column; }
         .actions { width: 100%; justify-content: stretch; }
         .actions button { flex: 1 1 0; }
-        .status-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .status-row { grid-template-columns: 1fr; }
         .grid { grid-template-columns: 1fr; }
+        .modal-sheet { width: 100%; max-height: 94vh; }
+        .modal-header, .modal-body { padding-left: 16px; padding-right: 16px; }
       }
     </style>
   </head>
@@ -235,58 +586,94 @@
         </div>
         <div class="actions" aria-label="Dashboard actions">
           <button class="primary" id="refresh-button" type="button">Refresh</button>
-          <button id="mute-button" type="button">Mute</button>
-          <button id="unmute-button" type="button">Unmute</button>
+          <button class="subtle" id="companion-action-button" type="button">Mute companion</button>
         </div>
       </header>
 
       <section class="status-row" aria-label="Runtime status">
-        <article class="stat">
+        <article class="stat" id="runtime-stat">
           <label>Runtime</label>
           <strong id="runtime-status" class="loading">Loading</strong>
           <span id="runtime-summary">Pending approvals and health summary.</span>
         </article>
-        <article class="stat">
+        <article class="stat" id="companion-stat">
           <label>Companion</label>
           <strong id="companion-status" class="loading">Loading</strong>
           <span id="companion-summary">Mute state and last activity.</span>
         </article>
-        <article class="stat">
+        <article class="stat" id="inbox-stat">
           <label>Inbox</label>
           <strong id="inbox-status" class="loading">Loading</strong>
           <span id="inbox-summary">Current triage load.</span>
         </article>
-        <article class="stat">
+        <article class="stat" id="memory-stat">
           <label>Memory</label>
           <strong id="memory-status" class="loading">Loading</strong>
           <span id="memory-summary">Durable notes and topics.</span>
         </article>
       </section>
 
+      <section class="card attention-strip" aria-label="Attention needed">
+        <div class="attention-header">
+          <div>
+            <strong>Attention Needed</strong>
+            <span id="attention-summary" class="muted">Waiting for the first dashboard refresh.</span>
+          </div>
+          <span class="pill" id="attention-count">0</span>
+        </div>
+        <div id="attention-items" class="attention-items">
+          <div class="muted">No attention items yet.</div>
+        </div>
+      </section>
+
       <section class="grid" aria-label="Dashboard sections">
         <button class="section-card" type="button" data-section="runtime">
           <h2>Runtime <span class="pill">Health</span></h2>
           <div class="muted">Pending approvals, loop health, and watch status.</div>
+          <div class="section-meta">
+            <span class="section-freshness" id="runtime-freshness">Waiting</span>
+            <span class="section-cta">View details</span>
+          </div>
         </button>
         <button class="section-card" type="button" data-section="companion">
           <h2>Companion <span class="pill">Signals</span></h2>
           <div class="muted">Mute state, last send, and proactive counters.</div>
+          <div class="section-meta">
+            <span class="section-freshness" id="companion-freshness">Waiting</span>
+            <span class="section-cta">View details</span>
+          </div>
         </button>
         <button class="section-card" type="button" data-section="inbox">
           <h2>Inbox <span class="pill">Triage</span></h2>
           <div class="muted">Unchecked items and the latest inbox snapshot.</div>
+          <div class="section-meta">
+            <span class="section-freshness" id="inbox-freshness">Waiting</span>
+            <span class="section-cta">View details</span>
+          </div>
         </button>
         <button class="section-card" type="button" data-section="daily">
           <h2>Daily Note <span class="pill">Today</span></h2>
           <div class="muted">Today's note and morning briefing preview.</div>
+          <div class="section-meta">
+            <span class="section-freshness" id="daily-freshness">Waiting</span>
+            <span class="section-cta">View details</span>
+          </div>
         </button>
         <button class="section-card" type="button" data-section="memory">
           <h2>Memory <span class="pill">Context</span></h2>
           <div class="muted">Durable memory and recent topic files.</div>
+          <div class="section-meta">
+            <span class="section-freshness" id="memory-freshness">Waiting</span>
+            <span class="section-cta">View details</span>
+          </div>
         </button>
         <button class="section-card" type="button" data-section="recent">
           <h2>Recent Files <span class="pill">Ops</span></h2>
-          <div class="muted">Outputs, resources, and logs at a glance.</div>
+          <div class="muted">Outputs and resources at a glance.</div>
+          <div class="section-meta">
+            <span class="section-freshness" id="recent-freshness">Waiting</span>
+            <span class="section-cta">View details</span>
+          </div>
         </button>
       </section>
 
@@ -298,14 +685,30 @@
         <div id="section-detail" class="muted">Waiting for data from <code>/dashboard/api/summary</code>...</div>
       </section>
 
-      <section class="card status" aria-label="Raw summary">
-        <h2>Raw Summary</h2>
-        <pre id="summary-json">Waiting for data from <code>/dashboard/api/summary</code>...</pre>
-      </section>
+      <details class="card status collapsible-panel" aria-label="Recent logs" id="recent-logs-panel">
+        <summary id="recent-logs-toggle">Live Log Tail</summary>
+        <div class="collapsible-body">
+          <div id="recent-logs-detail" class="muted">Waiting for recent log data from <code>/dashboard/api/summary</code>...</div>
+        </div>
+      </details>
     </main>
 
+    <div class="modal-overlay" id="detail-modal" hidden>
+      <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title" id="detail-modal-title">File detail</h2>
+            <div id="detail-modal-meta" class="modal-meta"></div>
+          </div>
+          <button class="subtle" id="detail-modal-close" type="button">Close</button>
+        </div>
+        <div class="modal-body">
+          <div id="detail-modal-content" class="muted">Select a file to view its full content.</div>
+        </div>
+      </div>
+    </div>
+
     <script>
-      const summaryJson = document.getElementById("summary-json");
       const runtimeStatus = document.getElementById("runtime-status");
       const runtimeSummary = document.getElementById("runtime-summary");
       const companionStatus = document.getElementById("companion-status");
@@ -314,12 +717,33 @@
       const inboxSummary = document.getElementById("inbox-summary");
       const memoryStatus = document.getElementById("memory-status");
       const memorySummary = document.getElementById("memory-summary");
+      const attentionSummary = document.getElementById("attention-summary");
+      const attentionCount = document.getElementById("attention-count");
+      const attentionItems = document.getElementById("attention-items");
+      const companionActionButton = document.getElementById("companion-action-button");
+      const dashboardTimeZone = "America/Los_Angeles";
       const detailTitle = document.getElementById("detail-title");
       const detailCount = document.getElementById("detail-count");
       const sectionDetail = document.getElementById("section-detail");
+      const recentLogsDetail = document.getElementById("recent-logs-detail");
+      const detailModal = document.getElementById("detail-modal");
+      const detailModalTitle = document.getElementById("detail-modal-title");
+      const detailModalMeta = document.getElementById("detail-modal-meta");
+      const detailModalContent = document.getElementById("detail-modal-content");
+      const detailModalClose = document.getElementById("detail-modal-close");
       const sectionButtons = Array.from(document.querySelectorAll(".section-card"));
+      const sectionFreshnessEls = {
+        runtime: document.getElementById("runtime-freshness"),
+        companion: document.getElementById("companion-freshness"),
+        inbox: document.getElementById("inbox-freshness"),
+        daily: document.getElementById("daily-freshness"),
+        memory: document.getElementById("memory-freshness"),
+        recent: document.getElementById("recent-freshness"),
+      };
       let dashboardSummary = null;
       let activeSection = "runtime";
+      let inFlightLoad = false;
+      let modalRequestId = 0;
 
       async function postJson(path) {
         const response = await fetch(path, { method: "POST", credentials: "same-origin" });
@@ -343,17 +767,229 @@
           .replaceAll("'", "&#39;");
       }
 
+      function setTone(el, tone) {
+        el.classList.remove("is-warning", "is-quiet", "is-stale", "is-fresh");
+        if (tone === "warning") el.classList.add("is-warning");
+        if (tone === "fresh") el.classList.add("is-fresh");
+        if (tone === "quiet") el.classList.add("is-quiet");
+        if (tone === "stale") el.classList.add("is-stale");
+      }
+
+      function freshnessTone(freshness) {
+        if (!freshness) return "quiet";
+        return freshness.state || "quiet";
+      }
+
+      function freshnessLabel(freshness) {
+        if (!freshness) return "Waiting";
+        const label = freshness.state ? freshness.state.charAt(0).toUpperCase() + freshness.state.slice(1) : "Quiet";
+        return `${label} · ${freshness.age_label || "n/a"}`;
+      }
+
+      function itemTitle(item, fallback = "File") {
+        return item?.name || item?.title || fallback;
+      }
+
+      function itemMetadata(item) {
+        const parts = [];
+        if (item?.modified_at) parts.push(`${formatPacificTime(item.modified_at)} · ${relativeTime(item.modified_at)}`);
+        if (item?.size_bytes !== undefined && item?.size_bytes !== null) parts.push(`${item.size_bytes} bytes`);
+        if (item?.freshness?.state) parts.push(item.freshness.state);
+        return parts.filter(Boolean);
+      }
+
+      function renderFileCard(item, { section, bucket = "", cta = "Open detail" }) {
+        const title = escapeHtml(itemTitle(item));
+        const metadata = itemMetadata(item).map(escapeHtml).join(" · ");
+        const preview = escapeHtml(item.preview || "No preview available.");
+        return `
+          <button
+            class="file-card"
+            type="button"
+            data-item-section="${escapeHtml(section)}"
+            data-item-name="${escapeHtml(item.name || "")}"
+            data-item-bucket="${escapeHtml(bucket)}"
+            data-item-title="${title}"
+          >
+            <div class="file-card-header">
+              <span class="file-card-title">${title}</span>
+              <span class="file-card-cta">${escapeHtml(cta)}</span>
+            </div>
+            <div class="file-card-meta">${metadata || "n/a"}</div>
+            <div class="file-card-preview">${preview}</div>
+          </button>
+        `;
+      }
+
+      function renderFileGroup(title, items, section, bucket = "", emptyCopy = "No files right now.") {
+        if (!items || !items.length) {
+          return `
+            <section class="section-block">
+              <h3>${escapeHtml(title)}</h3>
+              <div class="muted">${escapeHtml(emptyCopy)}</div>
+            </section>
+          `;
+        }
+        return `
+          <section class="section-block">
+            <h3>${escapeHtml(title)}</h3>
+            <div class="item-list">
+              ${items.map((item) => renderFileCard(item, { section, bucket })).join("")}
+            </div>
+          </section>
+        `;
+      }
+
+      function singleFileItem(title, path, data) {
+        if (!path) return null;
+        const name = path.split("/").pop() || title;
+        return {
+          name,
+          path,
+          modified_at: data?.modified_at || null,
+          size_bytes: data?.size_bytes ?? 0,
+          preview: data?.preview || "",
+          freshness: data?.freshness || null,
+        };
+      }
+
+      function setModalOpen(open) {
+        detailModal.hidden = !open;
+        detailModal.classList.toggle("is-open", open);
+        document.body.style.overflow = open ? "hidden" : "";
+      }
+
+      function renderModalDetail(detail) {
+        detailModalTitle.textContent = detail.title || detail.name || "File detail";
+        const meta = [];
+        meta.push(`Section: ${detail.section || "n/a"}`);
+        if (detail.bucket) meta.push(`Bucket: ${detail.bucket}`);
+        meta.push(`Modified: ${formatPacificTime(detail.modified_at_pacific || detail.modified_at)}`);
+        meta.push(`Size: ${detail.size_bytes ?? 0} bytes`);
+        if (detail.content_kind) meta.push(`Type: ${detail.content_kind}`);
+        if (detail.freshness?.state) meta.push(`Freshness: ${detail.freshness.state}`);
+        detailModalMeta.innerHTML = meta.map((part) => `<span class="pill quiet">${escapeHtml(part)}</span>`).join("");
+        detailModalContent.innerHTML = `
+          <div class="section-block">
+            <div class="muted">${escapeHtml(detail.path || "")}</div>
+            ${detail.content_truncated ? '<div class="pill warning" style="margin: 10px 0 12px;">Content truncated to keep the sheet responsive.</div>' : ""}
+            <pre>${escapeHtml(detail.content || "No content available.")}</pre>
+          </div>
+        `;
+      }
+
+      async function openItemDetail(section, name, bucket = "", title = "") {
+        const requestId = ++modalRequestId;
+        detailModalTitle.textContent = title || "File detail";
+        detailModalMeta.innerHTML = '<span class="pill quiet">Loading detail…</span>';
+        detailModalContent.innerHTML = '<div class="muted">Loading full file content…</div>';
+        setModalOpen(true);
+
+        const params = new URLSearchParams({ section, name });
+        if (bucket) params.set("bucket", bucket);
+        const response = await fetch(`/dashboard/api/item?${params.toString()}`, { credentials: "same-origin" });
+        if (requestId !== modalRequestId) return;
+        if (!response.ok) {
+          detailModalContent.innerHTML = `<div class="muted">Failed to load detail (${response.status}).</div>`;
+          return;
+        }
+        renderModalDetail(await response.json());
+      }
+
+      function relativeTime(iso) {
+        if (!iso) return "n/a";
+        const timestamp = new Date(iso);
+        if (Number.isNaN(timestamp.getTime())) return "n/a";
+        const deltaMs = Date.now() - timestamp.getTime();
+        const deltaSeconds = Math.max(0, Math.floor(deltaMs / 1000));
+        if (deltaSeconds < 60) return "just now";
+        const minutes = Math.floor(deltaSeconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ago`;
+      }
+
+      function formatPacificTime(iso) {
+        if (!iso) return "n/a";
+        const timestamp = new Date(iso);
+        if (Number.isNaN(timestamp.getTime())) return "n/a";
+        return new Intl.DateTimeFormat("en-US", {
+          timeZone: dashboardTimeZone,
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true,
+          timeZoneName: "short",
+        }).format(timestamp);
+      }
+
       function renderEntries(items) {
         if (!items || !items.length) {
           return '<div class="muted">No files in this section right now.</div>';
         }
-        return `<div class="timeline">${items.map((item) => `
-          <div>
-            <strong>${escapeHtml(item.name)}</strong>
-            <div class="muted">${escapeHtml(item.modified_at || "n/a")} · ${escapeHtml(item.size_bytes ?? "")} bytes</div>
-            <div>${escapeHtml(item.preview || "No preview available.")}</div>
+        return `<div class="item-list">${items.map((item) => renderFileCard(item, { section: "recent", bucket: "" })).join("")}</div>`;
+      }
+
+      function renderRecentLogs(recent) {
+        const logItems = recent?.logs || [];
+        const highlights = recent?.highlights || [];
+        if (!logItems || !logItems.length) {
+          recentLogsDetail.innerHTML = '<div class="muted">No recent logs available right now.</div>';
+          return;
+        }
+        const highlightHtml = highlights.length
+          ? `<div class="log-highlights">${highlights.map((item) => `
+              <div class="log-highlight">
+                <div class="log-highlight-header">
+                  <span class="log-highlight-source">${escapeHtml(item.source || "log")}</span>
+                  <span class="log-highlight-kind">${escapeHtml(item.kind || "log")}</span>
+                </div>
+                <div class="log-highlight-line">${escapeHtml(item.line || "")}</div>
+              </div>
+            `).join("")}</div>`
+          : "";
+
+        recentLogsDetail.innerHTML = `
+          ${highlightHtml}
+          ${renderFileGroup("Live log files", logItems, "recent", "logs", "No live log files available.")}
+        `;
+      }
+
+      function renderAttention(attention) {
+        const items = attention?.items || [];
+        const count = attention?.count || 0;
+        attentionCount.textContent = String(count);
+        attentionCount.className = `pill ${count > 0 ? "warning" : "quiet"}`;
+
+        if (!items.length) {
+          attentionSummary.textContent = "No attention items right now.";
+          attentionItems.innerHTML = '<div class="muted">Everything looks quiet for now.</div>';
+          return;
+        }
+
+        attentionSummary.textContent = `${count} item${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} attention.`;
+        attentionItems.innerHTML = items.map((item) => `
+          <div class="attention-item">
+            <div class="attention-item-kind">
+              <span class="attention-item-label">${escapeHtml(item.label || "Attention")}</span>
+              <span class="attention-item-value">${escapeHtml(item.value ?? "")}</span>
+            </div>
+            <div class="attention-item-detail">${escapeHtml(item.detail || "")}</div>
           </div>
-        `).join("")}</div>`;
+        `).join("");
+      }
+
+      function applySectionFreshness(section, freshness) {
+        const el = sectionFreshnessEls[section];
+        if (!el) return;
+        el.textContent = freshnessLabel(freshness);
+        el.classList.remove("warning", "quiet", "stale", "fresh");
+        el.classList.add(freshnessTone(freshness));
       }
 
       function renderSection(section) {
@@ -365,6 +1001,7 @@
             html: `
               <div><strong>Pending approvals:</strong> ${dashboardSummary.runtime.pending_approvals_count}</div>
               <div><strong>Status:</strong> ${dashboardSummary.runtime.pending_approvals_count === 0 ? "quiet" : "active"}</div>
+              <div><strong>Attention:</strong> ${dashboardSummary.attention.count} item${dashboardSummary.attention.count === 1 ? "" : "s"}</div>
             `,
           },
           companion: {
@@ -372,8 +1009,8 @@
             count: dashboardSummary.companion.muted ? "Muted" : "Live",
             html: `
               <div><strong>Muted:</strong> ${dashboardSummary.companion.muted ? "yes" : "no"}</div>
-              <div><strong>Last check:</strong> ${escapeHtml(dashboardSummary.companion.last_check_at || "n/a")}</div>
-              <div><strong>Last sent:</strong> ${escapeHtml(dashboardSummary.companion.last_sent_at || "n/a")}</div>
+              <div><strong>Last check:</strong> ${escapeHtml(formatPacificTime(dashboardSummary.companion.last_check_at))}</div>
+              <div><strong>Last sent:</strong> ${escapeHtml(formatPacificTime(dashboardSummary.companion.last_sent_at))}</div>
               <div><strong>Skip reason:</strong> ${escapeHtml(dashboardSummary.companion.skip_reason || "none")}</div>
               <div><strong>Hourly count:</strong> ${escapeHtml(dashboardSummary.companion.proactive_hour_count)}</div>
             `,
@@ -382,35 +1019,48 @@
             title: "Inbox",
             count: `${dashboardSummary.inbox.unchecked_count} unchecked`,
             html: `
-              <div><strong>Unchecked items:</strong> ${dashboardSummary.inbox.unchecked_count}</div>
-              <div class="muted">${escapeHtml(dashboardSummary.inbox.preview || "No inbox preview available.")}</div>
+              <div class="section-block">
+                <div><strong>Unchecked items:</strong> ${dashboardSummary.inbox.unchecked_count}</div>
+                <div class="muted">${escapeHtml(dashboardSummary.inbox.preview || "No inbox preview available.")}</div>
+              </div>
+              ${renderFileGroup("Open inbox file", [singleFileItem("Inbox", dashboardSummary.inbox.path, dashboardSummary.inbox)].filter(Boolean), "inbox")}
             `,
           },
           daily: {
             title: "Daily Note",
             count: dashboardSummary.daily.today_exists ? "Today exists" : "Missing",
             html: `
-              <div><strong>Today exists:</strong> ${dashboardSummary.daily.today_exists ? "yes" : "no"}</div>
-              <div><strong>Path:</strong> ${escapeHtml(dashboardSummary.daily.today_path)}</div>
-              <div class="muted">${escapeHtml(dashboardSummary.daily.preview || "No daily note preview available.")}</div>
+              <div class="section-block">
+                <div><strong>Today exists:</strong> ${dashboardSummary.daily.today_exists ? "yes" : "no"}</div>
+                <div><strong>Path:</strong> ${escapeHtml(dashboardSummary.daily.today_path)}</div>
+                <div class="muted">${escapeHtml(dashboardSummary.daily.preview || "No daily note preview available.")}</div>
+              </div>
+              ${renderFileGroup(
+                "Open today's note",
+                [singleFileItem("Today", dashboardSummary.daily.today_path, dashboardSummary.daily)].filter(Boolean),
+                "daily",
+              )}
             `,
           },
           memory: {
             title: "Memory",
             count: `${dashboardSummary.memory.topic_count} topics`,
             html: `
-              <div><strong>Topic count:</strong> ${dashboardSummary.memory.topic_count}</div>
-              <div class="muted">${escapeHtml(dashboardSummary.memory.preview || "No memory preview available.")}</div>
-              ${renderEntries(dashboardSummary.memory.topics)}
+              <div class="section-block">
+                <div><strong>Topic count:</strong> ${dashboardSummary.memory.topic_count}</div>
+                <div class="muted">${escapeHtml(dashboardSummary.memory.preview || "No memory preview available.")}</div>
+              </div>
+              ${renderFileGroup("Core memory", [singleFileItem("Memory", dashboardSummary.memory.path, dashboardSummary.memory)].filter(Boolean), "memory")}
+              ${renderFileGroup("Memory topics", dashboardSummary.memory.topics, "memory")}
             `,
           },
           recent: {
             title: "Recent Files",
             count: "3 buckets",
             html: `
-              <div><strong>Outputs</strong>${renderEntries(dashboardSummary.recent.outputs)}</div>
-              <div style="margin-top: 12px;"><strong>Resources</strong>${renderEntries(dashboardSummary.recent.resources)}</div>
-              <div style="margin-top: 12px;"><strong>Logs</strong>${renderEntries(dashboardSummary.recent.logs)}</div>
+              ${renderFileGroup("Outputs", dashboardSummary.recent.outputs, "recent", "outputs")}
+              ${renderFileGroup("Resources", dashboardSummary.recent.resources, "recent", "resources")}
+              ${renderFileGroup("Logs", dashboardSummary.recent.logs, "recent", "logs")}
             `,
           },
         };
@@ -422,35 +1072,60 @@
       }
 
       async function loadSummary() {
-        const response = await fetch("/dashboard/api/summary", { credentials: "same-origin" });
-        if (!response.ok) {
-          summaryJson.textContent = `Failed to load summary (${response.status})`;
-          runtimeStatus.textContent = "Error";
-          companionStatus.textContent = "Error";
-          inboxStatus.textContent = "Error";
-          memoryStatus.textContent = "Error";
-          return;
+        if (inFlightLoad) return;
+        inFlightLoad = true;
+        try {
+          const response = await fetch("/dashboard/api/summary", { credentials: "same-origin" });
+          if (!response.ok) {
+            runtimeStatus.textContent = "Error";
+            companionStatus.textContent = "Error";
+            inboxStatus.textContent = "Error";
+            memoryStatus.textContent = "Error";
+          recentLogsDetail.innerHTML = `<div class="muted">Failed to load recent logs (${response.status})</div>`;
+            return;
+          }
+          dashboardSummary = await response.json();
+          runtimeStatus.textContent = `${dashboardSummary.runtime.pending_approvals_count}`;
+          companionStatus.textContent = dashboardSummary.companion.muted ? "Muted" : "Live";
+          inboxStatus.textContent = `${dashboardSummary.inbox.unchecked_count}`;
+          memoryStatus.textContent = `${dashboardSummary.memory.topic_count}`;
+          runtimeSummary.textContent = `Pending approvals: ${dashboardSummary.runtime.pending_approvals_count}`;
+          companionSummary.textContent = `Muted: ${dashboardSummary.companion.muted ? "yes" : "no"} | Last check: ${formatPacificTime(dashboardSummary.companion.last_check_at)}`;
+          inboxSummary.textContent = `Unchecked items: ${dashboardSummary.inbox.unchecked_count}`;
+          memorySummary.textContent = `Memory topics: ${dashboardSummary.memory.topic_count}`;
+
+          setTone(document.getElementById("runtime-stat"), dashboardSummary.runtime.pending_approvals_count > 0 ? "warning" : "quiet");
+          setTone(document.getElementById("inbox-stat"), dashboardSummary.inbox.unchecked_count > 0 ? "warning" : "quiet");
+          setTone(document.getElementById("memory-stat"), dashboardSummary.memory.topic_count > 0 ? "fresh" : "stale");
+          setTone(document.getElementById("companion-stat"), dashboardSummary.companion.muted ? "quiet" : "fresh");
+
+          applySectionFreshness("runtime", dashboardSummary.runtime.pending_approvals_count > 0
+            ? { state: "warning", age_label: `${dashboardSummary.runtime.pending_approvals_count} approvals` }
+            : { state: "quiet", age_label: "no approvals" });
+          applySectionFreshness("companion", dashboardSummary.companion.muted
+            ? { state: "quiet", age_label: dashboardSummary.companion.last_check_at ? `last check ${relativeTime(dashboardSummary.companion.last_check_at)}` : "muted" }
+            : { state: "fresh", age_label: dashboardSummary.companion.last_sent_at ? `last send ${relativeTime(dashboardSummary.companion.last_sent_at)}` : "live" });
+          applySectionFreshness("inbox", dashboardSummary.inbox.freshness);
+          applySectionFreshness("daily", dashboardSummary.daily.freshness);
+          applySectionFreshness("memory", dashboardSummary.memory.freshness);
+          applySectionFreshness("recent", dashboardSummary.recent.freshness);
+
+          const companionMuted = Boolean(dashboardSummary.companion.muted);
+          companionActionButton.textContent = companionMuted ? "Unmute companion" : "Mute companion";
+          companionActionButton.dataset.action = companionMuted ? "unmute" : "mute";
+
+          renderAttention(dashboardSummary.attention);
+          renderRecentLogs(dashboardSummary.recent);
+          renderSection(activeSection);
+        } finally {
+          inFlightLoad = false;
         }
-        dashboardSummary = await response.json();
-        summaryJson.textContent = JSON.stringify(dashboardSummary, null, 2);
-        runtimeStatus.textContent = `${dashboardSummary.runtime.pending_approvals_count}`;
-        companionStatus.textContent = dashboardSummary.companion.muted ? "Muted" : "Live";
-        inboxStatus.textContent = `${dashboardSummary.inbox.unchecked_count}`;
-        memoryStatus.textContent = `${dashboardSummary.memory.topic_count}`;
-        runtimeSummary.textContent = `Pending approvals: ${dashboardSummary.runtime.pending_approvals_count}`;
-        companionSummary.textContent = `Muted: ${dashboardSummary.companion.muted ? "yes" : "no"} | Last check: ${dashboardSummary.companion.last_check_at || "n/a"}`;
-        inboxSummary.textContent = `Unchecked items: ${dashboardSummary.inbox.unchecked_count}`;
-        memorySummary.textContent = `Memory topics: ${dashboardSummary.memory.topic_count}`;
-        renderSection(activeSection);
       }
 
       document.getElementById("refresh-button").addEventListener("click", loadSummary);
-      document.getElementById("mute-button").addEventListener("click", async () => {
-        await postJson("/dashboard/api/companion/mute");
-        await loadSummary();
-      });
-      document.getElementById("unmute-button").addEventListener("click", async () => {
-        await postJson("/dashboard/api/companion/unmute");
+      companionActionButton.addEventListener("click", async () => {
+        const action = companionActionButton.dataset.action || "mute";
+        await postJson(`/dashboard/api/companion/${action}`);
         await loadSummary();
       });
       sectionButtons.forEach((button) => {
@@ -459,6 +1134,24 @@
 
       loadSummary();
       setInterval(loadSummary, 30000);
+      detailModalClose.addEventListener("click", () => setModalOpen(false));
+      detailModal.addEventListener("click", (event) => {
+        if (event.target === detailModal) setModalOpen(false);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") setModalOpen(false);
+      });
+      document.addEventListener("click", (event) => {
+        const target = event.target.closest("[data-item-section]");
+        if (!target) return;
+        event.preventDefault();
+        void openItemDetail(
+          target.dataset.itemSection || "",
+          target.dataset.itemName || "",
+          target.dataset.itemBucket || "",
+          target.dataset.itemTitle || "File detail",
+        );
+      });
     </script>
   </body>
 </html>

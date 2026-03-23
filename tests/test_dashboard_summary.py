@@ -43,13 +43,25 @@ def test_build_agent_office_summary_reads_expected_agent_office_fixture(agent_of
         "reference.md",
     ]
     assert [item["name"] for item in summary["recent"]["logs"]] == [
-        "automation-log.md",
-        "events.csv",
-        "debug.txt",
+        "apple-flow.err.log",
+        "apple-flow-admin.err.log",
+        "apple-flow-admin.log",
+        "apple-flow.log",
     ]
     assert summary["recent"]["outputs"][0]["preview"]
     assert summary["recent"]["resources"][0]["modified_at"]
     assert summary["recent"]["logs"][0]["modified_at"]
+    assert "daemon err line 14" in summary["recent"]["logs"][0]["preview"]
+    assert "daemon err line 2" not in summary["recent"]["logs"][0]["preview"]
+    assert summary["recent"]["highlights"][0]["kind"] == "error"
+    assert "timeout" in summary["recent"]["highlights"][0]["line"].lower()
+
+    assert summary["inbox"]["freshness"]["state"] == "fresh"
+    assert summary["daily"]["freshness"]["state"] == "fresh"
+    assert summary["memory"]["freshness"]["state"] == "fresh"
+    assert summary["recent"]["freshness"]["state"] == "fresh"
+    assert summary["attention"]["count"] == 2
+    assert [item["kind"] for item in summary["attention"]["items"]] == ["inbox", "error"]
 
 
 def test_build_agent_office_summary_ignores_unknown_paths(agent_office):
@@ -59,6 +71,7 @@ def test_build_agent_office_summary_ignores_unknown_paths(agent_office):
     assert "unrelated.txt" not in {item["name"] for item in summary["recent"]["outputs"]}
     assert "unrelated.txt" not in {item["name"] for item in summary["recent"]["resources"]}
     assert "unrelated.txt" not in {item["name"] for item in summary["recent"]["logs"]}
+    assert "other.log" not in {item["name"] for item in summary["recent"]["logs"]}
 
 
 def test_build_agent_office_summary_includes_runtime_and_companion_state(agent_office):

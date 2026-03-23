@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -14,7 +15,12 @@ from pydantic import BaseModel, Field
 
 from .config import RelaySettings
 from .csv_audit import CsvAuditLogger
-from .dashboard import build_agent_office_summary, get_agent_office_section, resolve_agent_office_path
+from .dashboard import (
+    build_agent_office_item_detail,
+    build_agent_office_summary,
+    get_agent_office_section,
+    resolve_agent_office_path,
+)
 from .gateway_health import read_all_gateway_health
 from .models import InboundMessage
 from .runtime_health import read_all_daemon_loop_health, read_daemon_watchdog
@@ -64,6 +70,17 @@ def _dashboard_auth_token(request: Request, token: str) -> str | None:
         return cookie_token
 
     return None
+
+
+def _dashboard_now(settings: RelaySettings) -> datetime:
+    tz_name = (settings.timezone or "").strip()
+    if not tz_name:
+        return datetime.now(UTC)
+    try:
+        return datetime.now(ZoneInfo(tz_name))
+    except Exception:
+        logger.warning("Invalid dashboard timezone %r; falling back to UTC", tz_name)
+        return datetime.now(UTC)
 
 
 def _dashboard_login_page() -> str:
@@ -193,7 +210,12 @@ def build_app(store: Any | None = None) -> FastAPI:
 
     def _dashboard_summary() -> dict[str, Any]:
         office_path = resolve_agent_office_path(settings.soul_file)
-        return build_agent_office_summary(office_path, store=app.state.store, config=settings)
+        return build_agent_office_summary(
+            office_path,
+            store=app.state.store,
+            config=settings,
+            now=_dashboard_now(settings),
+        )
 
     def _dashboard_html_path() -> Path:
         return Path(__file__).resolve().parent / "static" / "dashboard.html"
@@ -314,6 +336,20 @@ def build_app(store: Any | None = None) -> FastAPI:
             return get_agent_office_section(summary, section_name)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="dashboard section not found") from exc
+
+    @app.get("/dashboard/api/item", dependencies=[Depends(verify_dashboard_auth)])
+    def dashboard_item(section: str, name: str = "", bucket: str = "") -> dict[str, Any]:
+        office_path = resolve_agent_office_path(settings.soul_file)
+        try:
+            return build_agent_office_item_detail(
+                office_path,
+                section=section,
+                name=name,
+                bucket=bucket,
+                now=_dashboard_now(settings),
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="dashboard item not found") from exc
 
     @app.post("/dashboard/api/companion/mute", dependencies=[Depends(verify_dashboard_auth)])
     def dashboard_companion_mute() -> dict[str, Any]:

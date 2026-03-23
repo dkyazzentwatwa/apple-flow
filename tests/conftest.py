@@ -376,12 +376,21 @@ def agent_office(tmp_path: Path) -> Path:
     """Build a representative agent-office tree for dashboard summary tests."""
     office = tmp_path / "agent-office"
     office.mkdir()
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
 
     base_time = datetime(2026, 3, 22, 12, 0, tzinfo=UTC)
 
     def write(relative_path: str, content: str, minutes_ago: int) -> Path:
         path = office / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        stamp = (base_time - timedelta(minutes=minutes_ago)).timestamp()
+        os.utime(path, (stamp, stamp))
+        return path
+
+    def write_log(filename: str, content: str, minutes_ago: int) -> Path:
+        path = logs_dir / filename
         path.write_text(content, encoding="utf-8")
         stamp = (base_time - timedelta(minutes=minutes_ago)).timestamp()
         os.utime(path, (stamp, stamp))
@@ -413,6 +422,32 @@ def agent_office(tmp_path: Path) -> Path:
     write("90_logs/automation-log.md", "# Automation Log\n\n## Runs\n- companion checked in.\n", 10)
     write("90_logs/events.csv", "id,timestamp,event\n1,2026-03-22T11:50:00Z,summary\n", 12)
     write("90_logs/debug.txt", "Debug log line one.\nDebug log line two.\n", 18)
+    write_log(
+        "apple-flow.err.log",
+        "\n".join(f"daemon err line {i}" for i in range(1, 15))
+        + "\nERROR AppleScript timeout while polling inbox\n",
+        2,
+    )
+    write_log(
+        "apple-flow-admin.err.log",
+        "admin err line 1\nadmin err line 2\nadmin err line 3\n",
+        4,
+    )
+    write_log(
+        "apple-flow-admin.log",
+        "admin log line 1\nadmin log line 2\n",
+        6,
+    )
+    write_log(
+        "apple-flow.log",
+        "daemon out line 1\ndaemon out line 2\n",
+        8,
+    )
+    write_log(
+        "other.log",
+        "other log line 1\nother log line 2\n",
+        1,
+    )
     write("unrelated.txt", "Do not include this.\n", 3)
 
     return office

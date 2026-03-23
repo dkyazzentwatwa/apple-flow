@@ -9,6 +9,8 @@
 
 Apple Flow is a local-first macOS daemon that bridges Apple apps to AI coding assistants. It accepts inbound work from iMessage by default and can optionally ingest work from Apple Mail, Reminders, Notes, Calendar, or the local Admin API, then routes that work through policy checks, orchestration, connector execution, and app-specific egress.
 
+The project is configured for Pacific Time via `apple_flow_timezone=America/Los_Angeles` so scheduled companion and reminder behavior stays DST-safe.
+
 This reference is the canonical high-level guide for contributors who need to understand how the system fits together. Use it alongside setup-focused guides such as [QUICKSTART.md](./QUICKSTART.md), [ENV_SETUP.md](./ENV_SETUP.md), [AUTO_START_SETUP.md](./AUTO_START_SETUP.md), and the operational safety details in [SECURITY.md](../SECURITY.md).
 
 ## Architecture And Components

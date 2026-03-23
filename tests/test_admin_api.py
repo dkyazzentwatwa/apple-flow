@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -49,6 +50,8 @@ def _write_agent_office_fixture(office: Path) -> None:
     (office / "30_outputs").mkdir(parents=True, exist_ok=True)
     (office / "40_resources").mkdir(parents=True, exist_ok=True)
     (office / "90_logs").mkdir(parents=True, exist_ok=True)
+    logs_dir = office.parent / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
 
     (office / "SOUL.md").write_text("You are Flow.\n", encoding="utf-8")
     (office / "00_inbox" / "inbox.md").write_text(
@@ -65,6 +68,22 @@ def _write_agent_office_fixture(office: Path) -> None:
     (office / "40_resources" / "resource.md").write_text("# Resource\nResource body.\n", encoding="utf-8")
     (office / "90_logs" / "automation-log.md").write_text("# Log\n", encoding="utf-8")
     (office / "90_logs" / "events.csv").write_text("id,timestamp,event\n1,now,test\n", encoding="utf-8")
+    (logs_dir / "apple-flow.err.log").write_text(
+        "daemon err line 1\ndaemon err line 2\nERROR AppleScript timeout while polling inbox\n",
+        encoding="utf-8",
+    )
+    (logs_dir / "apple-flow-admin.err.log").write_text(
+        "admin err line 1\nadmin err line 2\n",
+        encoding="utf-8",
+    )
+    (logs_dir / "apple-flow-admin.log").write_text(
+        "admin log line 1\nadmin log line 2\n",
+        encoding="utf-8",
+    )
+    (logs_dir / "apple-flow.log").write_text(
+        "daemon out line 1\ndaemon out line 2\n",
+        encoding="utf-8",
+    )
 
 
 
@@ -129,6 +148,7 @@ def test_dashboard_routes_require_auth(monkeypatch, tmp_path):
     assert 'action="/dashboard/bootstrap"' in dashboard_response.text
     assert client.get("/dashboard/api/summary").status_code == 401
     assert client.get("/dashboard/api/section/inbox").status_code == 401
+    assert client.get("/dashboard/api/item?section=inbox").status_code == 401
     assert client.post("/dashboard/bootstrap", data={"dashboard_token": "wrong"}).status_code == 401
 
 
@@ -149,12 +169,55 @@ def test_dashboard_summary_and_section_expose_agent_office_state(monkeypatch, tm
     assert summary["inbox"]["unchecked_count"] == 1
     assert summary["runtime"]["pending_approvals_count"] == 1
     assert summary["companion"]["muted"] is False
+    assert summary["inbox"]["freshness"]["state"] in {"fresh", "quiet"}
+    assert summary["recent"]["freshness"]["state"] in {"fresh", "quiet"}
 
     section_response = client.get("/dashboard/api/section/inbox", headers=headers)
     assert section_response.status_code == 200
     section = section_response.json()
     assert section["section"] == "inbox"
     assert section["data"]["unchecked_count"] == 1
+
+    item_response = client.get("/dashboard/api/item?section=inbox", headers=headers)
+    assert item_response.status_code == 200
+    item = item_response.json()
+    assert item["section"] == "inbox"
+    assert item["content_kind"] == "markdown"
+    assert "Inbox item one" in item["content"]
+    assert item["freshness"]["state"] in {"fresh", "quiet"}
+
+    log_item_response = client.get(
+        "/dashboard/api/item?section=recent&bucket=logs&name=apple-flow.err.log",
+        headers=headers,
+    )
+    assert log_item_response.status_code == 200
+    log_item = log_item_response.json()
+    assert log_item["section"] == "recent"
+    assert log_item["bucket"] == "logs"
+    assert "AppleScript timeout" in log_item["content"]
+
+
+def test_dashboard_summary_uses_project_timezone_for_daily_note(monkeypatch, tmp_path):
+    office = tmp_path / "agent-office"
+    _write_agent_office_fixture(office)
+    monkeypatch.setenv("apple_flow_admin_api_token", "secret-token")
+    monkeypatch.setenv("apple_flow_soul_file", str(office / "SOUL.md"))
+    monkeypatch.setenv("apple_flow_timezone", "America/Los_Angeles")
+    monkeypatch.setattr(
+        "apple_flow.main._dashboard_now",
+        lambda _settings: datetime(2026, 3, 23, 6, 30, tzinfo=UTC),
+    )
+
+    app = build_app(store=InMemoryStore())
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer secret-token"}
+
+    summary_response = client.get("/dashboard/api/summary", headers=headers)
+    assert summary_response.status_code == 200
+    summary = summary_response.json()
+    assert summary["daily"]["today_exists"] is True
+    assert summary["daily"]["today_path"].endswith("2026-03-22.md")
+    assert not summary["daily"]["today_path"].endswith("2026-03-23.md")
 
 
 def test_dashboard_shell_serves_html(monkeypatch, tmp_path):
@@ -177,14 +240,24 @@ def test_dashboard_shell_serves_html(monkeypatch, tmp_path):
     assert "text/html" in response.headers["content-type"]
     body = response.text
     assert "Agent Office Dashboard" in body
+    assert "America/Los_Angeles" in body
     assert 'id="runtime-status"' in body
+    assert 'id="attention-count"' in body
+    assert 'id="companion-action-button"' in body
+    assert 'id="runtime-freshness"' in body
     assert 'data-section="inbox"' in body
     assert 'data-section="memory"' in body
     assert "/dashboard/api/summary" in body
     assert "refresh-button" in body
-    assert "mute-button" in body
-    assert "unmute-button" in body
     assert "section-detail" in body
+    assert 'id="recent-logs-panel"' in body
+    assert 'id="recent-logs-toggle"' in body
+    assert 'id="recent-logs-detail"' in body
+    assert 'id="detail-modal"' in body
+    assert 'id="detail-modal-title"' in body
+    assert 'id="detail-modal-content"' in body
+    assert 'id="detail-modal-close"' in body
+    assert "/dashboard/api/item" in body
     assert "secret-token" not in body
 
     summary_response = client.get("/dashboard/api/summary")
