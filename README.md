@@ -10,6 +10,7 @@ Control AI from iMessage, Mail, Reminders, Notes, and Calendar on macOS.
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos)
 [![GitHub release](https://img.shields.io/github/v/release/dkyazzentwatwa/apple-flow?include_prereleases)](https://github.com/dkyazzentwatwa/apple-flow/releases)
+[![GitHub downloads](https://img.shields.io/github/downloads/dkyazzentwatwa/apple-flow/total)](https://github.com/dkyazzentwatwa/apple-flow/releases)
 
 **[apple-flow-site.vercel.app](https://apple-flow-site.vercel.app/)**
 
