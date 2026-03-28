@@ -4,15 +4,23 @@ import hashlib
 import logging
 import re
 import subprocess
+import tempfile
 import time
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
+import httpx
 from .apple_tools import _send_imessage_attachment
 
 from .utils import normalize_echo_text, normalize_sender
 
 logger = logging.getLogger("apple_flow.egress")
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif", ".tiff", ".bmp"}
+_REMOTE_IMAGE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 Apple Flow/0.7.0",
+    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Referer": "https://commons.wikimedia.org/",
+}
 
 
 class IMessageEgress:
@@ -161,7 +169,7 @@ class IMessageEgress:
 
     @staticmethod
     def _extract_markdown_image_path(stripped: str) -> str | None:
-        match = re.fullmatch(r"!\[[^\]]*\]\((/[^)]+)\)", stripped)
+        match = re.fullmatch(r"!\[[^\]]*\]\(([^)]+)\)", stripped)
         if match:
             return match.group(1).strip()
         return None
@@ -173,6 +181,19 @@ class IMessageEgress:
         match = re.fullmatch(r"(?:[^:\n]+:\s+)?\[[^\]]+\]\((/[^)]+)\)", stripped)
         if match:
             return match.group(1).strip()
+        match = re.fullmatch(
+            r"(?i)saved(?: locally)?(?: at| to)?\s+\[[^\]]+\]\((/[^)]+)\)(?:\s+.+)?",
+            stripped,
+        )
+        if match:
+            return match.group(1).strip()
+        return None
+
+    @staticmethod
+    def _extract_backticked_image_path(stripped: str) -> str | None:
+        match = re.fullmatch(r"(?i)(?:\[progress\]\s+)?saved(?: locally)?(?: at| to)?\s+`((?:~|/)[^`]+)`(?:\s+.+)?", stripped)
+        if match:
+            return match.group(1).strip()
         return None
 
     @staticmethod
@@ -181,22 +202,49 @@ class IMessageEgress:
             return None
         _label, candidate = stripped.split(":", 1)
         candidate = candidate.strip()
-        if candidate.startswith("/"):
+        if candidate.startswith("/") and not candidate.startswith("//"):
             return candidate
         return None
 
-    @staticmethod
-    def _resolve_image_path(candidate: str | None) -> Path | None:
+    def _download_remote_image(self, url: str) -> Path | None:
+        parsed = urlparse(url)
+        suffix = Path(unquote(parsed.path)).suffix.lower()
+        if suffix not in _IMAGE_SUFFIXES:
+            return None
+
+        out_dir = Path(tempfile.gettempdir()) / "flow-images"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256(url.encode()).hexdigest()[:16]
+        out_path = out_dir / f"remote-{digest}{suffix}"
+
+        try:
+            with httpx.Client(
+                follow_redirects=True,
+                timeout=20.0,
+                headers=_REMOTE_IMAGE_HEADERS,
+            ) as client:
+                response = client.get(url)
+                response.raise_for_status()
+            out_path.write_bytes(response.content)
+        except Exception as exc:
+            logger.warning("Failed to download remote image %s: %s", url, exc)
+            return None
+
+        return out_path if out_path.is_file() else None
+
+    def _resolve_image_path(self, candidate: str | None) -> Path | None:
         if not candidate:
             return None
-        if not candidate.startswith("/"):
-            return None
-        path = Path(candidate)
-        if path.suffix.lower() not in _IMAGE_SUFFIXES:
-            return None
-        if not path.exists() or not path.is_file():
-            return None
-        return path
+        if candidate.startswith("/") or candidate.startswith("~/"):
+            path = Path(candidate).expanduser()
+            if path.suffix.lower() not in _IMAGE_SUFFIXES:
+                return None
+            if not path.exists() or not path.is_file():
+                return None
+            return path
+        if candidate.startswith("https://") or candidate.startswith("http://"):
+            return self._download_remote_image(candidate)
+        return None
 
     def _extract_image_candidates(self, text: str) -> list[tuple[int, Path]]:
         candidates: list[tuple[int, Path]] = []
@@ -214,6 +262,8 @@ class IMessageEgress:
                 candidate = self._extract_markdown_image_path(stripped)
             if candidate is None:
                 candidate = self._extract_markdown_link_image_path(stripped)
+            if candidate is None:
+                candidate = self._extract_backticked_image_path(stripped)
 
             path = self._resolve_image_path(candidate)
             if path is None:

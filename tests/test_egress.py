@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from apple_flow.egress import IMessageEgress
 
 
@@ -209,6 +211,210 @@ def test_auto_send_accepts_saved_image_markdown_link_format(monkeypatch, tmp_pat
 
     assert attachment_calls == [("+15551234567", str(image_path))]
     assert sent_calls == [("+15551234567", "Attached image.")]
+
+
+def test_auto_send_accepts_saved_locally_at_markdown_link_format(monkeypatch, tmp_path):
+    sent_calls = []
+    attachment_calls = []
+    image_path = tmp_path / "openai-cua-infographic.png"
+    image_path.write_bytes(b"png")
+
+    def fake_send(_recipient: str, _text: str) -> None:
+        sent_calls.append((_recipient, _text))
+
+    def fake_send_attachment(recipient: str, file_path: str) -> dict[str, object]:
+        attachment_calls.append((recipient, file_path))
+        return {"ok": True}
+
+    egress = IMessageEgress(auto_send_image_results="allowed-senders")
+    monkeypatch.setattr(egress, "_osascript_send", fake_send)
+    monkeypatch.setattr("apple_flow.egress._send_imessage_attachment", fake_send_attachment)
+
+    outbound = (
+        "Attached here.\n\n"
+        "Source: OpenAI's official Computer-Using Agent page\n"
+        f"Saved locally at [openai-cua-infographic.png]({image_path})"
+    )
+    egress.send("+15551234567", outbound)
+
+    assert attachment_calls == [("+15551234567", str(image_path))]
+    assert sent_calls == [("+15551234567", "Attached here.\n\nSource: OpenAI's official Computer-Using Agent page")]
+
+
+def test_auto_send_accepts_saved_locally_at_backticked_path_format(monkeypatch, tmp_path):
+    sent_calls = []
+    attachment_calls = []
+    image_path = tmp_path / "orange.jpg"
+    image_path.write_bytes(b"jpg")
+
+    def fake_send(_recipient: str, _text: str) -> None:
+        sent_calls.append((_recipient, _text))
+
+    def fake_send_attachment(recipient: str, file_path: str) -> dict[str, object]:
+        attachment_calls.append((recipient, file_path))
+        return {"ok": True}
+
+    egress = IMessageEgress(auto_send_image_results="allowed-senders")
+    monkeypatch.setattr(egress, "_osascript_send", fake_send)
+    monkeypatch.setattr("apple_flow.egress._send_imessage_attachment", fake_send_attachment)
+
+    outbound = (
+        "Here's a picture of an orange.\n\n"
+        "Source: Wikimedia Commons\n"
+        f"Saved locally at `{image_path}`"
+    )
+    egress.send("+15551234567", outbound)
+
+    assert attachment_calls == [("+15551234567", str(image_path))]
+    assert sent_calls == [("+15551234567", "Here's a picture of an orange.\n\nSource: Wikimedia Commons")]
+
+
+def test_auto_send_accepts_saved_to_markdown_link_with_trailing_prose(monkeypatch, tmp_path):
+    sent_calls = []
+    attachment_calls = []
+    image_path = tmp_path / "banana.jpg"
+    image_path.write_bytes(b"jpg")
+
+    def fake_send(_recipient: str, _text: str) -> None:
+        sent_calls.append((_recipient, _text))
+
+    def fake_send_attachment(recipient: str, file_path: str) -> dict[str, object]:
+        attachment_calls.append((recipient, file_path))
+        return {"ok": True}
+
+    egress = IMessageEgress(auto_send_image_results="allowed-senders")
+    monkeypatch.setattr(egress, "_osascript_send", fake_send)
+    monkeypatch.setattr("apple_flow.egress._send_imessage_attachment", fake_send_attachment)
+
+    outbound = (
+        "Here’s a banana.\n\n"
+        f"Saved to [~/Downloads/banana.jpg]({image_path}) and displayed above.\n"
+        "It’s the Wikimedia Commons banana photo."
+    )
+    egress.send("+15551234567", outbound)
+
+    assert attachment_calls == [("+15551234567", str(image_path))]
+    assert sent_calls == [("+15551234567", "Here’s a banana.\n\nIt’s the Wikimedia Commons banana photo.")]
+
+
+def test_auto_send_accepts_saved_to_tilde_backticked_path_with_trailing_prose(monkeypatch, tmp_path):
+    sent_calls = []
+    attachment_calls = []
+    image_path = tmp_path / "hamburger.jpg"
+    image_path.write_bytes(b"jpg")
+
+    def fake_send(_recipient: str, _text: str) -> None:
+        sent_calls.append((_recipient, _text))
+
+    def fake_send_attachment(recipient: str, file_path: str) -> dict[str, object]:
+        attachment_calls.append((recipient, file_path))
+        return {"ok": True}
+
+    target_path = tmp_path / "Downloads" / "hamburger.jpg"
+    target_path.parent.mkdir(exist_ok=True)
+    target_path.write_bytes(b"jpg")
+
+    original_expanduser = Path.expanduser
+
+    def fake_expanduser(path_obj: Path) -> Path:
+        if str(path_obj) == "~/Downloads/hamburger.jpg":
+            return target_path
+        return original_expanduser(path_obj)
+
+    egress = IMessageEgress(auto_send_image_results="allowed-senders")
+    monkeypatch.setattr(egress, "_osascript_send", fake_send)
+    monkeypatch.setattr("apple_flow.egress._send_imessage_attachment", fake_send_attachment)
+    monkeypatch.setattr("pathlib.Path.expanduser", fake_expanduser)
+
+    outbound = (
+        "[Progress] Saved to `~/Downloads/hamburger.jpg` and shown above. "
+        "Saved to `~/Downloads/hamburger.jpg` and shown above.\n\n"
+        "Source:\n"
+        "- Wikimedia Commons file page: https://commons.wikimedia.org/wiki/File:Hamburger_-_1.jpg\n"
+        "- Original image URL: https://live.staticflickr.com/4245/35070881531_f4d8f44c0a_o.jpg"
+    )
+
+    egress.send("+15551234567", outbound)
+
+    assert attachment_calls == [("+15551234567", str(target_path))]
+    assert sent_calls == [(
+        "+15551234567",
+        "Source:\n- Wikimedia Commons file page: https://commons.wikimedia.org/wiki/File:Hamburger_-_1.jpg\n- Original image URL: https://live.staticflickr.com/4245/35070881531_f4d8f44c0a_o.jpg",
+    )]
+
+
+def test_auto_send_accepts_remote_markdown_image_url(monkeypatch, tmp_path):
+    sent_calls = []
+    attachment_calls = []
+    downloaded_path = tmp_path / "mango.jpg"
+    downloaded_path.write_bytes(b"jpg")
+
+    def fake_send(_recipient: str, _text: str) -> None:
+        sent_calls.append((_recipient, _text))
+
+    def fake_send_attachment(recipient: str, file_path: str) -> dict[str, object]:
+        attachment_calls.append((recipient, file_path))
+        return {"ok": True}
+
+    egress = IMessageEgress(auto_send_image_results="allowed-senders")
+    monkeypatch.setattr(egress, "_osascript_send", fake_send)
+    monkeypatch.setattr("apple_flow.egress._send_imessage_attachment", fake_send_attachment)
+    monkeypatch.setattr(
+        egress,
+        "_download_remote_image",
+        lambda _url: downloaded_path,
+    )
+
+    outbound = (
+        "Here's a mango:\n\n"
+        "![Mango](https://upload.wikimedia.org/wikipedia/commons/1/1d/Mango_fruit_%28Omuyembe%29_05.jpg)\n\n"
+        "Source: [Wikimedia Commons](https://commons.wikimedia.org/wiki/File%3AMango_fruit_%28Omuyembe%29_05.jpg)"
+    )
+    egress.send("+15551234567", outbound)
+
+    assert attachment_calls == [("+15551234567", str(downloaded_path))]
+    assert sent_calls == [("+15551234567", "Here's a mango:\n\nSource: [Wikimedia Commons](https://commons.wikimedia.org/wiki/File%3AMango_fruit_%28Omuyembe%29_05.jpg)")]
+
+
+def test_download_remote_image_uses_browser_like_headers(monkeypatch, tmp_path):
+    seen: dict[str, object] = {}
+
+    class FakeResponse:
+        content = b"jpg"
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url: str):
+            seen["url"] = url
+            return FakeResponse()
+
+    monkeypatch.setattr("apple_flow.egress.httpx.Client", FakeClient)
+    monkeypatch.setattr("apple_flow.egress.tempfile.gettempdir", lambda: str(tmp_path))
+
+    egress = IMessageEgress(auto_send_image_results="allowed-senders")
+    out_path = egress._download_remote_image(
+        "https://upload.wikimedia.org/wikipedia/commons/1/1d/Mango_fruit_%28Omuyembe%29_05.jpg"
+    )
+
+    assert out_path is not None
+    assert out_path.exists()
+    assert seen["url"] == "https://upload.wikimedia.org/wikipedia/commons/1/1d/Mango_fruit_%28Omuyembe%29_05.jpg"
+    headers = seen["headers"]
+    assert isinstance(headers, dict)
+    assert "Apple Flow" in headers["User-Agent"]
+    assert headers["Referer"] == "https://commons.wikimedia.org/"
+    assert headers["Accept"].startswith("image/")
 
 
 def test_auto_send_limits_images_to_three(monkeypatch, tmp_path):
