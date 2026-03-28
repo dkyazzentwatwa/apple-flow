@@ -3212,6 +3212,30 @@ def messages_send_voice(
     }
 
 
+def _prepare_imessage_attachment_path(path: Path) -> Path:
+    """Stage image attachments under ~/Pictures so Messages can access them reliably."""
+    suffix = path.suffix.lower()
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif", ".tiff", ".bmp"}:
+        return path
+
+    pictures_root = Path.home() / "Pictures"
+    try:
+        if path.resolve().is_relative_to(pictures_root.resolve()):
+            return path
+    except Exception:
+        pass
+
+    outbox_dir = pictures_root / "Apple Flow Outbox"
+    try:
+        outbox_dir.mkdir(parents=True, exist_ok=True)
+        staged = outbox_dir / f"{int(time.time() * 1000)}-{path.name}"
+        shutil.copy2(path, staged)
+        return staged
+    except Exception as exc:
+        logger.warning("Failed to stage iMessage attachment in Pictures: %s", exc)
+        return path
+
+
 def _send_imessage_attachment(recipient: str, file_path: str) -> dict[str, Any]:
     """Send an iMessage with a file attachment to a recipient."""
     normalized = _normalize_phone_number(recipient)
@@ -3225,15 +3249,16 @@ def _send_imessage_attachment(recipient: str, file_path: str) -> dict[str, Any]:
     if not path.is_file():
         return {"ok": False, "error": "not a file"}
 
+    path = _prepare_imessage_attachment_path(path)
     esc_number = normalized
     esc_path = str(path).replace("\\", "\\\\").replace('"', '\\"')
 
     script = f'''
+    set attachmentFile to (POSIX file "{esc_path}" as alias)
     tell application "Messages"
         set targetService to 1st service whose service type = iMessage
         set targetBuddy to buddy "{esc_number}" of targetService
-        set audioFile to POSIX file "{esc_path}"
-        send audioFile to targetBuddy
+        send attachmentFile to targetBuddy
     end tell
     '''
 

@@ -173,6 +173,7 @@ class RelaySettings(BaseSettings):
 
     # Voice message + TTS settings
     phone_owner_number: str = ""
+    imessage_auto_send_image_results: str = "owner-only"  # off | owner-only | allowed-senders
     phone_tts_voice: str = ""
     phone_tts_rate: float = 180.0
     phone_tts_engine: str = "auto"  # auto | say | piper
@@ -305,6 +306,7 @@ class RelaySettings(BaseSettings):
         "watchdog_event_loop_lag_seconds",
         "watchdog_event_loop_lag_failures",
         "phone_tts_rate",
+        "imessage_auto_send_image_results",
         "phone_tts_engine",
         "phone_piper_command",
         "phone_piper_model_path",
@@ -354,6 +356,17 @@ class RelaySettings(BaseSettings):
         if normalized in allowed:
             return normalized
         raise ValueError(f"Invalid phone_tts_engine {value!r}. Allowed: {', '.join(sorted(allowed))}")
+
+    @field_validator("imessage_auto_send_image_results", mode="after")
+    @classmethod
+    def _validate_imessage_auto_send_image_results(cls, value: str) -> str:
+        allowed = {"off", "owner-only", "allowed-senders"}
+        normalized = (value or "").strip().lower()
+        if normalized in allowed:
+            return normalized
+        raise ValueError(
+            f"Invalid imessage_auto_send_image_results {value!r}. Allowed: {', '.join(sorted(allowed))}"
+        )
 
     @field_validator("db_path", "messages_db_path", mode="after")
     @classmethod

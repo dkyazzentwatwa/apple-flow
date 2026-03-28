@@ -598,7 +598,7 @@ def _get_version() -> str:
     try:
         return importlib.metadata.version("apple-flow")
     except importlib.metadata.PackageNotFoundError:
-        return "0.6.0 (dev)"
+        return "0.7.0 (dev)"
 
 
 def main() -> None:

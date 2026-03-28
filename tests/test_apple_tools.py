@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import apple_flow.apple_tools as at
@@ -361,7 +362,24 @@ class TestVoiceMessages:
                     result = at._send_imessage_attachment("+15551234567", file_path)
         assert result == {"ok": True}
         script = run_mock.call_args.args[0][2]
+        assert 'set attachmentFile to (POSIX file "/tmp/fake.aiff" as alias)' in script
         assert 'buddy "+15551234567"' in script
+        assert script.index('set attachmentFile to (POSIX file "/tmp/fake.aiff" as alias)') < script.index('tell application "Messages"')
+
+    def test_prepare_imessage_attachment_path_stages_images_into_pictures(self):
+        source = Path("/tmp/fake.jpg")
+        with patch("pathlib.Path.home", return_value=Path("/Users/tester")):
+            with patch("pathlib.Path.mkdir") as mkdir_mock:
+                with patch("shutil.copy2") as copy_mock:
+                    with patch("time.time", return_value=1234.567):
+                        staged = at._prepare_imessage_attachment_path(source)
+        assert staged == Path("/Users/tester/Pictures/Apple Flow Outbox/1234567-fake.jpg")
+        mkdir_mock.assert_called_once()
+        copy_mock.assert_called_once_with(source, staged)
+
+    def test_prepare_imessage_attachment_path_leaves_audio_unchanged(self):
+        source = Path("/tmp/fake.aiff")
+        assert at._prepare_imessage_attachment_path(source) == source
 
 
 # ---------------------------------------------------------------------------

@@ -55,6 +55,7 @@ _ENUM_OPTIONS: dict[str, list[str]] = {
         "sunday",
     ],
     "apple_flow_phone_tts_engine": ["auto", "say", "piper"],
+    "apple_flow_imessage_auto_send_image_results": ["off", "owner-only", "allowed-senders"],
 }
 
 _SKIP_KEYS: set[str] = set()
@@ -104,6 +105,7 @@ def _section_for_key(key: str) -> str:
         key.startswith(prefix)
         for prefix in (
             "apple_flow_messages_",
+            "apple_flow_imessage_",
             "apple_flow_process_historical",
             "apple_flow_max_startup",
             "apple_flow_startup_",

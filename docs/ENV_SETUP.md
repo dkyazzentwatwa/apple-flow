@@ -308,6 +308,18 @@ approve <new_request_id> <extra instructions>
 
 ---
 
+## iMessage Image Results
+
+Control whether Apple Flow auto-sends intentional local image outputs as iMessage attachments instead of replying with bare file paths.
+
+| Variable | Default | Description |
+|---|---|---|
+| `apple_flow_imessage_auto_send_image_results` | `owner-only` | Auto-attach intentional image result paths in outbound iMessages. Use `off`, `owner-only`, or `allowed-senders`. |
+
+With `owner-only`, Apple Flow only auto-sends image results to `apple_flow_phone_owner_number` and otherwise keeps the old text-only behavior.
+
+---
+
 ## File Attachments
 
 Allow the AI to read files sent as iMessage attachments (text/code, PDF, images via OCR when available, and Office files like `.docx/.pptx/.xlsx`).

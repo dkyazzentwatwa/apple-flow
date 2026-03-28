@@ -1,8 +1,8 @@
 # Apple Flow Project Reference
 
 **Module or component:** Apple Flow core project
-**Version:** 0.6.0
-**Last updated:** 2026-03-19
+**Version:** 0.7.0
+**Last updated:** 2026-03-27
 **Maintainer:** dkyazzentwatwa
 
 ## Overview

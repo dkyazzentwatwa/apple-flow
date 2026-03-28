@@ -2,7 +2,7 @@
 
 Gemini CLI entry point for this repository.
 
-Last updated: 2026-03-19
+Last updated: 2026-03-27
 
 `AGENTS.md` is the canonical repo-wide guide. Read it first and treat this file as a Gemini-specific companion, not a separate source of truth.
 
@@ -19,7 +19,7 @@ Last updated: 2026-03-19
 
 Apple Flow is a local-first macOS daemon that routes work from iMessage, Apple Mail, Apple Reminders, Apple Notes, Apple Calendar, and the Admin API through policy checks, orchestration, connector execution, and Apple-app egress.
 
-Current version: `0.6.0`
+Current version: `0.7.0`
 
 Main runtime modules:
 

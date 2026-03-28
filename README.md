@@ -290,6 +290,7 @@ Voice message examples:
 
 ```env
 apple_flow_phone_owner_number=+15551234567
+apple_flow_imessage_auto_send_image_results=owner-only
 apple_flow_phone_tts_voice=
 apple_flow_phone_tts_rate=180
 apple_flow_phone_tts_engine=auto
@@ -303,7 +304,7 @@ voice: standup starts in 10 minutes
 voice-task: analyze my workspace
 ```
 
-`voice:` speaks the exact text you send. `voice-task:` runs the task first, then sends both the text result and a synthesized audio copy over iMessage to the configured owner number.
+`voice:` speaks the exact text you send. `voice-task:` runs the task first, then sends both the text result and a synthesized audio copy over iMessage to the configured owner number. `apple_flow_imessage_auto_send_image_results=owner-only` also makes outbound replies auto-attach intentional local image results for the owner instead of echoing bare file paths.
 
 Companion + memory examples:
 

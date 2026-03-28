@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-03-27
+
+### Added
+- **Protected Agent Office dashboard**: Added authenticated dashboard routes, runtime/companion summary payloads, companion control endpoints, and a responsive dashboard shell with mobile detail views.
+- **End-to-end image output over iMessage**: Apple Flow now auto-sends intentional local image results as real iMessage attachments, stages outbound image files safely for Messages delivery, and supports a new `apple_flow_imessage_auto_send_image_results` config scope.
+- **Multilingual README set**: Added translated README variants for major locales so setup and product positioning are accessible beyond the English docs.
+
+### Changed
+- **Docs and agent-guide reorganization**: Reorganized the docs surface, refreshed setup/reference pages, aligned `AGENTS.md`/`CLAUDE.md`/`GEMINI.md`, and moved internal prompt-pack and automation material into clearer locations.
+- **Reminders surface simplification**: Removed the older Reminders accessibility/scaffold code paths and simplified the remaining reminders runtime surface and related tests/docs.
+- **Image result formatting behavior**: Outbound iMessage replies now strip raw image-path lines from user-facing text when those images are attached successfully, reducing noisy file-path echoes in conversations.
+
+### Fixed
+- **Translated README media links**: Fixed broken image links in translated READMEs.
+- **iMessage image attachment delivery**: Fixed AppleScript attachment coercion and file-staging behavior so image sends can deliver reliably instead of failing with raw-path-only responses.
+
 ## [0.6.0] - 2026-03-12
 
 ### Added
@@ -217,6 +233,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.7.0 | 2026-03-27 | Protected Agent Office dashboard, end-to-end iMessage image output delivery, multilingual docs, and docs/runtime cleanup |
 | 0.6.0 | 2026-03-12 | Section-aware Reminders automation, runtime health/guardrails, direct Notion helper coverage, and repo-wide config/docs cleanup |
 | 0.5.0 | 2026-03-05 | Autonomous Flow Healer, scan-to-issue pipeline, healer learning layer, and dedicated healer docs/manuals |
 | 0.4.1 | 2026-03-03 | iMessage image multimodal fallback via attachment source paths; no Tesseract requirement for multimodal providers |
@@ -229,7 +246,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/dkyazzentwatwa/apple-flow/compare/v0.4.0...v0.4.1

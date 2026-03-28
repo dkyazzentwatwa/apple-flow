@@ -2,8 +2,8 @@
 
 Canonical AI-agent guide for this repository.
 
-Last updated: 2026-03-19
-Version: 0.6.0
+Last updated: 2026-03-27
+Version: 0.7.0
 Python: >=3.11
 Package: `apple-flow`
 

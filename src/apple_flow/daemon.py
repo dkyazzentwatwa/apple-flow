@@ -143,7 +143,9 @@ class RelayDaemon:
             max_attachment_size_mb=settings.max_attachment_size_mb,
         )
         self.egress = IMessageEgress(
-            suppress_duplicate_outbound_seconds=settings.suppress_duplicate_outbound_seconds
+            suppress_duplicate_outbound_seconds=settings.suppress_duplicate_outbound_seconds,
+            auto_send_image_results=settings.imessage_auto_send_image_results,
+            image_result_owner_number=settings.phone_owner_number or (settings.allowed_senders[0] if settings.allowed_senders else ""),
         )
         self.attachment_processor = AttachmentProcessor(
             max_attachment_size_mb=settings.max_attachment_size_mb,

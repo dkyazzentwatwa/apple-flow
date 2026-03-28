@@ -193,6 +193,7 @@ def test_phone_defaults(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     settings = RelaySettings()
     assert settings.phone_owner_number == ""
+    assert settings.imessage_auto_send_image_results == "owner-only"
     assert settings.phone_tts_voice == ""
     assert settings.phone_tts_rate == 180.0
     assert settings.phone_tts_engine == "auto"
@@ -203,6 +204,11 @@ def test_phone_defaults(monkeypatch, tmp_path):
 def test_phone_tts_engine_validation():
     with pytest.raises(ValueError, match="Invalid phone_tts_engine"):
         RelaySettings(phone_tts_engine="elevenlabs")
+
+
+def test_imessage_auto_send_image_results_validation():
+    with pytest.raises(ValueError, match="Invalid imessage_auto_send_image_results"):
+        RelaySettings(imessage_auto_send_image_results="always")
 
 
 def test_attachment_audio_transcription_defaults(monkeypatch, tmp_path):
