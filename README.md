@@ -33,20 +33,7 @@ Apple Flow is a local-first macOS daemon that bridges Apple apps to AI CLIs (Cod
 
 Watch the walkthrough on YouTube:
 
-<p align="center">
-  <a href="https://youtu.be/8qXBy1ylbmk">
-    <img
-      src="https://img.youtube.com/vi/8qXBy1ylbmk/maxresdefault.jpg"
-      alt="Watch the Apple Flow demo"
-      width="720"
-    />
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://www.youtube.com/embed/8qXBy1ylbmk">Open embedded player</a> |
-  <a href="https://youtu.be/8qXBy1ylbmk">Watch on YouTube</a>
-</p>
+- [Apple Flow demo](https://youtu.be/8qXBy1ylbmk)
 
 ## Screenshots
 
